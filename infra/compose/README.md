@@ -5,6 +5,7 @@
 Use the repository wrapper script from the repo root:
 
 ```bash
+cp secrets.example.yaml secrets.yaml
 ./scripts/dev-compose.sh up --build
 ```
 
@@ -17,3 +18,5 @@ Current local services:
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 - `browser` as the containerized QA runner
+
+The backend container reads the repo-root `secrets.yaml` through `STORYTELLER_SECRETS_FILE=/workspace/secrets.yaml`, so the local Gemini API key stays server-side even during Compose development.

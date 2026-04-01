@@ -59,15 +59,19 @@ services:
     working_dir: /app
     volumes:
       - ../../backend:/app
+      - ../../:/workspace:ro
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      STORYTELLER_SECRETS_FILE: /workspace/secrets.yaml
       STORYTELLER_ENVIRONMENT: development
       STORYTELLER_DATABASE_URL: postgresql://storyteller:storyteller@postgres:5432/storyteller
-      STORYTELLER_GCS_BUCKET_NAME: storyteller-dev
       STORYTELLER_GCS_ENDPOINT: http://gcs:4443
       STORYTELLER_GCS_PROJECT_ID: storyteller-local
       STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
+      STORYTELLER_GCS_SESSIONS_BUCKET_NAME: storyteller-sessions
+      STORYTELLER_GCS_AUDIO_BUCKET_NAME: storyteller-audio
+      STORYTELLER_GCS_EXPORTS_BUCKET_NAME: storyteller-exports
     ports:
       - "8565:8565"
     command: python -m app

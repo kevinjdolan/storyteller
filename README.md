@@ -64,6 +64,7 @@ The repo is intended to run locally with Docker Compose. At the current scaffold
 Start the current stack with:
 
 ```bash
+cp secrets.example.yaml secrets.yaml
 ./scripts/dev-compose.sh up --build
 ```
 
@@ -74,7 +75,7 @@ The local Compose stack now includes:
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 
-`secrets.yaml` is already gitignored and reserved for local-only credentials. The compose file uses local development defaults for Postgres and the GCS emulator so a fresh clone can start without hand-editing configuration.
+`secrets.yaml` is already gitignored and reserved for local-only credentials. Copy `secrets.example.yaml` to `secrets.yaml`, add a Gemini API key, and keep the file local. The compose file uses development defaults for Postgres and the GCS emulator, while the backend loads secrets from the repo-root `secrets.yaml` at container startup.
 
 ## Docker Compose Local Stack
 
@@ -105,9 +106,13 @@ The backend receives the local infrastructure coordinates through environment va
 
 - `STORYTELLER_DATABASE_URL=postgresql://storyteller:storyteller@postgres:5432/storyteller`
 - `STORYTELLER_GCS_ENDPOINT=http://gcs:4443`
-- `STORYTELLER_GCS_BUCKET_NAME=storyteller-dev`
+- `STORYTELLER_GCS_SESSIONS_BUCKET_NAME=storyteller-sessions`
+- `STORYTELLER_GCS_AUDIO_BUCKET_NAME=storyteller-audio`
+- `STORYTELLER_GCS_EXPORTS_BUCKET_NAME=storyteller-exports`
 - `STORYTELLER_GCS_PROJECT_ID=storyteller-local`
 - `STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568`
+
+The backend settings layer merges defaults, `secrets.yaml`, and environment variables in that order. More detail is in [docs/secrets-and-local-config.md](/Users/kevin/code/storyteller/docs/secrets-and-local-config.md).
 
 ## Repository Shape
 
