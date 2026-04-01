@@ -271,6 +271,60 @@ function buildUiActionEvent(body: Record<string, unknown>) {
   }
 }
 
+function buildContextUpdateResponse(body: Record<string, unknown>) {
+  const detail =
+    typeof body.values === 'object' &&
+    body.values !== null &&
+    'detail' in body.values &&
+    typeof body.values.detail === 'string'
+      ? body.values.detail
+      : ''
+
+  return {
+    snapshot: {
+      ...sampleSnapshot,
+      updated_at: '2026-04-01T03:05:00Z',
+      stage_states: sampleSnapshot.stage_states.map((stageState) =>
+        stageState.stage === body.stage
+          ? {
+              ...stageState,
+              detail,
+              last_event_summary:
+                'Updated beat sheet notes from the workspace.',
+              last_event_type: 'content.user_edit.recorded',
+              last_event_at: '2026-04-01T03:05:00Z',
+            }
+          : stageState,
+      ),
+      agent_context_summary: `Session title: Lanterns Over Juniper Lake\nCurrent beat sheet detail: ${detail}`,
+    },
+    event: {
+      id: 'context-update-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 9,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'content.user_edit.recorded',
+      stage: body.stage ?? null,
+      summary: 'Saved user edit for beat sheet.',
+      payload: {
+        schema_version: 1,
+        target_kind: 'beat_sheet',
+        changed_fields: ['detail'],
+        source: body.origin ?? 'workspace',
+        field_values: {
+          detail,
+          control_id: body.control_id ?? null,
+        },
+        summary_text: 'Updated beat sheet notes from the workspace.',
+      },
+      created_at: '2026-04-01T03:05:00Z',
+    },
+  }
+}
+
 function mockWorkspaceApi(options?: {
   history?: unknown
   snapshot?: unknown
@@ -280,46 +334,44 @@ function mockWorkspaceApi(options?: {
   const history = options?.history ?? sampleHistory
   const snapshot = options?.snapshot ?? sampleSnapshot
   const snapshotStatus = options?.snapshotStatus ?? 200
-  const chatIntentResponse =
-    options?.chatIntentResponse ??
-    {
+  const chatIntentResponse = options?.chatIntentResponse ?? {
+    schema_version: 1,
+    status: 'parsed',
+    needs_clarification: false,
+    assistant_response:
+      'I can open the audio stage so you can review narration settings.',
+    clarification_reason: null,
+    proposed_actions: {
       schema_version: 1,
-      status: 'parsed',
-      needs_clarification: false,
-      assistant_response:
-        'I can open the audio stage so you can review narration settings.',
-      clarification_reason: null,
-      proposed_actions: {
-        schema_version: 1,
-        actions: [
-          {
-            schema_version: 1,
-            action_type: 'navigate_to_stage',
-            target_stage: 'audio',
-            confidence: 0.96,
-            rationale: 'The user asked to move to audio controls.',
-            requires_confirmation: false,
-            extracted_values: {},
-          },
-        ],
-      },
-      policy_evaluation: {
-        schema_version: 1,
-        session_id: 'moonlit-harbor',
-        evaluated_actions: [
-          {
-            action_index: 0,
-            action_type: 'navigate_to_stage',
-            target_stage: 'audio',
-            decision: 'accepted',
-            summary: 'Navigation is allowed.',
-            reasons: [],
-            side_effects: [],
-            prerequisite_action_types: [],
-          },
-        ],
-      },
-    }
+      actions: [
+        {
+          schema_version: 1,
+          action_type: 'navigate_to_stage',
+          target_stage: 'audio',
+          confidence: 0.96,
+          rationale: 'The user asked to move to audio controls.',
+          requires_confirmation: false,
+          extracted_values: {},
+        },
+      ],
+    },
+    policy_evaluation: {
+      schema_version: 1,
+      session_id: 'moonlit-harbor',
+      evaluated_actions: [
+        {
+          action_index: 0,
+          action_type: 'navigate_to_stage',
+          target_stage: 'audio',
+          decision: 'accepted',
+          summary: 'Navigation is allowed.',
+          reasons: [],
+          side_effects: [],
+          prerequisite_action_types: [],
+        },
+      ],
+    },
+  }
 
   vi.stubGlobal(
     'fetch',
@@ -360,6 +412,20 @@ function mockWorkspaceApi(options?: {
 
         return Promise.resolve(
           buildJsonResponse(201, buildUiActionEvent(requestBody)),
+        )
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/context-updates' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+
+        return Promise.resolve(
+          buildJsonResponse(200, buildContextUpdateResponse(requestBody)),
         )
       }
 
@@ -513,6 +579,28 @@ describe('SessionWorkspacePage', () => {
         name: 'Configure narration and music',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('saves a stage note through the durable context update pipeline', async () => {
+    mockWorkspaceApi()
+
+    renderWorkspaceRoute()
+
+    const noteField = await screen.findByLabelText('Beat sheet note')
+
+    fireEvent.change(noteField, {
+      target: {
+        value: 'Add one calmer beat before the return home.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }))
+
+    expect(
+      await screen.findByText('Updated beat sheet notes from the workspace.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Beat sheet note')).toHaveValue(
+      'Add one calmer beat before the return home.',
+    )
   })
 
   it('shows a missing-session state when the snapshot request returns 404', async () => {

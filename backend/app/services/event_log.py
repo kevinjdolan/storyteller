@@ -233,6 +233,8 @@ class SessionEventLogService:
         target_id: str | None = None,
         revision_number: int | None = None,
         source: str = "ui",
+        field_values: Mapping[str, Any] | None = None,
+        summary_text: str | None = None,
         actor: SessionEventActor | None = None,
     ) -> EventLogEntry:
         return self.append_event(
@@ -247,6 +249,8 @@ class SessionEventLogService:
                 revision_number=revision_number,
                 changed_fields=list(changed_fields),
                 source=source,
+                field_values=dict(field_values) if field_values is not None else None,
+                summary_text=summary_text,
             ),
         )
 

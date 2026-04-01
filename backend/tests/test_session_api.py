@@ -97,6 +97,7 @@ def test_get_session_snapshot_endpoint_returns_full_snapshot(
     assert len(payload["stage_states"]) == 10
     assert payload["stage_states"][0]["stage"] == "genre"
     assert payload["stage_states"][0]["status"] == "draft"
+    assert payload["agent_context_summary"].startswith("Session title: Moonlit Harbor")
 
 
 def test_get_session_history_endpoint_returns_durable_timeline(
@@ -149,6 +150,61 @@ def test_record_session_ui_action_endpoint_returns_recorded_event(
     assert payload["payload"]["origin"] == "workspace"
 
 
+def test_apply_session_context_update_endpoint_returns_updated_snapshot_and_event(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    try:
+        snapshot = SessionService(db_session).create_session(working_title="Context Update")
+        service = SessionService(db_session)
+        for stage in (
+            WorkflowStage.GENRE,
+            WorkflowStage.TONE,
+            WorkflowStage.BRIEF,
+            WorkflowStage.PITCHES,
+            WorkflowStage.CHARACTERS,
+            WorkflowStage.BEATS,
+        ):
+            service.update_stage_state(
+                snapshot.id,
+                stage=stage,
+                status=WorkflowStageState.COMPLETED,
+                detail=f"Accepted {stage.value}.",
+            )
+    finally:
+        db_session.close()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{snapshot.id}/context-updates",
+        json={
+            "target_kind": "stage_note",
+            "stage": "beats",
+            "control_id": "stage-note-editor",
+            "origin": "workspace",
+            "values": {
+                "detail": "Add one calmer beat before the return home.",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "content.user_edit.recorded"
+    assert payload["event"]["payload"]["field_values"] == {
+        "detail": "Add one calmer beat before the return home.",
+        "control_id": "stage-note-editor",
+    }
+    assert payload["snapshot"]["stage_states"][5]["detail"] == (
+        "Add one calmer beat before the return home."
+    )
+    assert payload["snapshot"]["stage_states"][7]["status"] == "draft"
+    assert (
+        "Latest saved UI detail: Beat sheet: Add one calmer beat"
+        in payload["snapshot"]["agent_context_summary"]
+    )
+
+
 def test_get_session_snapshot_endpoint_returns_404_for_missing_session(
     session_api_client: TestClient,
 ) -> None:
@@ -175,6 +231,30 @@ def test_record_session_ui_action_endpoint_returns_404_for_missing_session(
     assert response.json() == {
         "detail": "session 'missing-session' was not found",
     }
+
+
+def test_apply_session_context_update_endpoint_returns_422_for_unsupported_stage(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Unsupported Stage"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/context-updates",
+        json={
+            "target_kind": "stage_note",
+            "stage": "genre",
+            "values": {
+                "detail": "Quest fantasy should lean quieter.",
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert "does not support durable note edits" in response.json()["detail"]
 
 
 def test_create_session_endpoint_returns_a_fresh_snapshot(

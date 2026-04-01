@@ -192,6 +192,18 @@ export type RecordSessionUIActionRequest = {
   origin?: string
 }
 
+export type SessionContextStageNoteValues = {
+  detail?: string | null
+}
+
+export type SessionContextUpdateRequest = {
+  target_kind: 'stage_note'
+  stage: WorkflowStageId
+  control_id?: string | null
+  origin?: string
+  values: SessionContextStageNoteValues
+}
+
 export type SessionSnapshot = RecentSessionSummary & {
   stage_states: SessionStageStateView[]
   story_brief?: StoryBriefView | null
@@ -202,6 +214,12 @@ export type SessionSnapshot = RecentSessionSummary & {
   active_audio_job?: AudioJobView | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
+  agent_context_summary?: string | null
+}
+
+export type SessionContextUpdateResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
 }
 
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
@@ -222,7 +240,20 @@ export function recordSessionUiAction(
   sessionId: string,
   body: RecordSessionUIActionRequest,
 ) {
-  return postJson<SessionHistoryEvent>(`/api/v1/sessions/${sessionId}/ui-actions`, body)
+  return postJson<SessionHistoryEvent>(
+    `/api/v1/sessions/${sessionId}/ui-actions`,
+    body,
+  )
+}
+
+export function applySessionContextUpdate(
+  sessionId: string,
+  body: SessionContextUpdateRequest,
+) {
+  return postJson<SessionContextUpdateResponse>(
+    `/api/v1/sessions/${sessionId}/context-updates`,
+    body,
+  )
 }
 
 export function parseSessionChatIntent(sessionId: string, message: string) {

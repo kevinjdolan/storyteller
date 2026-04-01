@@ -63,6 +63,11 @@ def test_event_log_service_records_supported_event_categories(db_session) -> Non
         target_id="brief-1",
         revision_number=2,
         changed_fields=("raw_brief", "planning_notes"),
+        field_values={
+            "raw_brief": "A calmer harbor mystery.",
+            "planning_notes": "Keep the midpoint reassuring.",
+        },
+        summary_text="Updated story brief notes from the workspace.",
     )
     event_log.record_chat_message(
         story_session.id,
@@ -121,6 +126,13 @@ def test_event_log_service_records_supported_event_categories(db_session) -> Non
     assert history.events[1].payload.output_kind == AIOutputKind.PITCH_BATCH
     assert history.events[2].payload is not None
     assert history.events[2].payload.changed_fields == ["raw_brief", "planning_notes"]
+    assert history.events[2].payload.field_values == {
+        "raw_brief": "A calmer harbor mystery.",
+        "planning_notes": "Keep the midpoint reassuring.",
+    }
+    assert history.events[2].payload.summary_text == (
+        "Updated story brief notes from the workspace."
+    )
     assert history.events[3].payload is not None
     assert history.events[3].payload.message_role == ChatMessageRole.USER
     assert history.events[4].summary == "Recorded UI action: updated_target_runtime."

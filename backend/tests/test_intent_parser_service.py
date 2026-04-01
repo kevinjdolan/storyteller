@@ -10,6 +10,7 @@ from app.models import (
     IntentParserStatus,
     IntentParserStructuredOutput,
     SessionActionDecision,
+    SessionContextUpdateRequest,
     SessionEventType,
     WorkflowStage,
     WorkflowStageState,
@@ -197,6 +198,48 @@ def test_intent_parser_service_falls_back_gracefully_when_adapter_fails(db_sessi
     assert history.events[-2].payload is not None
     assert history.events[-2].payload.raw_response is None
     assert history.events[-2].payload.result.status == IntentParserStatus.FAILED
+
+
+def test_intent_parser_service_uses_updated_ui_context_in_prompt_summary(db_session) -> None:
+    session_id = _create_beats_session(db_session)
+    session_service = SessionService(db_session)
+    session_service.apply_context_update(
+        session_id,
+        payload=SessionContextUpdateRequest.model_validate({
+            "target_kind": "stage_note",
+            "stage": "beats",
+            "control_id": "stage-note-editor",
+            "origin": "workspace",
+            "values": {
+                "detail": "Make the midpoint gentler and add one calmer beat before the finale.",
+            },
+        }),
+    )
+    adapter = StubIntentParserAdapter(
+        IntentParserStructuredOutput.model_validate(
+            {
+                "schema_version": 1,
+                "status": "needs_clarification",
+                "needs_clarification": True,
+                "assistant_response": "Do you want me to adjust the beat sheet or story setup?",
+                "clarification_reason": "Need the target workflow stage.",
+                "proposed_actions": {
+                    "schema_version": 1,
+                    "actions": [],
+                },
+            }
+        )
+    )
+
+    SessionIntentParserService(db_session, adapter).parse_user_message(
+        session_id,
+        message="make it even softer",
+    )
+
+    assert adapter.invocations
+    assert "Current beat sheet detail: Make the midpoint gentler" in (
+        adapter.invocations[0].rendered_prompt
+    )
 
 
 def _create_beats_session(db_session) -> str:

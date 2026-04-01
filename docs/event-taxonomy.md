@@ -62,6 +62,20 @@ Example payload shapes:
 }
 ```
 
+```json
+{
+  "schema_version": 1,
+  "target_kind": "beat_sheet",
+  "changed_fields": ["detail"],
+  "source": "workspace",
+  "field_values": {
+    "detail": "Soften the midpoint and add one calmer beat before the finale.",
+    "control_id": "stage-note-editor"
+  },
+  "summary_text": "Updated beat sheet notes from the workspace."
+}
+```
+
 For one-off service-owned events that do not yet deserve a first-class payload class,
 `SessionEventLogService.append_event(...)` still injects `schema_version: 1`
 into raw mapping payloads so stored JSON ages predictably.
@@ -134,6 +148,9 @@ for event in history.events:
 - Prefer enriching an existing payload model over creating ad hoc keys in scattered callers.
 - Keep payloads small but reconstructive: include stable identifiers, revision numbers,
   and enough context to explain what changed.
+- For durable UI-side field edits, include normalized `field_values` and a compact
+  `summary_text` so later prompts, summaries, and chat replay can stay grounded
+  without re-reading the entire raw event stream.
 - Do not rewrite or delete historical events to "fix" history. Emit a new compensating event.
 - When a workflow-stage event changes the truth seen by the UI, attach the emitted event
   back to affected `workflow_stage_states.last_event_id` so snapshots can explain why a stage looks the way it does.

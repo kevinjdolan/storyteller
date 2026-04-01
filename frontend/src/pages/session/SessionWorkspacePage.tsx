@@ -1,6 +1,7 @@
-import { type MouseEvent, useEffect } from 'react'
+import { type MouseEvent, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
+  applySessionContextUpdate,
   parseSessionChatIntent,
   recordSessionUiAction,
   type SessionHistoryEvent,
@@ -37,7 +38,9 @@ import {
 import { getWorkflowStageLabel } from '../../features/session/workflowStages.ts'
 import {
   Badge,
+  Button,
   ProgressBar,
+  TextArea,
   type BadgeTone,
 } from '../../shared/ui/primitives.tsx'
 import {
@@ -283,6 +286,28 @@ function buildStageDetailSummary(stage: SessionWorkspaceStageView) {
   return 'No durable detail is saved here yet, but the scaffold is ready for future controls.'
 }
 
+function supportsStageNoteEditing(stage: SessionWorkspaceStageView['stage']) {
+  return stage !== 'genre' && stage !== 'tone' && stage !== 'finalize'
+}
+
+function buildStageNoteEditorDescription(stage: SessionWorkspaceStageView) {
+  if (!supportsStageNoteEditing(stage.stage)) {
+    return `${stage.label} is selection-driven, so this note editor stays disabled until dedicated controls land.`
+  }
+
+  if (stage.availability === 'locked') {
+    return 'Locked stages stay readable, but note editing is disabled until the session reaches that step.'
+  }
+
+  if (stage.invalidatesOnEdit.length === 0) {
+    return 'This note is durable and replayable, but it does not invalidate any later stage.'
+  }
+
+  const invalidationLabels = stage.invalidatesOnEdit.map(getWorkflowStageLabel)
+
+  return `Saving this note records a durable UI event and can refresh ${invalidationLabels.join(', ')}.`
+}
+
 function buildStageRoutingCopy(
   currentStage: SessionWorkspaceStageView,
   selectedStage: SessionWorkspaceStageView,
@@ -470,6 +495,9 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const eventStream = useSessionEventStream()
   const runtimeStore = useSessionRuntimeActions()
   const snapshot = runtimeSnapshot ?? snapshotQuery.data
+  const [stageNoteDraft, setStageNoteDraft] = useState('')
+  const [stageNoteError, setStageNoteError] = useState<string | null>(null)
+  const [isSavingStageNote, setIsSavingStageNote] = useState(false)
 
   useEffect(() => {
     if (snapshotQuery.data == null || snapshotQuery.isError) {
@@ -504,6 +532,23 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     snapshotQuery.isPending,
   ])
 
+  const stageScaffold =
+    snapshot == null
+      ? null
+      : buildSessionWorkspaceStageViews(snapshot, searchParams.get('stage'))
+  const selectedStage = stageScaffold?.selectedStage ?? null
+  const selectedStageDetail = selectedStage?.detail ?? null
+  const selectedStageId = selectedStage?.stage ?? null
+
+  useEffect(() => {
+    if (selectedStageId == null) {
+      return
+    }
+
+    setStageNoteDraft(selectedStageDetail ?? '')
+    setStageNoteError(null)
+  }, [selectedStageDetail, selectedStageId])
+
   if (snapshot == null && snapshotQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
   }
@@ -525,13 +570,21 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     )
   }
 
-  const stageScaffold = buildSessionWorkspaceStageViews(
-    snapshot,
-    searchParams.get('stage'),
-  )
-  const selectedStage = stageScaffold.selectedStage
-  const activeStage = stageScaffold.currentStage
-  const stageViews = stageScaffold.stageViews
+  const resolvedStageScaffold = stageScaffold
+  if (resolvedStageScaffold == null || selectedStage == null) {
+    return (
+      <WorkspaceErrorState
+        errorMessage="The workspace stage scaffold could not be built."
+        sessionId={sessionId}
+        onRetry={() => {
+          void snapshotQuery.refetch()
+        }}
+      />
+    )
+  }
+
+  const activeStage = resolvedStageScaffold.currentStage
+  const stageViews = resolvedStageScaffold.stageViews
   const currentStageStatus = getStatusBadgeCopy(activeStage.status)
   const overallStatus = getStatusBadgeCopy(snapshot.overall_status)
   const progress = buildProgressCopy(snapshot)
@@ -553,6 +606,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const selectedStageInvalidations = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
   )
+  const stageNoteEditingSupported = supportsStageNoteEditing(
+    selectedStage.stage,
+  )
+  const stageNoteEditingDisabled =
+    !stageNoteEditingSupported || selectedStage.availability === 'locked'
+  const savedStageDetail = selectedStage.detail ?? ''
+  const stageNoteDirty = stageNoteDraft.trim() !== savedStageDetail.trim()
 
   function appendHistoryEventToChat(event: SessionHistoryEvent) {
     buildChatMessagesFromRecordedEvent(event, snapshot).forEach((message) => {
@@ -583,11 +643,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     })
 
     appendHistoryEventToChat(event)
+    void historyQuery.refetch()
   }
 
-  async function applySupportedChatAction(
-    action: ChatToUiAction,
-  ) {
+  async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
       await persistUiAction({
@@ -609,6 +668,44 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         origin: 'chat',
         valueSummary: 'Finalize',
       })
+    }
+  }
+
+  async function saveStageNote() {
+    if (
+      stageNoteEditingDisabled ||
+      !stageNoteDirty ||
+      isSavingStageNote ||
+      selectedStageId == null
+    ) {
+      return
+    }
+
+    setIsSavingStageNote(true)
+    setStageNoteError(null)
+
+    try {
+      const result = await applySessionContextUpdate(sessionId, {
+        target_kind: 'stage_note',
+        stage: selectedStageId,
+        control_id: 'stage-note-editor',
+        origin: 'workspace',
+        values: {
+          detail: stageNoteDraft,
+        },
+      })
+
+      runtimeStore.hydrateSessionSnapshot(result.snapshot)
+      appendHistoryEventToChat(result.event)
+      void historyQuery.refetch()
+    } catch (error) {
+      setStageNoteError(
+        error instanceof Error
+          ? error.message
+          : 'The note could not be saved right now.',
+      )
+    } finally {
+      setIsSavingStageNote(false)
     }
   }
 
@@ -698,7 +795,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 }),
               )
 
-              const parsedIntent = await parseSessionChatIntent(sessionId, message)
+              const parsedIntent = await parseSessionChatIntent(
+                sessionId,
+                message,
+              )
               const assistantCreatedAt = new Date().toISOString()
 
               runtimeStore.appendChatMessage(
@@ -895,6 +995,60 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   }
                 />
               </CardGrid>
+
+              <section className="workspace-stage-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h3>Stage note</h3>
+                    <p>{buildStageNoteEditorDescription(selectedStage)}</p>
+                  </div>
+                  <Badge tone={selectedStageStatus.tone}>
+                    {selectedStageStatus.label}
+                  </Badge>
+                </div>
+
+                <TextArea
+                  description="Saved notes become durable session context, show up in replayable history, and feed the backend agent summary."
+                  disabled={stageNoteEditingDisabled}
+                  error={stageNoteError}
+                  label={`${selectedStage.label} note`}
+                  onChange={(event) => {
+                    setStageNoteDraft(event.currentTarget.value)
+                  }}
+                  rows={5}
+                  value={stageNoteDraft}
+                />
+
+                <div className="cta-row">
+                  <Button
+                    disabled={
+                      stageNoteEditingDisabled ||
+                      !stageNoteDirty ||
+                      isSavingStageNote
+                    }
+                    onClick={() => {
+                      void saveStageNote()
+                    }}
+                    tone="primary"
+                  >
+                    {isSavingStageNote ? 'Saving note...' : 'Save note'}
+                  </Button>
+                  <Button
+                    disabled={
+                      stageNoteEditingDisabled ||
+                      !stageNoteDirty ||
+                      isSavingStageNote
+                    }
+                    onClick={() => {
+                      setStageNoteDraft(savedStageDetail)
+                      setStageNoteError(null)
+                    }}
+                    tone="ghost"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </section>
 
               <SessionStageEditorPreview
                 invalidationLabels={selectedStageInvalidations}

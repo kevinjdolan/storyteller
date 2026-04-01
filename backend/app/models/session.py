@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.events import SessionEventView
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -148,6 +149,23 @@ class RecordSessionUIActionRequest(BaseModel):
     origin: str = Field(default="workspace", min_length=1)
 
 
+class SessionContextStageNoteValues(BaseModel):
+    detail: str | None = None
+
+
+class SessionContextUpdateRequest(BaseModel):
+    target_kind: Literal["stage_note"] = "stage_note"
+    stage: WorkflowStage
+    control_id: str | None = None
+    origin: str = Field(default="workspace", min_length=1)
+    values: SessionContextStageNoteValues
+
+
+class SessionContextUpdateResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class RecentSessionSummary(BaseModel):
     id: str
     display_title: str
@@ -188,6 +206,10 @@ class SessionSnapshot(BaseModel):
     active_audio_job: AudioJobView | None = None
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
+    agent_context_summary: str | None = None
 
 
 ExportAssetView = SessionAssetView
+
+
+SessionContextUpdateResponse.model_rebuild()

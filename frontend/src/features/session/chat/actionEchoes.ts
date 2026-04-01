@@ -6,10 +6,7 @@ import type {
   SessionHistoryEvent,
   SessionSnapshot,
 } from '../../../api/sessions.ts'
-import type {
-  ChatToUiAction,
-  ChatToUiActionType,
-} from './chatToUiActions.ts'
+import type { ChatToUiAction, ChatToUiActionType } from './chatToUiActions.ts'
 import {
   createSessionChatMessage,
   type SessionChatMessageRole,
@@ -136,6 +133,11 @@ function buildUserEditEcho(event: SessionHistoryEvent) {
     return event.summary
   }
 
+  const summaryText = readString(event.payload, 'summary_text')
+  if (summaryText != null) {
+    return summaryText
+  }
+
   const targetKind = readString(event.payload, 'target_kind')
   const changedFields = humanizeFieldList(
     readStringArray(event.payload, 'changed_fields'),
@@ -143,7 +145,9 @@ function buildUserEditEcho(event: SessionHistoryEvent) {
   const targetLabel =
     targetKind == null
       ? 'content'
-      : humanizeToken(targetKind).replace(/\b\w/g, (match) => match.toLowerCase())
+      : humanizeToken(targetKind).replace(/\b\w/g, (match) =>
+          match.toLowerCase(),
+        )
 
   if (changedFields == null) {
     return `Updated ${targetLabel}.`

@@ -119,6 +119,8 @@ class UserEditRecordedEventPayload(EventPayload):
     revision_number: int | None = None
     changed_fields: list[str] = Field(default_factory=list)
     source: str = "unknown"
+    field_values: dict[str, Any] | None = None
+    summary_text: str | None = None
 
 
 class ChatMessageRecordedEventPayload(EventPayload):

@@ -122,7 +122,8 @@ describe('actionEchoes', () => {
         schema_version: 1,
         status: 'parsed',
         needs_clarification: false,
-        assistant_response: 'I can shorten the story once story setup is ready.',
+        assistant_response:
+          'I can shorten the story once story setup is ready.',
         clarification_reason: null,
         proposed_actions: {
           schema_version: 1,
@@ -175,5 +176,45 @@ describe('actionEchoes', () => {
         body: "Couldn't update story setup yet. Finish Beat sheet first.",
       }),
     ])
+  })
+
+  it('prefers explicit user-edit summary text when replaying durable history', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 1,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'content.user_edit.recorded',
+            stage: 'beats',
+            summary: 'Saved user edit for beat sheet.',
+            payload: {
+              schema_version: 1,
+              target_kind: 'beat_sheet',
+              changed_fields: ['detail'],
+              summary_text: 'Updated beat sheet notes from the workspace.',
+            },
+            created_at: '2026-04-01T08:12:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'beats',
+      } as never,
+    )
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: 'action_echo',
+        body: 'Updated beat sheet notes from the workspace.',
+      }),
+    )
   })
 })

@@ -15,12 +15,18 @@ from app.models import (
     RecordSessionUIActionRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
+    SessionContextUpdateRequest,
+    SessionContextUpdateResponse,
     SessionEventView,
     SessionHistoryView,
     SessionSnapshot,
 )
 from app.services import SessionActionPolicyService, SessionIntentParserService
-from app.services.sessions import SessionNotFoundError, SessionService
+from app.services.sessions import (
+    SessionNotFoundError,
+    SessionService,
+    UnsupportedSessionContextUpdateError,
+)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -117,6 +123,34 @@ def record_session_ui_action(
     except SessionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/context-updates",
+    response_model=SessionContextUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Apply a durable UI-originated context update",
+)
+def apply_session_context_update(
+    session_id: str,
+    payload: SessionContextUpdateRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionContextUpdateResponse:
+    try:
+        return SessionService(db_session).apply_context_update(
+            session_id,
+            payload=payload,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except UnsupportedSessionContextUpdateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

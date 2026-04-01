@@ -24,7 +24,7 @@ from app.db import (
     ToneProfile,
     make_engine,
 )
-from app.models import WorkflowStage, WorkflowStageState
+from app.models import SessionContextUpdateRequest, WorkflowStage, WorkflowStageState
 from app.services.sessions import (
     InvalidStageTransitionError,
     SessionNotFoundError,
@@ -304,6 +304,10 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.progress.completed_stages == 7
     assert snapshot.progress.in_progress_stages == 1
     assert snapshot.current_stage == WorkflowStage.COMPOSITION
+    assert snapshot.agent_context_summary is not None
+    assert "Selected genre: Quest Fantasy" in snapshot.agent_context_summary
+    assert "Current stage: composition (in_progress)" in snapshot.agent_context_summary
+    assert "Story setup: 1800 words, 12 minutes, 3 chapters" in snapshot.agent_context_summary
     composition_stage = next(
         stage for stage in snapshot.stage_states if stage.stage == WorkflowStage.COMPOSITION
     )
@@ -380,6 +384,76 @@ def test_record_ui_action_persists_a_history_entry(db_session) -> None:
     history = service.load_session_history(snapshot.id)
     assert history.latest_sequence_number == 2
     assert history.events[-1].event_type == "ui.action.recorded"
+
+
+def test_apply_context_update_persists_stage_note_and_invalidates_dependents(db_session) -> None:
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="UI Context")
+
+    for stage in (
+        WorkflowStage.GENRE,
+        WorkflowStage.TONE,
+        WorkflowStage.BRIEF,
+        WorkflowStage.PITCHES,
+        WorkflowStage.CHARACTERS,
+        WorkflowStage.BEATS,
+        WorkflowStage.STORY_SETUP,
+        WorkflowStage.COMPOSITION,
+        WorkflowStage.AUDIO,
+    ):
+        snapshot = service.update_stage_state(
+            snapshot.id,
+            stage=stage,
+            status=WorkflowStageState.COMPLETED,
+            detail=f"Accepted {stage.value}.",
+        )
+
+    result = service.apply_context_update(
+        snapshot.id,
+        payload=SessionContextUpdateRequest.model_validate(
+            {
+                "target_kind": "stage_note",
+                "stage": "beats",
+                "control_id": "stage-note-editor",
+                "origin": "workspace",
+                "values": {
+                    "detail": "Soften the midpoint and let the return home land faster.",
+                },
+            }
+        ),
+    )
+
+    updated_snapshot = result.snapshot
+    stage_map = {stage.stage: stage for stage in updated_snapshot.stage_states}
+
+    assert result.event.event_type == "content.user_edit.recorded"
+    assert result.event.stage == WorkflowStage.BEATS
+    assert result.event.payload is not None
+    assert result.event.payload.changed_fields == ["detail"]
+    assert result.event.payload.field_values == {
+        "detail": "Soften the midpoint and let the return home land faster.",
+        "control_id": "stage-note-editor",
+    }
+    assert result.event.payload.summary_text == "Updated beat sheet notes from the workspace."
+    assert stage_map[WorkflowStage.BEATS].detail == (
+        "Soften the midpoint and let the return home land faster."
+    )
+    assert stage_map[WorkflowStage.BEATS].last_event_type == "content.user_edit.recorded"
+    assert stage_map[WorkflowStage.COMPOSITION].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.AUDIO].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.FINALIZE].status == WorkflowStageState.DRAFT
+    assert stage_map[WorkflowStage.COMPOSITION].last_event_type == "workflow.stage_changed"
+    assert updated_snapshot.overall_status == WorkflowStageState.NEEDS_REGENERATION
+    assert updated_snapshot.agent_context_summary is not None
+    assert "Latest saved UI detail: Beat sheet: Soften the midpoint" in (
+        updated_snapshot.agent_context_summary
+    )
+    assert "Needs regeneration: Composition, Audio" in updated_snapshot.agent_context_summary
+
+    history = service.load_session_history(snapshot.id)
+    assert history.latest_sequence_number == 12
+    assert history.events[-2].event_type == "workflow.stage_changed"
+    assert history.events[-1].event_type == "content.user_edit.recorded"
 
 
 def test_update_stage_state_invalidates_downstream_outputs_after_upstream_edit(db_session) -> None:

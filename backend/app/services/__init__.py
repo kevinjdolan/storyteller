@@ -26,6 +26,7 @@ from app.services.sessions import (
     SessionNotFoundError,
     SessionService,
     SessionServiceError,
+    UnsupportedSessionContextUpdateError,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "SessionEventLogService",
     "SessionService",
     "SessionServiceError",
+    "UnsupportedSessionContextUpdateError",
 ]

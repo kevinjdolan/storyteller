@@ -23,6 +23,8 @@ from app.models import (
     RecentSessionSummary,
     SessionAssetView,
     SessionCatalogSelection,
+    SessionContextUpdateRequest,
+    SessionContextUpdateResponse,
     SessionEventActor,
     SessionEventView,
     SessionHistoryView,
@@ -31,6 +33,7 @@ from app.models import (
     SessionStageStateView,
     StoryBriefView,
     StorySetupView,
+    UserEditTargetKind,
     WorkflowStage,
     WorkflowStageState,
     get_invalidated_stages_after_edit,
@@ -42,6 +45,7 @@ from app.repositories import (
     StorySessionRepository,
     WorkflowStageStateRepository,
 )
+from app.services.agent_context import build_session_agent_context_summary
 from app.services.event_log import SessionEventLogService
 
 
@@ -55,6 +59,21 @@ class SessionNotFoundError(SessionServiceError):
 
 class InvalidStageTransitionError(SessionServiceError):
     """Raised when a stage update violates workflow rules."""
+
+
+class UnsupportedSessionContextUpdateError(SessionServiceError):
+    """Raised when a UI-originated context update is not supported."""
+
+
+STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
+    WorkflowStage.BRIEF: UserEditTargetKind.STORY_BRIEF,
+    WorkflowStage.PITCHES: UserEditTargetKind.PITCH,
+    WorkflowStage.CHARACTERS: UserEditTargetKind.CHARACTER_SHEET,
+    WorkflowStage.BEATS: UserEditTargetKind.BEAT_SHEET,
+    WorkflowStage.STORY_SETUP: UserEditTargetKind.STORY_SETUP,
+    WorkflowStage.COMPOSITION: UserEditTargetKind.COMPOSITION_SEGMENT,
+    WorkflowStage.AUDIO: UserEditTargetKind.AUDIO_SETTINGS,
+}
 
 
 class SessionService:
@@ -139,6 +158,92 @@ class SessionService:
         )
         self._session.commit()
         return self._event_log.build_event_view(event)
+
+    def apply_context_update(
+        self,
+        session_id: str,
+        *,
+        payload: SessionContextUpdateRequest,
+        actor: SessionEventActor | None = None,
+    ) -> SessionContextUpdateResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        if payload.target_kind != "stage_note":
+            raise UnsupportedSessionContextUpdateError(
+                f"unsupported context update kind {payload.target_kind!r}"
+            )
+
+        target_kind = STAGE_EDIT_TARGET_KIND_MAP.get(payload.stage)
+        if target_kind is None:
+            raise UnsupportedSessionContextUpdateError(
+                f"stage {payload.stage.value!r} does not support durable note edits"
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        stage_snapshot = stage_map[payload.stage]
+        previous_status = stage_snapshot.status
+        now = utc_now()
+        normalized_detail = _normalize_optional_text(payload.values.detail)
+
+        if stage_snapshot.status == WorkflowStageState.DRAFT:
+            self._validate_stage_transition(
+                stage_map,
+                stage=payload.stage,
+                status=WorkflowStageState.IN_PROGRESS,
+            )
+            stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+            stage_snapshot.started_at = stage_snapshot.started_at or now
+        elif stage_snapshot.status == WorkflowStageState.NEEDS_REGENERATION:
+            stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+            stage_snapshot.started_at = stage_snapshot.started_at or now
+            stage_snapshot.completed_at = None
+
+        stage_snapshot.detail = normalized_detail
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=payload.stage,
+            detail=normalized_detail,
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        if previous_status != stage_snapshot.status or invalidated_stages:
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=payload.stage,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        edit_event = self._event_log.record_user_edit(
+            story_session.id,
+            target_kind=target_kind,
+            stage=payload.stage,
+            changed_fields=["detail"],
+            source=payload.origin,
+            field_values={
+                "detail": normalized_detail,
+                "control_id": payload.control_id,
+            },
+            summary_text=_build_stage_note_summary(payload.stage, normalized_detail),
+            actor=actor,
+        )
+        stage_snapshot.last_event = edit_event
+        self._session.commit()
+        return SessionContextUpdateResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(edit_event),
+        )
 
     def update_stage_state(
         self,
@@ -293,7 +398,7 @@ def _build_recent_session_summary(story_session) -> RecentSessionSummary:
 
 def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
     story_session = aggregate.session
-    return SessionSnapshot(
+    snapshot = SessionSnapshot(
         id=story_session.id,
         display_title=_resolve_display_title(
             working_title=story_session.working_title,
@@ -329,6 +434,8 @@ def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
         latest_story_asset=_build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=_build_session_asset_view(aggregate.latest_audio_asset),
     )
+    snapshot.agent_context_summary = build_session_agent_context_summary(snapshot)
+    return snapshot
 
 
 def _build_catalog_selection(row) -> SessionCatalogSelection | None:
@@ -595,3 +702,10 @@ def _resolve_furthest_completed_stage(
 def _stages_before(stage: WorkflowStage) -> tuple[WorkflowStage, ...]:
     stages = WORKFLOW_STAGE_SEQUENCE
     return stages[: stages.index(stage)]
+
+
+def _build_stage_note_summary(stage: WorkflowStage, detail: str | None) -> str:
+    label = get_workflow_stage_definition(stage).label
+    if detail:
+        return f"Updated {label.lower()} notes from the workspace."
+    return f"Cleared {label.lower()} notes from the workspace."
