@@ -1720,6 +1720,38 @@ h4 {
   background: rgba(255, 251, 247, 0.82);
 }
 
+.workspace-chat-quick-actions {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid rgba(39, 69, 99, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.workspace-chat-quick-actions__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-chat-quick-actions__header strong {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.workspace-chat-quick-actions__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.workspace-chat-quick-actions__hint {
+  margin: 0;
+  color: var(--color-ink-muted);
+}
+
 .workspace-chat-composer__header,
 .workspace-chat-composer__footer {
   display: flex;
@@ -2114,6 +2146,11 @@ h4 {
 
   .selection-card__meta {
     justify-content: start;
+  }
+
+  .workspace-chat-quick-actions__header {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

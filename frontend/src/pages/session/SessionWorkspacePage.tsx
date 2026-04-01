@@ -22,6 +22,13 @@ import {
 import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspaceProvider.tsx'
 import { SessionChatPane } from '../../features/session/chat/SessionChatPane.tsx'
 import {
+  buildSessionChatQuickActions,
+  buildSessionChatQuickActionSubmission,
+  buildSessionChatSlashCommandHint,
+  resolveSessionChatSlashCommand,
+  type SessionExplicitChatCommand,
+} from '../../features/session/chat/chatCommands.ts'
+import {
   buildInitialSessionChatMessages,
   createSessionChatMessage,
 } from '../../features/session/chat/sessionChat.ts'
@@ -606,6 +613,11 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const selectedStageInvalidations = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
   )
+  const chatQuickActions = buildSessionChatQuickActions({
+    snapshot,
+    selectedStage: selectedStage.stage,
+  })
+  const slashCommandHint = buildSessionChatSlashCommandHint(chatQuickActions)
   const stageNoteEditingSupported = supportsStageNoteEditing(
     selectedStage.stage,
   )
@@ -668,6 +680,66 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         origin: 'chat',
         valueSummary: 'Finalize',
       })
+    }
+  }
+
+  async function submitChatTurn(options: {
+    explicitCommand?: SessionExplicitChatCommand | null
+    message: string
+  }) {
+    const submittedAt = new Date().toISOString()
+
+    runtimeStore.appendChatMessage(
+      createSessionChatMessage({
+        role: 'user',
+        body: options.message,
+        createdAt: submittedAt,
+      }),
+    )
+
+    const parsedIntent = await parseSessionChatIntent(sessionId, options.message, {
+      explicitCommand: options.explicitCommand ?? null,
+    })
+    const assistantCreatedAt = new Date().toISOString()
+
+    runtimeStore.appendChatMessage(
+      createSessionChatMessage({
+        role: 'assistant',
+        body: parsedIntent.assistant_response,
+        createdAt: assistantCreatedAt,
+      }),
+    )
+
+    buildIntentActionEchoMessages({
+      result: parsedIntent,
+      createdAt: assistantCreatedAt,
+      idPrefix: `intent-${submittedAt}`,
+    }).forEach((actionEcho) => {
+      runtimeStore.appendChatMessage(actionEcho)
+    })
+
+    const evaluatedActions = parsedIntent.policy_evaluation?.evaluated_actions ?? []
+
+    for (const evaluatedAction of evaluatedActions) {
+      if (
+        evaluatedAction.decision !== 'accepted' &&
+        evaluatedAction.decision !== 'accepted_with_side_effects'
+      ) {
+        continue
+      }
+
+      const action =
+        parsedIntent.proposed_actions.actions[evaluatedAction.action_index]
+
+      if (
+        action == null ||
+        (action.action_type !== 'navigate_to_stage' &&
+          action.action_type !== 'open_finalize_view')
+      ) {
+        continue
+      }
+
+      await applySupportedChatAction(action).catch(() => {})
     }
   }
 
@@ -784,66 +856,36 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             disabledReason={chatActivityState.disabledReason}
             isBusy={chatActivityState.isBusy}
             messages={chatMessages}
-            onSubmit={async (message) => {
-              const submittedAt = new Date().toISOString()
-
-              runtimeStore.appendChatMessage(
-                createSessionChatMessage({
-                  role: 'user',
-                  body: message,
-                  createdAt: submittedAt,
-                }),
-              )
-
-              const parsedIntent = await parseSessionChatIntent(
-                sessionId,
-                message,
-              )
-              const assistantCreatedAt = new Date().toISOString()
-
-              runtimeStore.appendChatMessage(
-                createSessionChatMessage({
-                  role: 'assistant',
-                  body: parsedIntent.assistant_response,
-                  createdAt: assistantCreatedAt,
-                }),
-              )
-
-              buildIntentActionEchoMessages({
-                result: parsedIntent,
-                createdAt: assistantCreatedAt,
-                idPrefix: `intent-${submittedAt}`,
-              }).forEach((actionEcho) => {
-                runtimeStore.appendChatMessage(actionEcho)
+            onQuickAction={async (commandId) => {
+              const submission = buildSessionChatQuickActionSubmission({
+                commandId,
+                snapshot,
+                selectedStage: selectedStage.stage,
               })
 
-              const evaluatedActions =
-                parsedIntent.policy_evaluation?.evaluated_actions ?? []
-
-              for (const evaluatedAction of evaluatedActions) {
-                if (
-                  evaluatedAction.decision !== 'accepted' &&
-                  evaluatedAction.decision !== 'accepted_with_side_effects'
-                ) {
-                  continue
-                }
-
-                const action =
-                  parsedIntent.proposed_actions.actions[
-                    evaluatedAction.action_index
-                  ]
-
-                if (
-                  action == null ||
-                  (action.action_type !== 'navigate_to_stage' &&
-                    action.action_type !== 'open_finalize_view')
-                ) {
-                  continue
-                }
-
-                await applySupportedChatAction(action).catch(() => {})
+              if (submission == null) {
+                throw new Error('The requested quick action is not available.')
               }
+
+              await submitChatTurn({
+                message: submission.message,
+                explicitCommand: submission.explicitCommand,
+              })
             }}
+            onSubmit={async (message) => {
+              const commandSubmission = resolveSessionChatSlashCommand({
+                input: message,
+                snapshot,
+                selectedStage: selectedStage.stage,
+              })
+
+              await submitChatTurn({
+                message,
+                explicitCommand: commandSubmission?.explicitCommand ?? null,
+              })
+            }}
+            quickActions={chatQuickActions}
+            slashCommandHint={slashCommandHint}
           />
         </aside>
 

@@ -184,6 +184,28 @@ export type ParsedChatIntentResponse = {
   policy_evaluation?: SessionActionPolicyEvaluation | null
 }
 
+export type SessionExplicitChatCommandId =
+  | 'next_stage'
+  | 'summarize_plan'
+  | 'regenerate_pitches'
+  | 'pause_writing'
+  | 'resume_writing'
+
+export type SessionExplicitChatCommandSource =
+  | 'slash_command'
+  | 'quick_action'
+
+export type SessionExplicitChatCommand = {
+  command_id: SessionExplicitChatCommandId
+  source: SessionExplicitChatCommandSource
+  proposed_actions: ChatToUiActionBatch
+}
+
+export type ParseSessionChatIntentRequest = {
+  message: string
+  explicit_command?: SessionExplicitChatCommand | null
+}
+
 export type RecordSessionUIActionRequest = {
   action: string
   stage?: WorkflowStageId | null
@@ -256,11 +278,18 @@ export function applySessionContextUpdate(
   )
 }
 
-export function parseSessionChatIntent(sessionId: string, message: string) {
+export function parseSessionChatIntent(
+  sessionId: string,
+  message: string,
+  options?: {
+    explicitCommand?: SessionExplicitChatCommand | null
+  },
+) {
   return postJson<ParsedChatIntentResponse>(
     `/api/v1/sessions/${sessionId}/chat/intents`,
     {
       message,
+      explicit_command: options?.explicitCommand ?? null,
     },
   )
 }

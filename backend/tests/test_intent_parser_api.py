@@ -17,8 +17,10 @@ class StubIntentParserAdapter:
     def __init__(self, structured_output: IntentParserStructuredOutput) -> None:
         self.model_id = "gemini-3.1-flash-lite"
         self._structured_output = structured_output
+        self.parse_calls = 0
 
     def parse(self, invocation):
+        self.parse_calls += 1
         return IntentParserInvocationResult(
             invocation=invocation,
             structured_output=self._structured_output,
@@ -136,3 +138,92 @@ def test_parse_chat_intents_endpoint_returns_404_for_missing_session(
     assert response.json() == {
         "detail": "session 'missing-session' was not found",
     }
+
+
+def test_parse_chat_intents_endpoint_handles_explicit_commands_without_calling_the_parser(
+    intent_parser_api_client: tuple[TestClient, StubIntentParserAdapter],
+) -> None:
+    client, adapter = intent_parser_api_client
+    db_session = get_session_factory()()
+    try:
+        session_id = SessionService(db_session).create_session(working_title="Lantern Cove").id
+    finally:
+        db_session.close()
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/chat/intents",
+        json={
+            "message": "/next-stage",
+            "explicit_command": {
+                "command_id": "next_stage",
+                "source": "quick_action",
+                "proposed_actions": {
+                    "schema_version": 1,
+                    "actions": [
+                        {
+                            "schema_version": 1,
+                            "action_type": "navigate_to_stage",
+                            "target_stage": "tone",
+                            "confidence": 1,
+                            "rationale": "Explicit command requested navigation to Tone.",
+                            "requires_confirmation": False,
+                            "extracted_values": {},
+                        }
+                    ],
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["assistant_response"] == "I can move the workspace to Tone."
+    assert payload["proposed_actions"]["actions"][0]["action_type"] == "navigate_to_stage"
+    assert payload["policy_evaluation"]["evaluated_actions"][0]["decision"] == "accepted"
+    assert adapter.parse_calls == 0
+
+    db_session = get_session_factory()()
+    try:
+        history = SessionEventLogService(db_session).list_session_history(session_id)
+    finally:
+        db_session.close()
+
+    assert history.events[-2].event_type == "chat.intent.parsed"
+    assert history.events[-2].payload is not None
+    assert history.events[-2].payload.prompt_version == "explicit_command.v1"
+    assert history.events[-2].payload.model_id == "deterministic-command-map"
+
+
+def test_parse_chat_intents_endpoint_supports_summary_commands_with_no_actions(
+    intent_parser_api_client: tuple[TestClient, StubIntentParserAdapter],
+) -> None:
+    client, adapter = intent_parser_api_client
+    db_session = get_session_factory()()
+    try:
+        session_id = SessionService(db_session).create_session(working_title="Lantern Cove").id
+    finally:
+        db_session.close()
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/chat/intents",
+        json={
+            "message": "/plan",
+            "explicit_command": {
+                "command_id": "summarize_plan",
+                "source": "slash_command",
+                "proposed_actions": {
+                    "schema_version": 1,
+                    "actions": [],
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "parsed"
+    assert payload["needs_clarification"] is False
+    assert payload["proposed_actions"]["actions"] == []
+    assert payload["policy_evaluation"] is None
+    assert "Current focus is genre." in payload["assistant_response"]
+    assert adapter.parse_calls == 0

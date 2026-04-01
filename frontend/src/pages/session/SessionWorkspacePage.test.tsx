@@ -325,15 +325,92 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
   }
 }
 
+function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
+  const explicitCommand =
+    typeof requestBody.explicit_command === 'object' &&
+    requestBody.explicit_command !== null
+      ? (requestBody.explicit_command as Record<string, unknown>)
+      : null
+  const proposedActions =
+    explicitCommand != null &&
+    typeof explicitCommand.proposed_actions === 'object' &&
+    explicitCommand.proposed_actions !== null
+      ? explicitCommand.proposed_actions
+      : {
+          schema_version: 1,
+          actions: [],
+        }
+  const actions =
+    typeof proposedActions === 'object' &&
+    proposedActions !== null &&
+    Array.isArray((proposedActions as { actions?: unknown[] }).actions)
+      ? ((proposedActions as { actions: unknown[] }).actions as Array<
+          Record<string, unknown>
+        >)
+      : []
+  const commandId =
+    explicitCommand != null && typeof explicitCommand.command_id === 'string'
+      ? explicitCommand.command_id
+      : null
+
+  if (commandId === 'summarize_plan') {
+    return {
+      schema_version: 1,
+      status: 'parsed',
+      needs_clarification: false,
+      assistant_response:
+        'Current focus is beat sheet. Plan so far: Quest Fantasy, Hushed Wonder, pitch "Lanterns Over Juniper Lake", ~12 minutes, 4 chapters, 1500 words.',
+      clarification_reason: null,
+      proposed_actions: {
+        schema_version: 1,
+        actions: [],
+      },
+      policy_evaluation: null,
+    }
+  }
+
+  return {
+    schema_version: 1,
+    status: 'parsed',
+    needs_clarification: false,
+    assistant_response:
+      commandId === 'next_stage'
+        ? 'I can move the workspace to Story setup.'
+        : 'I can translate that command into the story workspace.',
+    clarification_reason: null,
+    proposed_actions: proposedActions,
+    policy_evaluation: {
+      schema_version: 1,
+      session_id: 'moonlit-harbor',
+      evaluated_actions: actions.map((action, actionIndex) => ({
+        action_index: actionIndex,
+        action_type: action.action_type,
+        target_stage: action.target_stage,
+        decision: 'accepted',
+        summary:
+          action.action_type === 'navigate_to_stage'
+            ? 'Navigation is allowed.'
+            : 'Action can be applied.',
+        reasons: [],
+        side_effects: [],
+        prerequisite_action_types: [],
+      })),
+    },
+  }
+}
+
 function mockWorkspaceApi(options?: {
   history?: unknown
   snapshot?: unknown
   snapshotStatus?: number
-  chatIntentResponse?: unknown
+  chatIntentResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
 }) {
   const history = options?.history ?? sampleHistory
   const snapshot = options?.snapshot ?? sampleSnapshot
   const snapshotStatus = options?.snapshotStatus ?? 200
+  const chatIntentRequests: Record<string, unknown>[] = []
   const chatIntentResponse = options?.chatIntentResponse ?? {
     schema_version: 1,
     status: 'parsed',
@@ -394,10 +471,21 @@ function mockWorkspaceApi(options?: {
         pathname === '/api/v1/sessions/moonlit-harbor/chat/intents' &&
         init?.method === 'POST'
       ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+
+        chatIntentRequests.push(requestBody)
+        const resolvedChatIntentResponse =
+          typeof chatIntentResponse === 'function'
+            ? chatIntentResponse(requestBody)
+            : chatIntentResponse
+
         return Promise.resolve(
-          chatIntentResponse instanceof Response
-            ? chatIntentResponse
-            : buildJsonResponse(200, chatIntentResponse),
+          resolvedChatIntentResponse instanceof Response
+            ? resolvedChatIntentResponse
+            : buildJsonResponse(200, resolvedChatIntentResponse),
         )
       }
 
@@ -432,6 +520,10 @@ function mockWorkspaceApi(options?: {
       throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
     }),
   )
+
+  return {
+    chatIntentRequests,
+  }
 }
 
 function renderWorkspaceRoute() {
@@ -498,6 +590,18 @@ describe('SessionWorkspacePage', () => {
       screen.getByRole('heading', { level: 3, name: 'Workflow component kit' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Choice cards')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next stage' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Regenerate pitches' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Summarize plan' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Slash commands: /next-stage, /regenerate-pitches, /plan',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {
@@ -579,6 +683,78 @@ describe('SessionWorkspacePage', () => {
         name: 'Configure narration and music',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('submits slash commands through the explicit command contract', async () => {
+    const { chatIntentRequests } = mockWorkspaceApi({
+      chatIntentResponse: buildCommandChatIntentResponse,
+    })
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: '/plan',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      await screen.findByText(
+        'Current focus is beat sheet. Plan so far: Quest Fantasy, Hushed Wonder, pitch "Lanterns Over Juniper Lake", ~12 minutes, 4 chapters, 1500 words.',
+      ),
+    ).toBeInTheDocument()
+    expect(chatIntentRequests).toHaveLength(1)
+    expect(chatIntentRequests[0]).toMatchObject({
+      message: '/plan',
+      explicit_command: {
+        command_id: 'summarize_plan',
+        source: 'slash_command',
+        proposed_actions: {
+          schema_version: 1,
+          actions: [],
+        },
+      },
+    })
+  })
+
+  it('runs quick actions through the same explicit command request shape', async () => {
+    const { chatIntentRequests } = mockWorkspaceApi({
+      chatIntentResponse: buildCommandChatIntentResponse,
+    })
+
+    renderWorkspaceRoute()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Next stage' }))
+
+    expect(
+      await screen.findByText('I can move the workspace to Story setup.'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Set soft story targets',
+      }),
+    ).toBeInTheDocument()
+    expect(chatIntentRequests).toHaveLength(1)
+    expect(chatIntentRequests[0]).toMatchObject({
+      message: '/next-stage',
+      explicit_command: {
+        command_id: 'next_stage',
+        source: 'quick_action',
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              action_type: 'navigate_to_stage',
+              target_stage: 'story_setup',
+            },
+          ],
+        },
+      },
+    })
   })
 
   it('saves a stage note through the durable context update pipeline', async () => {

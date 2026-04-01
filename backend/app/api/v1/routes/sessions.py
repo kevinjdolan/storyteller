@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.ai import IntentParserAdapter
@@ -163,13 +163,18 @@ def apply_session_context_update(
 def parse_chat_intents(
     session_id: str,
     payload: ParseChatIntentRequest,
+    request: Request,
     db_session: Annotated[Session, Depends(get_db_session)],
-    intent_parser: Annotated[IntentParserAdapter, Depends(get_intent_parser_adapter)],
 ) -> ParsedChatIntentResponse:
+    intent_parser: IntentParserAdapter | None = None
+    if payload.explicit_command is None:
+        intent_parser = get_intent_parser_adapter(request)
+
     try:
         return SessionIntentParserService(db_session, intent_parser).parse_user_message(
             session_id,
             message=payload.message,
+            explicit_command=payload.explicit_command,
         )
     except SessionNotFoundError as exc:
         raise HTTPException(

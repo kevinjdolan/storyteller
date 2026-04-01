@@ -12,6 +12,7 @@ import {
   type SessionChatMessage,
   type SessionChatMessageRole,
 } from './sessionChat.ts'
+import type { SessionChatQuickAction } from './chatCommands.ts'
 
 type SessionChatPaneProps = {
   activityLabel: string
@@ -20,7 +21,12 @@ type SessionChatPaneProps = {
   disabledReason?: string | null
   isBusy?: boolean
   messages: ReadonlyArray<SessionChatMessage>
+  onQuickAction?: (
+    commandId: SessionChatQuickAction['commandId'],
+  ) => Promise<void> | void
   onSubmit: (message: string) => Promise<void> | void
+  quickActions?: ReadonlyArray<SessionChatQuickAction>
+  slashCommandHint?: string | null
 }
 
 type MessageRoleCopy = {
@@ -62,10 +68,12 @@ function getComposerHint({
   disabledReason,
   isBusy,
   isSubmitting,
+  slashCommandHint,
 }: {
   disabledReason?: string | null
   isBusy: boolean
   isSubmitting: boolean
+  slashCommandHint?: string | null
 }) {
   if (disabledReason != null) {
     return disabledReason
@@ -79,6 +87,10 @@ function getComposerHint({
     return 'Background work is active in the workspace. Chat stays available for notes and redirects.'
   }
 
+  if (slashCommandHint != null) {
+    return `Press Enter to send. Press Shift+Enter for a new line. Try ${slashCommandHint}.`
+  }
+
   return 'Press Enter to send. Press Shift+Enter for a new line.'
 }
 
@@ -89,7 +101,10 @@ export function SessionChatPane({
   disabledReason = null,
   isBusy = false,
   messages,
+  onQuickAction,
   onSubmit,
+  quickActions = [],
+  slashCommandHint = null,
 }: SessionChatPaneProps) {
   const transcriptRef = useRef<HTMLOListElement | null>(null)
   const shouldStickToBottomRef = useRef(true)
@@ -161,10 +176,33 @@ export function SessionChatPane({
     await submitDraft()
   }
 
+  async function runQuickAction(commandId: SessionChatQuickAction['commandId']) {
+    if (isSubmitting || disabledReason != null || onQuickAction == null) {
+      return
+    }
+
+    setSubmissionError(null)
+    setIsSubmitting(true)
+
+    try {
+      await onQuickAction(commandId)
+      shouldStickToBottomRef.current = true
+    } catch (error) {
+      setSubmissionError(
+        error instanceof Error
+          ? error.message
+          : 'The quick action could not be added to the chat transcript.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const composerHint = getComposerHint({
     disabledReason,
     isBusy,
     isSubmitting,
+    slashCommandHint,
   })
   const composerIsDisabled = disabledReason != null || isSubmitting
 
@@ -231,6 +269,46 @@ export function SessionChatPane({
                 : 'Ready'}
           </Badge>
         </div>
+
+        {quickActions.length > 0 ? (
+          <section
+            aria-label="Quick chat actions"
+            className="workspace-chat-quick-actions"
+          >
+            <div className="workspace-chat-quick-actions__header">
+              <div>
+                <strong>Quick actions</strong>
+                <p className="body-copy">
+                  Run a common action in one tap, or type the slash version.
+                </p>
+              </div>
+              <Badge tone="neutral">Commands</Badge>
+            </div>
+
+            <div className="workspace-chat-quick-actions__list">
+              {quickActions.map((action) => (
+                <Button
+                  key={action.commandId}
+                  size="compact"
+                  title={`${action.description} (${action.slashCommand})`}
+                  tone="ghost"
+                  disabled={composerIsDisabled}
+                  onClick={() => {
+                    void runQuickAction(action.commandId)
+                  }}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+
+            {slashCommandHint != null ? (
+              <p className="workspace-chat-quick-actions__hint body-copy">
+                Slash commands: {slashCommandHint}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         <TextArea
           description={composerHint}
