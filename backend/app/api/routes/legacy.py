@@ -4,7 +4,6 @@ from app.models import HelloResponse
 from app.services.health import build_hello_response
 from app.settings import get_settings
 
-
 router = APIRouter(prefix="/api", tags=["legacy"])
 
 

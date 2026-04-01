@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset lint test build check frontend-lint frontend-test frontend-build backend-test
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -27,6 +27,12 @@ ps: ## Show the current local Docker Compose service state
 reset: ## Stop the stack and remove only Postgres and fake GCS persistent data
 	@./scripts/reset-local-data.sh
 
+frontend-format: ## Format frontend files with Prettier
+	@npm --prefix frontend run format
+
+frontend-format-check: ## Check frontend formatting with Prettier
+	@npm --prefix frontend run format:check
+
 frontend-lint: ## Run the frontend ESLint checks
 	@npm --prefix frontend run lint
 
@@ -36,11 +42,29 @@ frontend-test: ## Run the frontend unit test suite
 frontend-build: ## Run the frontend production build
 	@npm --prefix frontend run build
 
+backend-format: ## Format backend Python files with Ruff
+	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m ruff format app tests; elif command -v python3 >/dev/null 2>&1; then python3 -m ruff format app tests; else python -m ruff format app tests; fi
+
+backend-format-check: ## Check backend Python formatting with Ruff
+	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m ruff format --check app tests; elif command -v python3 >/dev/null 2>&1; then python3 -m ruff format --check app tests; else python -m ruff format --check app tests; fi
+
+backend-lint: ## Run backend Ruff lint checks
+	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m ruff check app tests; elif command -v python3 >/dev/null 2>&1; then python3 -m ruff check app tests; else python -m ruff check app tests; fi
+
 backend-test: ## Run the backend pytest suite
 	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi
 
-lint: ## Run the currently available lint checks
+format: ## Format frontend and backend source files
+	@$(MAKE) frontend-format
+	@$(MAKE) backend-format
+
+format-check: ## Check frontend and backend formatting without changing files
+	@$(MAKE) frontend-format-check
+	@$(MAKE) backend-format-check
+
+lint: ## Run frontend and backend lint checks
 	@$(MAKE) frontend-lint
+	@$(MAKE) backend-lint
 
 test: ## Run the backend and frontend automated tests
 	@$(MAKE) backend-test
@@ -49,7 +73,8 @@ test: ## Run the backend and frontend automated tests
 build: ## Run the frontend production build
 	@$(MAKE) frontend-build
 
-check: ## Run lint, automated tests, and the frontend production build
+check: ## Run formatting checks, lint, tests, and the frontend production build
+	@$(MAKE) format-check
 	@$(MAKE) lint
 	@$(MAKE) test
 	@$(MAKE) build

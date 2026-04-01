@@ -11,7 +11,6 @@ from app.api.router import router as api_router
 from app.api.v1.router import router as api_v1_router
 from app.settings import AppSettings, SettingsValidationError, get_settings
 
-
 logger = logging.getLogger(__name__)
 
 

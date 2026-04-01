@@ -104,21 +104,24 @@ The most common daily commands are:
 - `make logs`: follow the compose logs without restarting anything
 - `make down`: stop the stack and preserve local Postgres and fake GCS data
 - `make reset`: stop the stack and remove only the Postgres and fake GCS data volumes
-- `make lint`: run the currently available lint checks
+- `make format`: apply Prettier to the frontend and Ruff formatting to the backend
+- `make format-check`: verify formatting for both stacks without changing files
+- `make lint`: run frontend ESLint and backend Ruff lint checks
 - `make test`: run backend pytest and frontend Vitest
 - `make build`: run the frontend production build
-- `make check`: run lint, tests, and the frontend build in one pass
+- `make check`: run formatting checks, lint, tests, and the frontend build in one pass
 
 Suggested daily loop:
 
 1. `make up`
 2. make changes in `frontend/` or `backend/`
-3. `make logs` when you need live service output
-4. `make test` for targeted automated coverage
-5. `make check` before handing work off or committing
-6. `make down` when you are done
+3. `make format` before or after a focused edit pass
+4. `make logs` when you need live service output
+5. `make test` for targeted automated coverage
+6. `make check` before handing work off or committing
+7. `make down` when you are done
 
-For frontend-only work, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-test`.
+For frontend-only work, `make frontend-format`, `make frontend-format-check`, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-format`, `make backend-format-check`, `make backend-lint`, and `make backend-test`.
 
 ## Docker Compose Local Stack
 
