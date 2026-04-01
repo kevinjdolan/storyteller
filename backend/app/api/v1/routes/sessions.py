@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db_session
 from app.models import CreateSessionRequest, RecentSessionSummary, SessionSnapshot
-from app.services.sessions import SessionService
+from app.services.sessions import SessionNotFoundError, SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -22,6 +22,24 @@ def list_recent_sessions(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[RecentSessionSummary]:
     return SessionService(db_session).list_recent_sessions(limit=limit)
+
+
+@router.get(
+    "/{session_id}",
+    response_model=SessionSnapshot,
+    summary="Load a story session snapshot",
+)
+def get_session_snapshot(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSnapshot:
+    try:
+        return SessionService(db_session).load_session_snapshot(session_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(

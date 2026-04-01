@@ -76,6 +76,40 @@ def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
     assert payload[1]["progress"]["completed_stages"] == 0
 
 
+def test_get_session_snapshot_endpoint_returns_full_snapshot(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["id"] == created["id"]
+    assert payload["display_title"] == "Moonlit Harbor"
+    assert payload["current_stage"] == "genre"
+    assert payload["progress"]["total_stages"] == 10
+    assert len(payload["stage_states"]) == 10
+    assert payload["stage_states"][0]["stage"] == "genre"
+    assert payload["stage_states"][0]["status"] == "draft"
+
+
+def test_get_session_snapshot_endpoint_returns_404_for_missing_session(
+    session_api_client: TestClient,
+) -> None:
+    response = session_api_client.get("/api/v1/sessions/missing-session")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "session 'missing-session' was not found",
+    }
+
+
 def test_create_session_endpoint_returns_a_fresh_snapshot(
     session_api_client: TestClient,
 ) -> None:

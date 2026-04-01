@@ -24,6 +24,73 @@ const sampleSessions = [
   },
 ] as const
 
+const sampleSessionSnapshot = {
+  id: 'moonlit-harbor',
+  display_title: 'Lanterns Over Juniper Lake',
+  working_title: 'Lanterns Over Juniper Lake',
+  current_stage: 'beats',
+  resume_stage: 'beats',
+  furthest_completed_stage: 'characters',
+  overall_status: 'in_progress',
+  created_at: '2026-04-01T03:00:00Z',
+  updated_at: '2026-04-01T05:15:00Z',
+  completed_at: null,
+  selected_genre: {
+    id: 'genre-1',
+    slug: 'quest-fantasy',
+    label: 'Quest Fantasy',
+  },
+  selected_tone_profile: {
+    id: 'tone-1',
+    slug: 'hushed-wonder',
+    label: 'Hushed Wonder',
+  },
+  progress: {
+    total_stages: 10,
+    completed_stages: 5,
+    in_progress_stages: 1,
+    needs_regeneration_stages: 0,
+  },
+  stage_states: [
+    {
+      stage: 'genre',
+      label: 'Genre',
+      description:
+        'Choose the overall bedtime-story lane before the rest of the plan is shaped.',
+      status: 'completed',
+      detail: 'Accepted quest fantasy.',
+    },
+    {
+      stage: 'beats',
+      label: 'Beat sheet',
+      description:
+        'Store the accepted Save-the-Cat beat sheet for the session.',
+      status: 'in_progress',
+      detail: 'Midpoint needs one more bedtime-soft pass.',
+    },
+  ],
+  story_brief: {
+    id: 'brief-1',
+    revision_number: 1,
+    raw_brief: 'A lantern-filled harbor bedtime quest.',
+    normalized_summary: 'A child follows lanterns across the harbor.',
+  },
+  selected_pitch: {
+    id: 'pitch-1',
+    generation_key: 'batch-1',
+    pitch_index: 0,
+    title: 'Lanterns Over Juniper Lake',
+    logline:
+      'A child and an otter guardian follow drifting lanterns across the harbor to return each light before bedtime.',
+  },
+  selected_character_sheet: null,
+  selected_story_setup: null,
+  active_composition_job: null,
+  active_audio_job: null,
+  latest_story_asset: null,
+  latest_audio_asset: null,
+} as const
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -35,9 +102,11 @@ function buildJsonResponse(status: number, body: unknown) {
 function mockBackendOnline({
   createSessionId = 'fresh-session',
   sessions = sampleSessions,
+  sessionSnapshot = sampleSessionSnapshot,
 }: {
   createSessionId?: string
   sessions?: ReadonlyArray<Record<string, unknown>>
+  sessionSnapshot?: Record<string, unknown>
 } = {}) {
   vi.stubGlobal(
     'fetch',
@@ -56,6 +125,21 @@ function mockBackendOnline({
 
       if (url.includes('/api/v1/sessions?limit=20')) {
         return Promise.resolve(buildJsonResponse(200, sessions))
+      }
+
+      if (url.includes('/api/v1/sessions/moonlit-harbor')) {
+        return Promise.resolve(buildJsonResponse(200, sessionSnapshot))
+      }
+
+      if (url.includes('/api/v1/sessions/fresh-session')) {
+        return Promise.resolve(
+          buildJsonResponse(200, {
+            ...sessionSnapshot,
+            id: 'fresh-session',
+            display_title: 'Fresh Session',
+            working_title: 'Fresh Session',
+          }),
+        )
       }
 
       throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
@@ -104,10 +188,16 @@ describe('app router', () => {
     renderRoute('/sessions/moonlit-harbor')
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Session moonlit-harbor' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Lanterns Over Juniper Lake',
+      }),
     ).toBeInTheDocument()
     expect(screen.getByTestId('workspace-route')).toBeInTheDocument()
-    expect(screen.getByText('/sessions/moonlit-harbor')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute(
+      'href',
+      '/',
+    )
   })
 
   it('starts a new session from the home screen and routes into the workspace', async () => {
@@ -122,7 +212,7 @@ describe('app router', () => {
     expect(
       await screen.findByRole('heading', {
         level: 1,
-        name: 'Session fresh-session',
+        name: 'Fresh Session',
       }),
     ).toBeInTheDocument()
   })
