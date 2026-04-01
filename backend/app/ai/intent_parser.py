@@ -131,8 +131,7 @@ _ACTION_CATALOG = (
         "action_type": "update_story_setup",
         "stage": "story_setup",
         "description": (
-            "Update soft planning targets like length, runtime, chapters, "
-            "or setup guidance."
+            "Update soft planning targets like length, runtime, chapters, or setup guidance."
         ),
         "common_fields": [
             "target_word_count",
@@ -219,14 +218,11 @@ class IntentParserTransportError(IntentParserError):
 
 class IntentParserAdapter(Protocol):
     @property
-    def model_id(self) -> str:
-        ...
+    def model_id(self) -> str: ...
 
-    def parse(self, invocation: IntentParserInvocation) -> IntentParserInvocationResult:
-        ...
+    def parse(self, invocation: IntentParserInvocation) -> IntentParserInvocationResult: ...
 
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
 
 class GeminiIntentParserAdapter:
@@ -257,13 +253,7 @@ class GeminiIntentParserAdapter:
             },
             json={
                 "systemInstruction": {
-                    "parts": [
-                        {
-                            "text": (
-                                "Return only JSON that matches the requested schema."
-                            )
-                        }
-                    ]
+                    "parts": [{"text": ("Return only JSON that matches the requested schema.")}]
                 },
                 "contents": [
                     {
@@ -361,8 +351,7 @@ def _sanitize_json_schema(value: Any) -> Any:
                 continue
             if key in {"$defs", "properties"}:
                 normalized[key] = {
-                    name: _sanitize_json_schema(child)
-                    for name, child in item.items()
+                    name: _sanitize_json_schema(child) for name, child in item.items()
                 }
                 continue
             if key == "additionalProperties" and isinstance(item, dict):

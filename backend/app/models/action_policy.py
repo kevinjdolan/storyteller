@@ -19,9 +19,7 @@ class SessionActionDecision(str, Enum):
 
 class SessionActionReasonCode(str, Enum):
     CONFIRMATION_REQUIRED_BY_DEFAULT = "confirmation_required_by_default"
-    CONFIRMATION_REQUIRED_DUE_TO_SIDE_EFFECTS = (
-        "confirmation_required_due_to_side_effects"
-    )
+    CONFIRMATION_REQUIRED_DUE_TO_SIDE_EFFECTS = "confirmation_required_due_to_side_effects"
     PREREQUISITE_STAGE_INCOMPLETE = "prerequisite_stage_incomplete"
     PREREQUISITE_SELECTION_MISSING = "prerequisite_selection_missing"
     TARGET_STAGE_STALE = "target_stage_stale"

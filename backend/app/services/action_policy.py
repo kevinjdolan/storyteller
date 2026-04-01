@@ -1295,23 +1295,20 @@ class SessionActionPolicyService:
                 SessionActionPolicySideEffect(
                     kind=SessionActionSideEffectKind.STOP_ACTIVE_JOB,
                     message=(
-                        "The active audio job must stop before the new upstream changes "
-                        "can apply."
+                        "The active audio job must stop before the new upstream changes can apply."
                     ),
                     job_kind=ChatToUIJobKind.AUDIO.value,
                 )
             )
 
         if (
-            stage == WorkflowStage.COMPOSITION
-            or WorkflowStage.COMPOSITION in invalidated_stages
+            stage == WorkflowStage.COMPOSITION or WorkflowStage.COMPOSITION in invalidated_stages
         ) and state.ready_story_asset_kinds:
             side_effects.append(
                 SessionActionPolicySideEffect(
                     kind=SessionActionSideEffectKind.SUPERSEDE_ASSET,
                     message=(
-                        "Existing story exports will become stale until composition "
-                        "runs again."
+                        "Existing story exports will become stale until composition runs again."
                     ),
                     asset_kind="story",
                 )
@@ -1323,8 +1320,7 @@ class SessionActionPolicyService:
                 SessionActionPolicySideEffect(
                     kind=SessionActionSideEffectKind.SUPERSEDE_ASSET,
                     message=(
-                        "Existing final audio will become stale until audio generation "
-                        "runs again."
+                        "Existing final audio will become stale until audio generation runs again."
                     ),
                     asset_kind=AssetKind.FINAL_AUDIO.value,
                 )
@@ -1480,9 +1476,8 @@ class SessionActionPolicyService:
             state.active_composition_job_id = None
             state.active_composition_job_status = None
             state.ready_story_asset_kinds.clear()
-        if (
-            stage == WorkflowStage.AUDIO
-            or WorkflowStage.AUDIO in get_invalidated_stages_after_edit(stage)
+        if stage == WorkflowStage.AUDIO or WorkflowStage.AUDIO in get_invalidated_stages_after_edit(
+            stage
         ):
             state.active_audio_job_id = None
             state.active_audio_job_status = None
@@ -1636,7 +1631,7 @@ def _reject_for_blocked_stages(
     return _reject(
         SessionActionReasonCode.PREREQUISITE_STAGE_INCOMPLETE,
         (
-            f"Complete or regenerate { _format_stage_list(blocked_stages) } "
+            f"Complete or regenerate {_format_stage_list(blocked_stages)} "
             f"before changing {target_stage.value}."
         ),
         stage=target_stage,

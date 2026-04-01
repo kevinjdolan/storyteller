@@ -152,8 +152,6 @@ def test_default_policy_mapping_is_stable_for_auto_apply_and_confirm_first() -> 
 
 
 def test_chat_to_ui_action_schema_bundle_matches_checked_in_schema_file() -> None:
-    schema_path = (
-        Path(__file__).resolve().parents[2] / "docs" / "chat-to-ui-actions.schema.json"
-    )
+    schema_path = Path(__file__).resolve().parents[2] / "docs" / "chat-to-ui-actions.schema.json"
 
     assert json.loads(schema_path.read_text()) == get_chat_to_ui_action_schema_bundle()

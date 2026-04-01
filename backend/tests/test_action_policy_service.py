@@ -244,9 +244,7 @@ def test_policy_rejects_audio_generation_when_story_text_is_not_ready(db_session
     )
 
     assert result.evaluated_actions[0].decision == SessionActionDecision.REJECTED
-    assert (
-        result.evaluated_actions[0].reasons[0].code == SessionActionReasonCode.ASSET_NOT_READY
-    )
+    assert result.evaluated_actions[0].reasons[0].code == SessionActionReasonCode.ASSET_NOT_READY
 
 
 def test_policy_rejects_resume_job_when_audio_job_is_not_paused(db_session) -> None:
@@ -285,9 +283,7 @@ def test_policy_rejects_resume_job_when_audio_job_is_not_paused(db_session) -> N
     )
 
     assert result.evaluated_actions[0].decision == SessionActionDecision.REJECTED
-    assert (
-        result.evaluated_actions[0].reasons[0].code == SessionActionReasonCode.JOB_STATE_CONFLICT
-    )
+    assert result.evaluated_actions[0].reasons[0].code == SessionActionReasonCode.JOB_STATE_CONFLICT
 
 
 def _seed_catalog(db_session):

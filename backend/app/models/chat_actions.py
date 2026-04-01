@@ -66,9 +66,7 @@ class DownloadAssetKind(str, Enum):
     FINAL_AUDIO = "final_audio"
 
 
-DEFAULT_CHAT_TO_UI_ACTION_POLICIES: dict[
-    ChatToUIActionType, ChatToUIActionDefaultPolicy
-] = {
+DEFAULT_CHAT_TO_UI_ACTION_POLICIES: dict[ChatToUIActionType, ChatToUIActionDefaultPolicy] = {
     ChatToUIActionType.NAVIGATE_TO_STAGE: ChatToUIActionDefaultPolicy.AUTO_APPLY_CANDIDATE,
     ChatToUIActionType.SELECT_GENRE: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
     ChatToUIActionType.SELECT_TONE: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
@@ -153,8 +151,7 @@ class SelectToneValues(ChatToUIExtractedValues):
             self.tone_profile_slug,
             self.tone_profile_label,
             error_message=(
-                "select_tone requires a tone_profile_id, tone_profile_slug, or "
-                "tone_profile_label"
+                "select_tone requires a tone_profile_id, tone_profile_slug, or tone_profile_label"
             ),
         )
         return self
@@ -219,8 +216,7 @@ class SelectCharacterSheetValues(ChatToUIExtractedValues):
             self.revision_number,
             self.title,
             error_message=(
-                "select_character_sheet requires a character_sheet_id, revision_number, or "
-                "title"
+                "select_character_sheet requires a character_sheet_id, revision_number, or title"
             ),
         )
         return self
@@ -453,9 +449,7 @@ class RegenerateBeatSheetAction(ChatToUIActionBase):
         ChatToUIActionType.REGENERATE_BEAT_SHEET
     )
     target_stage: Literal[WorkflowStage.BEATS] = WorkflowStage.BEATS
-    extracted_values: RegenerateBeatSheetValues = Field(
-        default_factory=RegenerateBeatSheetValues
-    )
+    extracted_values: RegenerateBeatSheetValues = Field(default_factory=RegenerateBeatSheetValues)
 
 
 class UpdateStorySetupAction(ChatToUIActionBase):
@@ -531,9 +525,7 @@ class StartAudioGenerationAction(ChatToUIActionBase):
         ChatToUIActionType.START_AUDIO_GENERATION
     )
     target_stage: Literal[WorkflowStage.AUDIO] = WorkflowStage.AUDIO
-    extracted_values: StartAudioGenerationValues = Field(
-        default_factory=StartAudioGenerationValues
-    )
+    extracted_values: StartAudioGenerationValues = Field(default_factory=StartAudioGenerationValues)
 
 
 class OpenFinalizeViewAction(ChatToUIActionBase):
@@ -545,9 +537,7 @@ class OpenFinalizeViewAction(ChatToUIActionBase):
 
 
 class DownloadAssetAction(ChatToUIActionBase):
-    action_type: Literal[ChatToUIActionType.DOWNLOAD_ASSET] = (
-        ChatToUIActionType.DOWNLOAD_ASSET
-    )
+    action_type: Literal[ChatToUIActionType.DOWNLOAD_ASSET] = ChatToUIActionType.DOWNLOAD_ASSET
     target_stage: Literal[WorkflowStage.FINALIZE] = WorkflowStage.FINALIZE
     extracted_values: DownloadAssetValues
 

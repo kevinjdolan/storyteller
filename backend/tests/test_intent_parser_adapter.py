@@ -143,8 +143,9 @@ def test_gemini_intent_parser_adapter_requests_json_schema_and_parses_response()
     assert seen_request["headers"]["x-goog-api-key"] == "test-key"
     assert request_body["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in request_body["generationConfig"]
-    assert "make it a little more mysterious and shorter" in (
-        request_body["contents"][0]["parts"][0]["text"]
+    assert (
+        "make it a little more mysterious and shorter"
+        in (request_body["contents"][0]["parts"][0]["text"])
     )
     assert result.structured_output.status == IntentParserStatus.PARSED
     assert result.structured_output.proposed_actions.actions[0].action_type == "refine_beat_sheet"
