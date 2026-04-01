@@ -146,4 +146,3 @@ class SessionArtifactStoragePaths:
 
     def _component(self, value: str, *, label: str) -> str:
         return _normalize_component(value, label=label)
-

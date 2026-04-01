@@ -24,8 +24,7 @@ class ObjectNotFoundError(StorageError):
 
 
 class ObjectStorageBackend(Protocol):
-    def create_bucket_if_missing(self, bucket_name: str) -> None:
-        ...
+    def create_bucket_if_missing(self, bucket_name: str) -> None: ...
 
     def upload_bytes(
         self,
@@ -33,17 +32,13 @@ class ObjectStorageBackend(Protocol):
         data: bytes,
         *,
         content_type: str,
-    ) -> StorageObjectMetadata:
-        ...
+    ) -> StorageObjectMetadata: ...
 
-    def get_object_metadata(self, location: StorageObjectLocation) -> StorageObjectMetadata:
-        ...
+    def get_object_metadata(self, location: StorageObjectLocation) -> StorageObjectMetadata: ...
 
-    def download_bytes(self, location: StorageObjectLocation) -> bytes:
-        ...
+    def download_bytes(self, location: StorageObjectLocation) -> bytes: ...
 
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
 
 class GCSStorageBackend:
@@ -125,10 +120,7 @@ class GCSStorageBackend:
             self._client.close()
 
     def _object_metadata_path(self, location: StorageObjectLocation) -> str:
-        return (
-            f"/storage/v1/b/{quote(location.bucket, safe='')}/o/"
-            f"{quote(location.key, safe='')}"
-        )
+        return f"/storage/v1/b/{quote(location.bucket, safe='')}/o/{quote(location.key, safe='')}"
 
     def _metadata_from_payload(
         self,

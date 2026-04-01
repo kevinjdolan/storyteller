@@ -5,7 +5,6 @@ from urllib.parse import unquote
 
 import httpx
 import pytest
-
 from app.settings import load_settings
 from app.storage import (
     ObjectNotFoundError,
@@ -128,8 +127,7 @@ def test_session_artifact_paths_use_stable_session_scoped_prefixes() -> None:
         job_id="audio-job-02",
         segment_index=3,
     ).uri == (
-        "gs://storyteller-audio/"
-        "sessions/session-123/audio/jobs/audio-job-02/segments/0003.mp3"
+        "gs://storyteller-audio/sessions/session-123/audio/jobs/audio-job-02/segments/0003.mp3"
     )
     assert paths.final_audio(
         session_id="session-123",
@@ -144,19 +142,13 @@ def test_session_artifact_paths_use_stable_session_scoped_prefixes() -> None:
         export_kind="docx",
         export_id="final-manuscript",
         extension="docx",
-    ).uri == (
-        "gs://storyteller-exports/"
-        "sessions/session-123/exports/docx/final-manuscript.docx"
-    )
+    ).uri == ("gs://storyteller-exports/sessions/session-123/exports/docx/final-manuscript.docx")
     assert paths.debug_artifact(
         session_id="session-123",
         artifact_group="llm traces",
         artifact_name="draft #1",
         extension="json",
-    ).uri == (
-        "gs://storyteller-sessions/"
-        "sessions/session-123/debug/llm-traces/draft-1.json"
-    )
+    ).uri == ("gs://storyteller-sessions/sessions/session-123/debug/llm-traces/draft-1.json")
 
 
 def test_storage_service_round_trips_objects_through_gcs_json_api() -> None:
@@ -221,4 +213,3 @@ def test_storage_service_raises_clear_error_for_missing_objects() -> None:
         client.close()
 
     assert location.uri in str(exc_info.value)
-

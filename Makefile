@@ -59,15 +59,15 @@ backend-seed-catalog: ## Seed the backend-owned genre and tone catalog
 
 backend-storage-smoke: ## Round-trip a sample object through the configured storage backend
 	@cd backend && \
-	STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}" \
-	STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql://storyteller:storyteller@127.0.0.1:8567/storyteller}" \
-	STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}" \
-	STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}" \
-	STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}" \
-	STORYTELLER_GCS_PUBLIC_URL="$${STORYTELLER_GCS_PUBLIC_URL:-http://127.0.0.1:8568}" \
-	STORYTELLER_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}" \
-	STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}" \
-	STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}" \
+	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
+	export STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql://storyteller:storyteller@127.0.0.1:8567/storyteller}"; \
+	export STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}"; \
+	export STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}"; \
+	export STORYTELLER_GCS_PUBLIC_URL="$${STORYTELLER_GCS_PUBLIC_URL:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}"; \
+	export STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}"; \
+	export STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}"; \
 	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.storage.smoke_test; elif command -v python3 >/dev/null 2>&1; then python3 -m app.storage.smoke_test; else python -m app.storage.smoke_test; fi
 
 format: ## Format frontend and backend source files

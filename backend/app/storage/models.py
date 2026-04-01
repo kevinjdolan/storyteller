@@ -29,4 +29,3 @@ class StorageObjectMetadata:
     generation: str | None = None
     md5_hash: str | None = None
     updated_at: str | None = None
-
