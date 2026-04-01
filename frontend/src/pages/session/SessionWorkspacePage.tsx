@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { type SessionSnapshot } from '../../api/sessions.ts'
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
+import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import {
   useSessionChatMessages,
@@ -24,13 +25,18 @@ import {
 import { getWorkflowStageLabel } from '../../features/session/workflowStages.ts'
 import {
   Badge,
-  Panel,
   ProgressBar,
   type BadgeTone,
 } from '../../shared/ui/primitives.tsx'
 import {
+  BlockingFeedback,
+  FeedbackBanner,
+  InlineSpinner,
+  SkeletonBlock,
+  type FeedbackTone,
+} from '../../shared/ui/feedback.tsx'
+import {
   CardGrid,
-  EmptyStateBlock,
   SelectionCard,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
@@ -285,14 +291,14 @@ function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
       <header className="panel workspace-topbar" aria-busy="true">
         <div className="workspace-topbar__copy">
           <p className="eyebrow">Session workspace</p>
-          <div className="loading-block loading-block--title" />
-          <div className="loading-block loading-block--detail" />
+          <SkeletonBlock className="loading-block--title" />
+          <SkeletonBlock className="loading-block--detail" />
         </div>
         <div className="workspace-topbar__status">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="workspace-topbar__status-card">
-              <div className="loading-block loading-block--detail loading-block--short" />
-              <div className="loading-block loading-block--detail" />
+              <SkeletonBlock className="loading-block--detail loading-block--short" />
+              <SkeletonBlock className="loading-block--detail" />
             </div>
           ))}
         </div>
@@ -300,16 +306,16 @@ function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
 
       <div className="workspace-shell" aria-busy="true">
         <article className="panel workspace-pane">
-          <div className="loading-block loading-block--title" />
-          <div className="loading-block loading-block--detail" />
-          <div className="loading-block loading-block--detail" />
-          <div className="loading-block loading-block--detail loading-block--short" />
+          <SkeletonBlock className="loading-block--title" />
+          <SkeletonBlock className="loading-block--detail" />
+          <SkeletonBlock className="loading-block--detail" />
+          <SkeletonBlock className="loading-block--detail loading-block--short" />
         </article>
         <article className="panel workspace-pane">
-          <div className="loading-block loading-block--title" />
-          <div className="loading-block loading-block--detail" />
-          <div className="loading-block loading-block--detail" />
-          <div className="loading-block loading-block--detail" />
+          <SkeletonBlock className="loading-block--title" />
+          <SkeletonBlock className="loading-block--detail" />
+          <SkeletonBlock className="loading-block--detail" />
+          <SkeletonBlock className="loading-block--detail" />
         </article>
       </div>
     </section>
@@ -330,41 +336,36 @@ function WorkspaceErrorState({
       aria-label={`Session workspace for ${sessionId}`}
       className="workspace-page"
     >
-      <Panel
-        as="article"
-        className="empty-state"
+      <BlockingFeedback
+        actions={
+          <div className="cta-row">
+            <button
+              className={getButtonClassName({
+                size: 'compact',
+                tone: 'ghost',
+              })}
+              type="button"
+              onClick={() => void onRetry()}
+            >
+              Retry
+            </button>
+            <Link
+              className={getButtonClassName({
+                size: 'compact',
+                tone: 'ghost',
+              })}
+              to={routePaths.home}
+            >
+              Return home
+            </Link>
+          </div>
+        }
+        bannerTitle="Session snapshot unavailable"
+        description={errorMessage}
         eyebrow="Session workspace"
-        headingLevel={1}
         title="Workspace unavailable"
-      >
-        <EmptyStateBlock
-          action={
-            <div className="cta-row">
-              <button
-                className={getButtonClassName({
-                  size: 'compact',
-                  tone: 'ghost',
-                })}
-                type="button"
-                onClick={() => void onRetry()}
-              >
-                Retry
-              </button>
-              <Link
-                className={getButtonClassName({
-                  size: 'compact',
-                  tone: 'ghost',
-                })}
-                to={routePaths.home}
-              >
-                Return home
-              </Link>
-            </div>
-          }
-          description={errorMessage}
-          title="The session snapshot could not be loaded."
-        />
-      </Panel>
+        tone="warning"
+      />
     </section>
   )
 }
@@ -375,6 +376,52 @@ function buildWorkspaceErrorMessage(error: Error, sessionId: string) {
   }
 
   return 'The workspace could not load this session right now. Try again once the backend is reachable.'
+}
+
+function getWorkspaceConnectionBanner(connectionState: string): {
+  description: string
+  isBusy?: boolean
+  title: string
+  tone: FeedbackTone
+} | null {
+  if (connectionState === 'open') {
+    return null
+  }
+
+  if (connectionState === 'connecting' || connectionState === 'reconnecting') {
+    return {
+      description:
+        'The durable session shell is loaded. Live event updates are still reconnecting, so recent confirmations may take a moment to appear.',
+      isBusy: true,
+      title: 'Live feed reconnecting',
+      tone: 'info',
+    }
+  }
+
+  if (connectionState === 'error') {
+    return {
+      description:
+        'The workspace can still render the saved snapshot, but live confirmations and background progress updates are temporarily unavailable.',
+      title: 'Live feed unavailable',
+      tone: 'warning',
+    }
+  }
+
+  if (connectionState === 'closed') {
+    return {
+      description:
+        'The saved session remains readable, but live runtime updates are paused until the feed reconnects.',
+      title: 'Live feed paused',
+      tone: 'warning',
+    }
+  }
+
+  return {
+    description:
+      'Realtime workspace events are still mocked in this scaffold, so the chat lane and stage detail panels are reflecting local placeholder activity.',
+    title: 'Live feed not wired yet',
+    tone: 'info',
+  }
 }
 
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
@@ -443,6 +490,9 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     snapshot,
     pendingActions.length,
   )
+  const workspaceConnectionBanner = getWorkspaceConnectionBanner(
+    eventStream.connectionState,
+  )
   const selectedStageStatus = getStatusBadgeCopy(selectedStage.status)
   const selectedStageAvailability = getStageAvailabilityCopy(
     selectedStage.availability,
@@ -495,6 +545,20 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           </Link>
         </div>
       </header>
+
+      {workspaceConnectionBanner != null ? (
+        <FeedbackBanner
+          className="workspace-page__banner"
+          description={workspaceConnectionBanner.description}
+          icon={
+            workspaceConnectionBanner.isBusy ? (
+              <InlineSpinner label="Live feed status update" />
+            ) : undefined
+          }
+          title={workspaceConnectionBanner.title}
+          tone={workspaceConnectionBanner.tone}
+        />
+      ) : null}
 
       <div className="workspace-shell" data-testid="workspace-route">
         <aside className="panel workspace-pane workspace-pane--chat">
@@ -732,7 +796,9 @@ export function SessionWorkspacePage() {
 
   return (
     <SessionWorkspaceProvider key={sessionId} sessionId={sessionId}>
-      <SessionWorkspaceContent sessionId={sessionId} />
+      <SessionWorkspaceErrorBoundary sessionId={sessionId}>
+        <SessionWorkspaceContent sessionId={sessionId} />
+      </SessionWorkspaceErrorBoundary>
     </SessionWorkspaceProvider>
   )
 }

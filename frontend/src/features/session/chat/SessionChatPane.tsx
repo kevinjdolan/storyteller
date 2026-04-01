@@ -6,6 +6,7 @@ import {
   TextArea,
   type BadgeTone,
 } from '../../../shared/ui/primitives.tsx'
+import { FeedbackBanner, InlineSpinner } from '../../../shared/ui/feedback.tsx'
 import {
   formatSessionChatTimestamp,
   type SessionChatMessage,
@@ -234,7 +235,6 @@ export function SessionChatPane({
         <TextArea
           description={composerHint}
           disabled={composerIsDisabled}
-          error={submissionError}
           hideLabel
           label="Message composer"
           maxLength={1200}
@@ -251,6 +251,14 @@ export function SessionChatPane({
           value={draft}
         />
 
+        {submissionError != null ? (
+          <FeedbackBanner
+            description="The draft is still in the composer, so you can adjust it and retry without losing the note."
+            title={submissionError}
+            tone="warning"
+          />
+        ) : null}
+
         <div className="workspace-chat-composer__footer">
           <p className="body-copy">{draft.trim().length}/1200 characters</p>
           <Button
@@ -258,7 +266,14 @@ export function SessionChatPane({
             type="submit"
             disabled={composerIsDisabled || draft.trim().length === 0}
           >
-            {isSubmitting ? 'Sending…' : 'Send message'}
+            {isSubmitting ? (
+              <>
+                <InlineSpinner label="Sending message" />
+                Sending...
+              </>
+            ) : (
+              'Send message'
+            )}
           </Button>
         </div>
       </form>

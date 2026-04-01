@@ -1,17 +1,45 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, matchPath, useLocation } from 'react-router-dom'
 import { useBackendStatus } from '../hooks/useBackendStatus.ts'
 import { ConnectionStatusBadge } from '../shared/ui/ConnectionStatusBadge.tsx'
 import { ToastRegion } from '../shared/ui/ToastRegion.tsx'
-import { createInitialAppShellState } from '../state/appShellStore.ts'
+import {
+  enqueueAppShellToast,
+  useAppShellToasts,
+} from '../state/appShellStore.ts'
 import { routePaths } from './routePaths.ts'
 
 export function AppShell() {
   const location = useLocation()
-  const backendStatus = useBackendStatus()
-  const [shellState] = useState(createInitialAppShellState)
+  const { refresh, status: backendStatus } = useBackendStatus()
+  const toasts = useAppShellToasts()
+  const previousBackendStateRef = useRef(backendStatus.state)
   const workspaceNavIsActive =
     matchPath(routePaths.sessionWorkspace, location.pathname) !== null
+
+  useEffect(() => {
+    const previousState = previousBackendStateRef.current
+
+    if (backendStatus.state === 'offline' && previousState !== 'offline') {
+      enqueueAppShellToast({
+        body: 'The shell still renders, but backend-owned data and mutations may fail until FastAPI is reachable again.',
+        dedupeKey: 'backend-connection',
+        title: 'Backend connection lost',
+        tone: 'warning',
+      })
+    }
+
+    if (backendStatus.state === 'online' && previousState === 'offline') {
+      enqueueAppShellToast({
+        body: 'Fresh session data and workflow requests can flow again.',
+        dedupeKey: 'backend-connection',
+        title: 'Backend connection restored',
+        tone: 'success',
+      })
+    }
+
+    previousBackendStateRef.current = backendStatus.state
+  }, [backendStatus.state])
 
   return (
     <div className="app-shell">
@@ -69,14 +97,15 @@ export function AppShell() {
           className="app-utility-bar"
           aria-label="Application utility rail"
         >
-          <ConnectionStatusBadge status={backendStatus} />
-          <ToastRegion toasts={shellState.toasts} />
+          <ConnectionStatusBadge onRefresh={refresh} status={backendStatus} />
         </section>
 
         <main className="app-main" id="app-main-content">
           <Outlet />
         </main>
       </div>
+
+      <ToastRegion toasts={toasts} />
     </div>
   )
 }

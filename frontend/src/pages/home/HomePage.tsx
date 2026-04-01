@@ -17,6 +17,12 @@ import {
   ProgressBar,
   type BadgeTone,
 } from '../../shared/ui/primitives.tsx'
+import {
+  BlockingFeedback,
+  FeedbackBanner,
+  InlineSpinner,
+  SkeletonBlock,
+} from '../../shared/ui/feedback.tsx'
 import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 
 type SessionLoadState = 'loading' | 'ready' | 'error'
@@ -119,9 +125,9 @@ function HomePageLoadingState() {
       <ul className="session-card-list">
         {Array.from({ length: 3 }).map((_, index) => (
           <li key={index} className="session-card session-card--loading">
-            <div className="loading-block loading-block--title" />
-            <div className="loading-block loading-block--detail" />
-            <div className="loading-block loading-block--detail loading-block--short" />
+            <SkeletonBlock className="loading-block--title" />
+            <SkeletonBlock className="loading-block--detail" />
+            <SkeletonBlock className="loading-block--detail loading-block--short" />
           </li>
         ))}
       </ul>
@@ -131,23 +137,20 @@ function HomePageLoadingState() {
 
 function HomePageErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <Panel
-      as="article"
-      className="sessions-panel"
-      description="The home screen could not load prior sessions from the backend. Retry once the API is reachable again."
-      title="Recent sessions"
-    >
-      <div className="empty-state">
-        <p className="empty-state__title">Could not load past sessions.</p>
-        <p className="body-copy">
-          The list request failed before the home screen could show in-progress
-          and completed stories.
-        </p>
+    <BlockingFeedback
+      actions={
         <Button size="compact" tone="ghost" onClick={() => void onRetry()}>
           Retry
         </Button>
-      </div>
-    </Panel>
+      }
+      bannerTitle="Recent sessions could not load"
+      className="sessions-panel"
+      description="The home screen could not load prior sessions from the backend. Retry once the API is reachable again."
+      eyebrow="Recent sessions"
+      headingLevel={2}
+      title="Could not load past sessions."
+      tone="warning"
+    />
   )
 }
 
@@ -329,7 +332,14 @@ export function HomePage() {
             disabled={isCreatingSession}
             onClick={() => void handleCreateSession()}
           >
-            {isCreatingSession ? 'Starting...' : 'Start a new session'}
+            {isCreatingSession ? (
+              <>
+                <InlineSpinner label="Starting a new session" />
+                Starting...
+              </>
+            ) : (
+              'Start a new session'
+            )}
           </Button>
           <p className="cta-note">
             New sessions open directly into the workspace shell so the user can
@@ -338,9 +348,21 @@ export function HomePage() {
           </p>
         </div>
         {createError ? (
-          <p className="form-feedback" role="alert">
-            {createError}
-          </p>
+          <FeedbackBanner
+            actions={
+              <Button
+                size="compact"
+                tone="ghost"
+                onClick={() => void handleCreateSession()}
+              >
+                Try again
+              </Button>
+            }
+            className="sessions-home__feedback"
+            description="The request failed before the workspace could open. The current home screen state is still intact."
+            title={createError}
+            tone="warning"
+          />
         ) : null}
       </Panel>
 

@@ -35,6 +35,16 @@ export function useCreateSessionMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: {
+      feedback: {
+        errorToast: {
+          body: 'The home screen could not open a new workspace. Try the request again.',
+          dedupeKey: 'create-session',
+          title: 'Could not start a new session',
+          tone: 'warning',
+        },
+      },
+    },
     mutationFn: (workingTitle?: string) => createSession(workingTitle),
     onSuccess: async () => {
       await queryClient.invalidateQueries({

@@ -89,7 +89,7 @@ describe('SessionChatPane', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       'Please add one calmer beat before the finale.',
     )
-    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sending/ })).toBeDisabled()
 
     expect(resolveSubmit).toBeDefined()
     resolveSubmit?.()

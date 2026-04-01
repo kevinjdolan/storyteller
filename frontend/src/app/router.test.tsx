@@ -220,6 +220,48 @@ describe('app router', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows an inline banner and toast when creating a session fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+
+        if (url.endsWith('/api/hello')) {
+          return Promise.resolve(
+            buildJsonResponse(200, { message: 'Hello from FastAPI!' }),
+          )
+        }
+
+        if (url.includes('/api/v1/sessions?limit=20')) {
+          return Promise.resolve(buildJsonResponse(200, []))
+        }
+
+        if (url.endsWith('/api/v1/sessions') && init?.method === 'POST') {
+          return Promise.resolve(buildJsonResponse(500, { detail: 'boom' }))
+        }
+
+        throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
+      }),
+    )
+
+    renderRoute('/')
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start a new session' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Could not start a new session. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The home screen could not open a new workspace. Try the request again.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('renders the not-found fallback for unknown routes', async () => {
     mockBackendOnline()
 
