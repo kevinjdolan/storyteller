@@ -208,7 +208,8 @@ describe('SessionWorkspacePage', () => {
         name: 'Refine the Save-the-Cat beats',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Live feed not wired yet')).toBeInTheDocument()
+    expect(screen.getAllByText('Live feed idle').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('live-feed-status')).toHaveTextContent('Idle')
     expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute(
       'href',
       '/',

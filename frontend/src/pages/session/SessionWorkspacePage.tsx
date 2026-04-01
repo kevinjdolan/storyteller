@@ -6,6 +6,7 @@ import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWor
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import {
   useSessionChatMessages,
+  useSessionCurrentSnapshot,
   useCurrentSessionSnapshotQuery,
   useSessionEventStream,
   useSessionPendingActions,
@@ -18,6 +19,7 @@ import {
   buildMockAssistantChatReply,
   createSessionChatMessage,
 } from '../../features/session/chat/sessionChat.ts'
+import { SessionFeedStatusIndicator } from '../../features/session/live/SessionFeedStatusIndicator.tsx'
 import {
   buildSessionWorkspaceStageViews,
   type SessionWorkspaceStageView,
@@ -418,8 +420,8 @@ function getWorkspaceConnectionBanner(connectionState: string): {
 
   return {
     description:
-      'Realtime workspace events are still mocked in this scaffold, so the chat lane and stage detail panels are reflecting local placeholder activity.',
-    title: 'Live feed not wired yet',
+      'The workspace is running from the durable snapshot only. Configure the websocket endpoint to start session-scoped live updates.',
+    title: 'Live feed idle',
     tone: 'info',
   }
 }
@@ -427,19 +429,23 @@ function getWorkspaceConnectionBanner(connectionState: string): {
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const [searchParams] = useSearchParams()
   const snapshotQuery = useCurrentSessionSnapshotQuery()
+  const runtimeSnapshot = useSessionCurrentSnapshot()
   const chatMessages = useSessionChatMessages()
   const pendingActions = useSessionPendingActions()
   const eventStream = useSessionEventStream()
   const runtimeStore = useSessionRuntimeActions()
-  const snapshot = snapshotQuery.data
+  const snapshot = runtimeSnapshot ?? snapshotQuery.data
 
   useEffect(() => {
-    if (
-      snapshot == null ||
-      snapshotQuery.isPending ||
-      snapshotQuery.isError ||
-      chatMessages.length > 0
-    ) {
+    if (snapshotQuery.data == null || snapshotQuery.isError) {
+      return
+    }
+
+    runtimeStore.hydrateSessionSnapshot(snapshotQuery.data)
+  }, [runtimeStore, snapshotQuery.data, snapshotQuery.isError])
+
+  useEffect(() => {
+    if (snapshot == null || chatMessages.length > 0) {
       return
     }
 
@@ -452,11 +458,11 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     snapshotQuery.isPending,
   ])
 
-  if (snapshotQuery.isPending) {
+  if (snapshot == null && snapshotQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
   }
 
-  if (snapshotQuery.isError || snapshot == null) {
+  if (snapshot == null) {
     const errorMessage =
       snapshotQuery.error instanceof Error
         ? buildWorkspaceErrorMessage(snapshotQuery.error, sessionId)
@@ -532,6 +538,12 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           <div className="workspace-topbar__status-card">
             <dt>Session ID</dt>
             <dd>{snapshot.id}</dd>
+          </div>
+          <div className="workspace-topbar__status-card">
+            <dt>Live updates</dt>
+            <dd>
+              <SessionFeedStatusIndicator eventStream={eventStream} />
+            </dd>
           </div>
         </dl>
 

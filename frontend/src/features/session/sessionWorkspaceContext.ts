@@ -51,6 +51,10 @@ export function useSessionChatMessages() {
   return useSessionRuntimeSelector((state) => state.chat.messages)
 }
 
+export function useSessionCurrentSnapshot() {
+  return useSessionRuntimeSelector((state) => state.sessionSnapshot)
+}
+
 export function useSessionEventStream() {
   return useSessionRuntimeSelector((state) => state.eventStream)
 }
