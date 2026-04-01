@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { SessionWorkspacePage } from './SessionWorkspacePage.tsx'
 
 const sampleSnapshot = {
@@ -166,7 +167,7 @@ function mockWorkspaceApi(status = 200, body: unknown = sampleSnapshot) {
 }
 
 function renderWorkspaceRoute() {
-  return render(
+  return renderWithAppProviders(
     <MemoryRouter initialEntries={['/sessions/moonlit-harbor']}>
       <Routes>
         <Route path="/sessions/:sessionId" element={<SessionWorkspacePage />} />

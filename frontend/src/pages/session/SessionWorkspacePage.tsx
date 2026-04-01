@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  fetchSessionSnapshot,
   type SessionSnapshot,
   type SessionStageStateView,
 } from '../../api/sessions.ts'
 import { routePaths } from '../../app/routePaths.ts'
+import {
+  useCurrentSessionSnapshotQuery,
+  useSessionEventStream,
+  useSessionPendingActions,
+} from '../../features/session/sessionWorkspaceContext.ts'
+import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspaceProvider.tsx'
 import { workflowStageDefinitions } from '../../features/session/workflowStages.ts'
-
-type WorkspaceLoadState = 'loading' | 'ready' | 'error'
 
 type StatusChipCopy = {
   className: string
@@ -61,6 +63,26 @@ function getStatusChipCopy(status: string): StatusChipCopy {
     label: 'Queued',
     className: 'status-chip status-chip--draft',
   }
+}
+
+function getRuntimeConnectionLabel(connectionState: string) {
+  if (connectionState === 'open') {
+    return 'Live feed connected'
+  }
+
+  if (connectionState === 'connecting' || connectionState === 'reconnecting') {
+    return 'Live feed connecting'
+  }
+
+  if (connectionState === 'error') {
+    return 'Live feed unavailable'
+  }
+
+  if (connectionState === 'closed') {
+    return 'Live feed paused'
+  }
+
+  return 'Live feed idle'
 }
 
 function formatSavedAt(value: string) {
@@ -226,9 +248,11 @@ function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
 function WorkspaceErrorState({
   errorMessage,
   sessionId,
+  onRetry,
 }: {
   errorMessage: string
   sessionId: string
+  onRetry: () => void
 }) {
   return (
     <section
@@ -239,6 +263,13 @@ function WorkspaceErrorState({
         <p className="eyebrow">Session workspace</p>
         <h1>Workspace unavailable</h1>
         <p className="body-copy">{errorMessage}</p>
+        <button
+          className="ghost-link"
+          type="button"
+          onClick={() => void onRetry()}
+        >
+          Retry
+        </button>
         <Link className="ghost-link" to={routePaths.home}>
           Return home
         </Link>
@@ -247,60 +278,37 @@ function WorkspaceErrorState({
   )
 }
 
+function buildWorkspaceErrorMessage(error: Error, sessionId: string) {
+  if (error.message.includes('Unexpected status code: 404')) {
+    return `The session ${sessionId} could not be found in the durable store.`
+  }
+
+  return 'The workspace could not load this session right now. Try again once the backend is reachable.'
+}
+
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
-  const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null)
-  const [loadState, setLoadState] = useState<WorkspaceLoadState>('loading')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const snapshotQuery = useCurrentSessionSnapshotQuery()
+  const pendingActions = useSessionPendingActions()
+  const eventStream = useSessionEventStream()
+  const snapshot = snapshotQuery.data
 
-  useEffect(() => {
-    let isDisposed = false
-
-    void fetchSessionSnapshot(sessionId)
-      .then((nextSnapshot) => {
-        if (isDisposed) {
-          return
-        }
-
-        setSnapshot(nextSnapshot)
-        setLoadState('ready')
-      })
-      .catch((error: unknown) => {
-        if (isDisposed) {
-          return
-        }
-
-        if (
-          error instanceof Error &&
-          error.message.includes('Unexpected status code: 404')
-        ) {
-          setErrorMessage(
-            `The session ${sessionId} could not be found in the durable store.`,
-          )
-        } else {
-          setErrorMessage(
-            'The workspace could not load this session right now. Try again once the backend is reachable.',
-          )
-        }
-
-        setLoadState('error')
-      })
-
-    return () => {
-      isDisposed = true
-    }
-  }, [sessionId])
-
-  if (loadState === 'loading') {
+  if (snapshotQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
   }
 
-  if (loadState === 'error' || snapshot === null) {
+  if (snapshotQuery.isError || snapshot == null) {
+    const errorMessage =
+      snapshotQuery.error instanceof Error
+        ? buildWorkspaceErrorMessage(snapshotQuery.error, sessionId)
+        : 'The workspace could not load this session right now.'
+
     return (
       <WorkspaceErrorState
-        errorMessage={
-          errorMessage ?? 'The workspace could not load this session right now.'
-        }
+        errorMessage={errorMessage}
         sessionId={sessionId}
+        onRetry={() => {
+          void snapshotQuery.refetch()
+        }}
       />
     )
   }
@@ -319,6 +327,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const overallStatus = getStatusChipCopy(snapshot.overall_status)
   const progress = buildProgressCopy(snapshot)
   const chatPreview = buildChatPreview(snapshot)
+  const runtimeSummary = `${pendingActions.length} pending UI actions / ${eventStream.events.length} buffered live events`
+  const runtimeConnectionLabel = getRuntimeConnectionLabel(
+    eventStream.connectionState,
+  )
 
   return (
     <section
@@ -373,7 +385,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 visible while the workflow advances.
               </p>
             </div>
-            <span className="status-chip">Chat bridge</span>
+            <span className="status-chip">{runtimeConnectionLabel}</span>
           </div>
 
           <ol
@@ -399,6 +411,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               Message input, quick action chips, and live agent summaries will
               anchor here in the next workflow prompts.
             </p>
+            <p>{runtimeSummary}.</p>
           </div>
         </aside>
 
@@ -505,5 +518,9 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 export function SessionWorkspacePage() {
   const { sessionId = 'unknown-session' } = useParams()
 
-  return <SessionWorkspaceContent key={sessionId} sessionId={sessionId} />
+  return (
+    <SessionWorkspaceProvider key={sessionId} sessionId={sessionId}>
+      <SessionWorkspaceContent sessionId={sessionId} />
+    </SessionWorkspaceProvider>
+  )
 }

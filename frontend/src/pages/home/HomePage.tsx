@@ -1,16 +1,15 @@
-import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { buildSessionWorkspacePath } from '../../app/routePaths.ts'
-import {
-  createSession,
-  fetchRecentSessions,
-  type RecentSessionSummary,
-} from '../../api/sessions.ts'
+import { type RecentSessionSummary } from '../../api/sessions.ts'
 import {
   type WorkflowStageId,
   type WorkflowStageState,
   workflowStageDefinitions,
 } from '../../features/session/workflowStages.ts'
+import {
+  useCreateSessionMutation,
+  useRecentSessionsQuery,
+} from '../../features/session/sessionQueries.ts'
 
 type SessionLoadState = 'loading' | 'ready' | 'error'
 
@@ -252,81 +251,32 @@ function SessionGroup({
 
 export function HomePage() {
   const navigate = useNavigate()
-  const [sessions, setSessions] = useState<RecentSessionSummary[]>([])
-  const [loadState, setLoadState] = useState<SessionLoadState>('loading')
-  const [isCreatingSession, setIsCreatingSession] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let isCurrent = true
-
-    async function loadSessionsOnMount() {
-      setLoadState('loading')
-
-      try {
-        const recentSessions = await fetchRecentSessions()
-
-        if (!isCurrent) {
-          return
-        }
-
-        setSessions(recentSessions)
-        setLoadState('ready')
-      } catch (error) {
-        if (!isCurrent) {
-          return
-        }
-
-        setLoadState('error')
-
-        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-          console.warn('Failed to load recent sessions.', error)
-        }
-      }
-    }
-
-    void loadSessionsOnMount()
-
-    return () => {
-      isCurrent = false
-    }
-  }, [])
+  const recentSessionsQuery = useRecentSessionsQuery()
+  const createSessionMutation = useCreateSessionMutation()
 
   function handleRetryLoad() {
-    setLoadState('loading')
-
-    void fetchRecentSessions()
-      .then((recentSessions) => {
-        setSessions(recentSessions)
-        setLoadState('ready')
-      })
-      .catch((error) => {
-        setLoadState('error')
-
-        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-          console.warn('Failed to load recent sessions.', error)
-        }
-      })
+    void recentSessionsQuery.refetch()
   }
 
   async function handleCreateSession() {
-    setCreateError(null)
-    setIsCreatingSession(true)
-
     try {
-      const session = await createSession()
+      const session = await createSessionMutation.mutateAsync(undefined)
       navigate(buildSessionWorkspacePath(session.id))
-    } catch (error) {
-      setCreateError('Could not start a new session. Please try again.')
-
-      if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-        console.warn('Failed to create a new session.', error)
-      }
-    } finally {
-      setIsCreatingSession(false)
+    } catch {
+      // Query state drives the visible failure message.
     }
   }
 
+  const sessions = recentSessionsQuery.data ?? []
+  const loadState: SessionLoadState = recentSessionsQuery.isPending
+    ? 'loading'
+    : recentSessionsQuery.isError
+      ? 'error'
+      : 'ready'
+  const isCreatingSession = createSessionMutation.isPending
+  const createError = createSessionMutation.isError
+    ? 'Could not start a new session. Please try again.'
+    : null
   const { active, completed } = splitSessionsByStatus(sessions)
   const totalSessions = sessions.length
 

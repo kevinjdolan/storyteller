@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { renderWithAppProviders } from '../test/renderWithAppProviders.tsx'
 import { appRoutes } from './router.tsx'
 
 const sampleSessions = [
@@ -152,7 +153,7 @@ function renderRoute(initialEntry: string) {
     initialEntries: [initialEntry],
   })
 
-  return render(<RouterProvider router={router} />)
+  return renderWithAppProviders(<RouterProvider router={router} />)
 }
 
 describe('app router', () => {
@@ -177,7 +178,9 @@ describe('app router', () => {
       }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: 'Resume Lanterns Over Juniper Lake' }),
+      await screen.findByRole('link', {
+        name: 'Resume Lanterns Over Juniper Lake',
+      }),
     ).toHaveAttribute('href', '/sessions/juniper-lake')
     expect(await screen.findByText('Hello from FastAPI!')).toBeInTheDocument()
   })

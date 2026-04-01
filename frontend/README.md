@@ -8,6 +8,7 @@ Key entrypoints:
 
 - `src/main.tsx`: browser entrypoint
 - `src/app/router.tsx`: browser-router configuration for the home page, session workspace, and not-found fallback
+- `src/app/AppProviders.tsx`: global providers, including the shared React Query client
 - `src/app/routePaths.ts`: central path helpers, including the session-workspace URL builder
 - `src/app/AppShell.tsx`: global chrome with navigation, connection status, and toast space
 - `src/pages/`: route-level screens
@@ -15,6 +16,8 @@ Key entrypoints:
 - `src/hooks/`: shared data hooks
 - `src/api/`: backend request helpers and service-specific clients
 - `src/state/`: app-level state shapes and future store modules
+- `src/features/session/sessionQueries.ts`: React Query hooks and cache keys for session server state
+- `src/features/session/sessionRuntimeStore.ts`: local session runtime store for live events and optimistic actions
 - `src/styles/index.css`: global styles and design tokens for the scaffold
 - `vite.config.ts`: Vite dev server configuration, including the backend proxy
 
@@ -22,11 +25,13 @@ Folder conventions:
 
 - `src/app/`: router, app shell, route constants, and future global providers
 - `src/pages/`: page modules that map directly to routes
-- `src/features/`: reusable product-domain logic that can be shared across pages
+- `src/features/`: reusable product-domain logic that can be shared across pages, including session query hooks and runtime state
 - `src/shared/ui/`: composable display primitives and chrome
 - `src/hooks/`: cross-cutting React hooks that are not owned by a single page
 - `src/api/`: fetch wrappers, endpoint clients, and request helpers
 - `src/state/`: state models and future global/session store modules
+
+See [docs/frontend-state-architecture.md](/Users/kevin/code/storyteller/docs/frontend-state-architecture.md) for the current split between React Query server state and the workspace-local runtime store.
 
 Useful commands:
 

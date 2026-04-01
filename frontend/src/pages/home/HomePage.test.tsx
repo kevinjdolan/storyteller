@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { HomePage } from './HomePage.tsx'
 
 const sampleSessions = [
@@ -102,7 +103,7 @@ describe('HomePage', () => {
   it('renders active and completed sessions from the backend', async () => {
     mockSessionsApi()
 
-    render(
+    renderWithAppProviders(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,
@@ -132,7 +133,7 @@ describe('HomePage', () => {
   it('shows an empty state when there are no stored sessions', async () => {
     mockSessionsApi({ sessions: [] })
 
-    render(
+    renderWithAppProviders(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,
@@ -154,7 +155,7 @@ describe('HomePage', () => {
 
     vi.stubGlobal('fetch', fetchMock)
 
-    render(
+    renderWithAppProviders(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,
