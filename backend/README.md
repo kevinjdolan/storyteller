@@ -51,6 +51,7 @@ Useful commands:
 
 ```bash
 pytest
+pytest --run-integration -m integration tests/integration
 python -m ruff check app tests
 python -m ruff format app tests
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
@@ -87,6 +88,37 @@ alembic revision --autogenerate -m "describe change"
 
 The migration environment prefers an explicit `sqlalchemy.url` or `STORYTELLER_DATABASE_URL`. If
 neither is supplied, it falls back to the application settings loader.
+
+## Integration tests
+
+The durable data-layer integration suite lives under
+[`backend/tests/integration`](/Users/kevin/code/storyteller/backend/tests/integration). These
+tests talk to the real local Postgres service and the file-backed fake GCS server instead of using
+SQLite or mocked HTTP transports.
+
+Run the suite from the repo root:
+
+```bash
+make backend-integration-test
+```
+
+That target starts `postgres` and `gcs` if needed, creates a disposable PostgreSQL database with
+Alembic, reuses the local fake GCS server on `http://127.0.0.1:8568`, and runs only
+`pytest.mark.integration` tests. The default `make backend-test` path keeps skipping these tests so
+the fast unit loop stays fast.
+
+Manual invocation from `backend/` is also supported:
+
+```bash
+STORYTELLER_RUN_INTEGRATION_TESTS=1 \
+STORYTELLER_INTEGRATION_POSTGRES_ADMIN_URL="postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/postgres" \
+STORYTELLER_INTEGRATION_GCS_ENDPOINT="http://127.0.0.1:8568" \
+python -m pytest --run-integration -m integration tests/integration
+```
+
+Future CI should treat `make backend-integration-test` as the durable-state gate after booting the
+same Compose-backed infrastructure. That keeps local and CI behavior aligned and makes migration,
+queue-claim, and storage regressions visible before higher-level workflow prompts add more state.
 
 ## Background jobs
 

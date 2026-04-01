@@ -6,3 +6,7 @@ src = ["app", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: exercises real Postgres and fake GCS services",
+]

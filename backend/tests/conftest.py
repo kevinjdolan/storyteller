@@ -28,6 +28,43 @@ for name, value in TEST_ENVIRONMENT_DEFAULTS.items():
     os.environ.setdefault(name, value)
 
 
+def _integration_enabled(config: pytest.Config) -> bool:
+    if config.getoption("--run-integration"):
+        return True
+
+    return os.environ.get("STORYTELLER_RUN_INTEGRATION_TESTS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="run integration tests that require local Postgres and fake GCS services",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if _integration_enabled(config):
+        return
+
+    skip_integration = pytest.mark.skip(
+        reason=(
+            "integration tests are disabled by default; pass --run-integration or set "
+            "STORYTELLER_RUN_INTEGRATION_TESTS=1"
+        ),
+    )
+
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     from app.main import create_app

@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-seed-catalog backend-storage-smoke
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-integration-test backend-seed-catalog backend-storage-smoke
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,20 @@ backend-lint: ## Run backend Ruff lint checks
 
 backend-test: ## Run the backend pytest suite
 	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi
+
+backend-integration-test: ## Run backend integration tests against local Postgres and fake GCS
+	@$(COMPOSE) up -d postgres gcs
+	@cd backend && \
+	export STORYTELLER_RUN_INTEGRATION_TESTS=1; \
+	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
+	export STORYTELLER_INTEGRATION_POSTGRES_ADMIN_URL="$${STORYTELLER_INTEGRATION_POSTGRES_ADMIN_URL:-postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/postgres}"; \
+	export STORYTELLER_INTEGRATION_GCS_ENDPOINT="$${STORYTELLER_INTEGRATION_GCS_ENDPOINT:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_INTEGRATION_GCS_PUBLIC_URL="$${STORYTELLER_INTEGRATION_GCS_PUBLIC_URL:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_INTEGRATION_GCS_PROJECT_ID="$${STORYTELLER_INTEGRATION_GCS_PROJECT_ID:-storyteller-local}"; \
+	export STORYTELLER_INTEGRATION_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_INTEGRATION_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}"; \
+	export STORYTELLER_INTEGRATION_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_INTEGRATION_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}"; \
+	export STORYTELLER_INTEGRATION_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_INTEGRATION_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}"; \
+	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m pytest --run-integration -m integration tests/integration; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest --run-integration -m integration tests/integration; else python -m pytest --run-integration -m integration tests/integration; fi
 
 backend-seed-catalog: ## Seed the backend-owned genre and tone catalog
 	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.seed_catalog; elif command -v python3 >/dev/null 2>&1; then python3 -m app.seed_catalog; else python -m app.seed_catalog; fi
