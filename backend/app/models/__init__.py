@@ -5,6 +5,21 @@ from app.models.catalog import (
     ToneCatalogEntry,
     ToneCatalogSeed,
 )
+from app.models.session import (
+    AudioJobView,
+    BeatSheetView,
+    CharacterSheetView,
+    CompositionJobView,
+    ExportAssetView,
+    PitchView,
+    RecentSessionSummary,
+    SessionCatalogSelection,
+    SessionProgress,
+    SessionSnapshot,
+    SessionStageStateView,
+    StoryBriefView,
+    StorySetupView,
+)
 from app.models.system import DependencyStatus, HealthResponse, HelloResponse
 from app.models.workflow import (
     WORKFLOW_STAGE_DEFINITIONS,
@@ -19,12 +34,25 @@ from app.models.workflow import (
 )
 
 __all__ = [
+    "AudioJobView",
+    "BeatSheetView",
+    "CharacterSheetView",
+    "CompositionJobView",
     "DependencyStatus",
+    "ExportAssetView",
     "GenreCatalogEntry",
     "GenreCatalogSeed",
     "GenreToneCatalogDocument",
     "HealthResponse",
     "HelloResponse",
+    "PitchView",
+    "RecentSessionSummary",
+    "SessionCatalogSelection",
+    "SessionProgress",
+    "SessionSnapshot",
+    "SessionStageStateView",
+    "StoryBriefView",
+    "StorySetupView",
     "WORKFLOW_STAGE_DEFINITIONS",
     "WORKFLOW_STAGE_SEQUENCE",
     "WORKFLOW_STAGE_STATES",

@@ -1,0 +1,377 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from app.db import (
+    AssetKind,
+    AssetStatus,
+    AudioJob,
+    Base,
+    BeatSheet,
+    CharacterSheet,
+    CompositionJob,
+    CompositionJobKind,
+    ExportAsset,
+    Genre,
+    JobStatus,
+    Pitch,
+    StoryBrief,
+    StorySession,
+    StorySetup,
+    ToneProfile,
+    make_engine,
+)
+from app.models import WorkflowStage, WorkflowStageState
+from app.services.sessions import (
+    InvalidStageTransitionError,
+    SessionNotFoundError,
+    SessionService,
+)
+from sqlalchemy.orm import sessionmaker
+
+
+def _enable_sqlite_foreign_keys(engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+
+@pytest.fixture
+def db_session():
+    engine = make_engine("sqlite+pysqlite:///:memory:")
+    _enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
+
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> None:
+    service = SessionService(db_session)
+
+    snapshot = service.create_session(working_title="  Starlight Ferry  ")
+
+    assert snapshot.display_title == "Starlight Ferry"
+    assert snapshot.working_title == "Starlight Ferry"
+    assert snapshot.current_stage == WorkflowStage.GENRE
+    assert snapshot.resume_stage == WorkflowStage.GENRE
+    assert snapshot.overall_status == WorkflowStageState.DRAFT
+    assert snapshot.progress.total_stages == len(WorkflowStage)
+    assert snapshot.progress.completed_stages == 0
+    assert [stage.stage for stage in snapshot.stage_states] == list(WorkflowStage)
+    assert all(stage.status == WorkflowStageState.DRAFT for stage in snapshot.stage_states)
+
+    stored_session = db_session.get(StorySession, snapshot.id)
+    assert stored_session is not None
+    assert len(stored_session.workflow_stage_states) == len(WorkflowStage)
+
+
+def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_session) -> None:
+    now = datetime.now(timezone.utc)
+    genre = Genre(
+        slug="quest-fantasy",
+        label="Quest Fantasy",
+        description="A gentle adventure.",
+    )
+    tone = ToneProfile(
+        genre=genre,
+        slug="hushed-wonder",
+        label="Hushed Wonder",
+        description="Quiet and luminous.",
+        default_planning_hints={"pacing": "unhurried"},
+    )
+    story_session = StorySession(
+        working_title=None,
+        current_stage=WorkflowStage.COMPOSITION,
+        resume_stage=WorkflowStage.COMPOSITION,
+        furthest_completed_stage=WorkflowStage.STORY_SETUP,
+        overall_status=WorkflowStageState.IN_PROGRESS,
+        selected_genre=genre,
+        selected_tone_profile=tone,
+    )
+    db_session.add(story_session)
+    db_session.flush()
+
+    service = SessionService(db_session)
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.GENRE,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.TONE,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.BRIEF,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.PITCHES,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.CHARACTERS,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.BEATS,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.STORY_SETUP,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        story_session.id,
+        stage=WorkflowStage.COMPOSITION,
+        status=WorkflowStageState.IN_PROGRESS,
+        detail="Writing the middle chapters.",
+    )
+
+    brief = StoryBrief(
+        session_id=story_session.id,
+        revision_number=1,
+        raw_brief="A young fox rows across a moonlit lake.",
+        normalized_summary="A sleepy quest to find a glowing reed before dawn.",
+        planning_notes="Keep the tension soft and quickly reparative.",
+        is_active=True,
+        accepted_at=now,
+    )
+    db_session.add(brief)
+    db_session.flush()
+
+    pitch = Pitch(
+        session_id=story_session.id,
+        story_brief_id=brief.id,
+        generation_key="pitch-batch-1",
+        pitch_index=0,
+        title="The Reed of Quiet Light",
+        logline="A young fox follows the lake's hush toward a night mystery.",
+        summary="Pip drifts toward a lantern-bright reed and learns the lake is helping.",
+        bedtime_notes="Every surprise resolves gently.",
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(pitch)
+    db_session.flush()
+
+    character_sheet = CharacterSheet(
+        session_id=story_session.id,
+        pitch_id=pitch.id,
+        revision_number=1,
+        title="Pip and the Listening Lake",
+        protagonist_name="Pip",
+        summary="Pip is cautious, curious, and calmed by steady rhythms.",
+        supporting_cast={"friend": "a sleepy reed-heron"},
+        bedtime_notes="Keep Pip emotionally safe in every scene.",
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(character_sheet)
+    db_session.flush()
+
+    beat_sheet = BeatSheet(
+        session_id=story_session.id,
+        character_sheet_id=character_sheet.id,
+        revision_number=1,
+        summary="A gentle Save-the-Cat arc with a quiet return home.",
+        beats={"opening_image": "Moonlight on still water"},
+        bedtime_notes="The midpoint should feel magical, not scary.",
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(beat_sheet)
+    db_session.flush()
+
+    story_setup = StorySetup(
+        session_id=story_session.id,
+        beat_sheet_id=beat_sheet.id,
+        revision_number=1,
+        target_word_count=1800,
+        target_runtime_minutes=12,
+        chapter_count=3,
+        chapter_style="three gentle chapters",
+        guidance_notes="Let each chapter end on a calmer image than it began.",
+        preferences={"narration_style": "soft"},
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(story_setup)
+    db_session.flush()
+
+    composition_job = CompositionJob(
+        session_id=story_session.id,
+        beat_sheet_id=beat_sheet.id,
+        story_setup_id=story_setup.id,
+        job_kind=CompositionJobKind.DRAFT,
+        status=JobStatus.IN_PROGRESS,
+        progress_percent=48.0,
+        current_segment_index=2,
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+
+    audio_job = AudioJob(
+        session_id=story_session.id,
+        source_composition_job_id=composition_job.id,
+        status=JobStatus.PAUSED,
+        voice_key="gemini-soft-1",
+        playback_speed=0.95,
+        include_background_music=True,
+        music_profile="gentle-piano",
+        estimated_duration_seconds=620,
+    )
+    db_session.add(audio_job)
+
+    story_asset = ExportAsset(
+        session_id=story_session.id,
+        composition_job_id=composition_job.id,
+        asset_kind=AssetKind.STORY_TEXT,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-exports",
+        storage_key="sessions/story-1/story.md",
+        mime_type="text/markdown",
+        byte_size=4096,
+        ready_at=now,
+    )
+    audio_asset = ExportAsset(
+        session_id=story_session.id,
+        audio_job_id=audio_job.id,
+        asset_kind=AssetKind.FINAL_AUDIO,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-exports",
+        storage_key="sessions/story-1/story.mp3",
+        mime_type="audio/mpeg",
+        byte_size=8192,
+        ready_at=now,
+    )
+    db_session.add_all([story_asset, audio_asset])
+    db_session.commit()
+
+    snapshot = service.load_session_snapshot(story_session.id)
+
+    assert snapshot.display_title == "The Reed of Quiet Light"
+    assert snapshot.selected_genre is not None and snapshot.selected_genre.slug == "quest-fantasy"
+    assert snapshot.selected_tone_profile is not None
+    assert snapshot.story_brief is not None
+    assert snapshot.story_brief.raw_brief.startswith("A young fox")
+    assert snapshot.selected_pitch is not None
+    assert snapshot.selected_pitch.title == "The Reed of Quiet Light"
+    assert snapshot.selected_character_sheet is not None
+    assert snapshot.selected_beat_sheet is not None
+    assert snapshot.selected_story_setup is not None
+    assert snapshot.active_composition_job is not None
+    assert snapshot.active_audio_job is not None
+    assert snapshot.latest_story_asset is not None
+    assert snapshot.latest_audio_asset is not None
+    assert snapshot.progress.completed_stages == 7
+    assert snapshot.progress.in_progress_stages == 1
+    assert snapshot.current_stage == WorkflowStage.COMPOSITION
+    composition_stage = next(
+        stage
+        for stage in snapshot.stage_states
+        if stage.stage == WorkflowStage.COMPOSITION
+    )
+    assert composition_stage.detail == "Writing the middle chapters."
+
+
+def test_update_stage_state_rejects_skipping_prerequisites(db_session) -> None:
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Stage Guardrails")
+
+    with pytest.raises(InvalidStageTransitionError):
+        service.update_stage_state(
+            snapshot.id,
+            stage=WorkflowStage.TONE,
+            status=WorkflowStageState.COMPLETED,
+        )
+
+
+def test_update_stage_state_invalidates_downstream_outputs_after_upstream_edit(db_session) -> None:
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Regeneration Test")
+
+    for stage in (
+        WorkflowStage.GENRE,
+        WorkflowStage.TONE,
+        WorkflowStage.BRIEF,
+        WorkflowStage.PITCHES,
+        WorkflowStage.CHARACTERS,
+        WorkflowStage.BEATS,
+        WorkflowStage.STORY_SETUP,
+        WorkflowStage.COMPOSITION,
+        WorkflowStage.AUDIO,
+        WorkflowStage.FINALIZE,
+    ):
+        snapshot = service.update_stage_state(
+            snapshot.id,
+            stage=stage,
+            status=WorkflowStageState.COMPLETED,
+            detail=f"Accepted {stage.value}.",
+        )
+
+    assert snapshot.overall_status == WorkflowStageState.COMPLETED
+    assert snapshot.resume_stage == WorkflowStage.FINALIZE
+
+    snapshot = service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.BRIEF,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted a revised brief.",
+    )
+
+    stage_map = {stage.stage: stage for stage in snapshot.stage_states}
+    assert snapshot.current_stage == WorkflowStage.PITCHES
+    assert snapshot.resume_stage == WorkflowStage.PITCHES
+    assert snapshot.furthest_completed_stage == WorkflowStage.STORY_SETUP
+    assert snapshot.overall_status == WorkflowStageState.NEEDS_REGENERATION
+    assert snapshot.completed_at is None
+    assert stage_map[WorkflowStage.BRIEF].status == WorkflowStageState.COMPLETED
+    assert stage_map[WorkflowStage.PITCHES].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.STORY_SETUP].status == WorkflowStageState.COMPLETED
+    assert stage_map[WorkflowStage.COMPOSITION].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.FINALIZE].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.PITCHES].detail == "Accepted a revised brief."
+
+
+def test_list_recent_sessions_returns_latest_first_with_progress_counts(db_session) -> None:
+    service = SessionService(db_session)
+    older = service.create_session(working_title="Older Session")
+    newer = service.create_session(working_title="Newer Session")
+
+    older_row = db_session.get(StorySession, older.id)
+    newer_row = db_session.get(StorySession, newer.id)
+    assert older_row is not None and newer_row is not None
+
+    older_row.updated_at = datetime.now(timezone.utc) - timedelta(days=1)
+    newer_row.updated_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    service.update_stage_state(
+        newer.id,
+        stage=WorkflowStage.GENRE,
+        status=WorkflowStageState.COMPLETED,
+    )
+    recent = service.list_recent_sessions(limit=5)
+
+    assert [session.id for session in recent[:2]] == [newer.id, older.id]
+    assert recent[0].progress.completed_stages == 1
+    assert recent[1].progress.completed_stages == 0
+
+
+def test_load_session_snapshot_raises_for_missing_session(db_session) -> None:
+    service = SessionService(db_session)
+
+    with pytest.raises(SessionNotFoundError):
+        service.load_session_snapshot("missing-session-id")

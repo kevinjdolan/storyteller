@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.models.workflow import WorkflowStage, WorkflowStageState
+
+
+class SessionCatalogSelection(BaseModel):
+    id: str
+    slug: str
+    label: str
+
+
+class SessionProgress(BaseModel):
+    total_stages: int
+    completed_stages: int
+    in_progress_stages: int
+    needs_regeneration_stages: int
+
+
+class SessionStageStateView(BaseModel):
+    stage: WorkflowStage
+    label: str
+    description: str
+    status: WorkflowStageState
+    detail: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    last_event_summary: str | None = None
+    last_event_type: str | None = None
+    last_event_at: datetime | None = None
+
+
+class StoryBriefView(BaseModel):
+    id: str
+    revision_number: int
+    raw_brief: str
+    normalized_summary: str | None = None
+    planning_notes: str | None = None
+    accepted_at: datetime | None = None
+
+
+class PitchView(BaseModel):
+    id: str
+    generation_key: str
+    pitch_index: int
+    title: str
+    logline: str
+    summary: str | None = None
+    bedtime_notes: str | None = None
+    accepted_at: datetime | None = None
+
+
+class CharacterSheetView(BaseModel):
+    id: str
+    revision_number: int
+    title: str | None = None
+    protagonist_name: str | None = None
+    summary: str | None = None
+    supporting_cast: dict[str, Any] | list[Any] | None = None
+    bedtime_notes: str | None = None
+    accepted_at: datetime | None = None
+
+
+class BeatSheetView(BaseModel):
+    id: str
+    revision_number: int
+    summary: str | None = None
+    beats: dict[str, Any] | list[Any] | None = None
+    bedtime_notes: str | None = None
+    accepted_at: datetime | None = None
+
+
+class StorySetupView(BaseModel):
+    id: str
+    revision_number: int
+    target_word_count: int | None = None
+    target_runtime_minutes: int | None = None
+    chapter_count: int | None = None
+    chapter_style: str | None = None
+    guidance_notes: str | None = None
+    preferences: dict[str, Any] | list[Any] | None = None
+    accepted_at: datetime | None = None
+
+
+class CompositionJobView(BaseModel):
+    id: str
+    job_kind: str
+    status: str
+    progress_percent: float
+    current_segment_index: int | None = None
+    attempt_count: int
+    stop_reason: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AudioJobView(BaseModel):
+    id: str
+    status: str
+    voice_key: str | None = None
+    playback_speed: float
+    include_background_music: bool
+    music_profile: str | None = None
+    estimated_duration_seconds: int | None = None
+    current_segment_index: int | None = None
+    attempt_count: int
+    stop_reason: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExportAssetView(BaseModel):
+    id: str
+    asset_kind: str
+    status: str
+    mime_type: str
+    byte_size: int | None = None
+    ready_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RecentSessionSummary(BaseModel):
+    id: str
+    display_title: str
+    working_title: str | None = None
+    current_stage: WorkflowStage
+    resume_stage: WorkflowStage
+    furthest_completed_stage: WorkflowStage | None = None
+    overall_status: WorkflowStageState
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    selected_genre: SessionCatalogSelection | None = None
+    selected_tone_profile: SessionCatalogSelection | None = None
+    progress: SessionProgress
+
+
+class SessionSnapshot(BaseModel):
+    id: str
+    display_title: str
+    working_title: str | None = None
+    current_stage: WorkflowStage
+    resume_stage: WorkflowStage
+    furthest_completed_stage: WorkflowStage | None = None
+    overall_status: WorkflowStageState
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    selected_genre: SessionCatalogSelection | None = None
+    selected_tone_profile: SessionCatalogSelection | None = None
+    progress: SessionProgress
+    stage_states: list[SessionStageStateView] = Field(default_factory=list)
+    story_brief: StoryBriefView | None = None
+    selected_pitch: PitchView | None = None
+    selected_character_sheet: CharacterSheetView | None = None
+    selected_beat_sheet: BeatSheetView | None = None
+    selected_story_setup: StorySetupView | None = None
+    active_composition_job: CompositionJobView | None = None
+    active_audio_job: AudioJobView | None = None
+    latest_story_asset: ExportAssetView | None = None
+    latest_audio_asset: ExportAssetView | None = None
