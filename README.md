@@ -65,6 +65,7 @@ Start the current stack with:
 
 ```bash
 cp secrets.example.yaml secrets.yaml
+./scripts/install-git-hooks.sh
 ./scripts/dev-compose.sh up --build
 ```
 
@@ -75,7 +76,7 @@ The local Compose stack now includes:
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 
-`secrets.yaml` is already gitignored and reserved for local-only credentials. Copy `secrets.example.yaml` to `secrets.yaml`, add a Gemini API key, and keep the file local. The compose file uses development defaults for Postgres and the GCS emulator, while the backend loads secrets from the repo-root `secrets.yaml` at container startup.
+`secrets.yaml` is already gitignored and reserved for local-only credentials. Copy `secrets.example.yaml` to `secrets.yaml`, add a Gemini API key, and keep the file local. `./scripts/install-git-hooks.sh` enables the repo-managed pre-commit hook that blocks accidental commits of `secrets.yaml`, `.env` files, and obvious live key material. The compose file uses development defaults for Postgres and the GCS emulator, while the backend loads secrets from the repo-root `secrets.yaml` at container startup.
 
 ## Docker Compose Local Stack
 

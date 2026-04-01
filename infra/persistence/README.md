@@ -10,6 +10,15 @@ Examples that belong here:
 
 This directory is for documentation and conventions, not checked-in database dumps or generated runtime data.
 
+If future local infrastructure work needs host-mounted runtime state instead of named Docker volumes, keep that data under one of these reserved ignored paths:
+
+- `infra/persistence/runtime/`
+- `infra/persistence/postgres-data/`
+- `infra/persistence/gcs-data/`
+- `infra/persistence/local/`
+
+Those directories are gitignored so local persistence experiments and recovered data do not pollute commits.
+
 Current Compose-backed persistent volumes:
 
 - `storyteller_postgres_data`: mounted into `/var/lib/postgresql/data`

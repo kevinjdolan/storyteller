@@ -13,6 +13,20 @@ Precedence is simple:
 
 Environment variables always win over `secrets.yaml`.
 
+## Commit Hygiene
+
+`secrets.yaml` is the live local credentials file. It must never be committed, copied into tracked examples, or pasted into checked-in docs. The repository keeps exactly one tracked template for that shape: `secrets.example.yaml`.
+
+When contributors need a safe sample file, it should use an example-style name such as:
+
+- `secrets.example.yaml`
+- `.env.example`
+- `.env.local.example`
+
+Tracked examples must contain placeholders only. Real credentials belong in local-only files such as `secrets.yaml` or in shell environment variables that stay outside git.
+
+The repository also ignores `.env`, `.env.*`, and reserved local persistence paths under `infra/persistence/` so machine-specific config and runtime data do not pollute `git status`.
+
 ## File Discovery
 
 The backend looks for `secrets.yaml` in this order:
@@ -41,6 +55,14 @@ cp secrets.example.yaml secrets.yaml
 ```
 
 Then replace `gemini.api_key` with a real local key before starting the backend.
+
+To enable the repo-managed pre-commit guard for this clone, run:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+The hook blocks commits that stage `secrets.yaml`, `.env` files, or obvious Gemini/private-key material.
 
 ## Supported Shape
 
