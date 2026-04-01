@@ -33,6 +33,7 @@ from app.models.events import (
 )
 from app.models.intent_parser import ParsedChatIntentResponse
 from app.repositories import EventLogRepository
+from app.services.conversation_memory import SessionMemoryService
 
 DEFAULT_LOCAL_USER_ACTOR = SessionEventActor(
     actor_type=EventActorType.USER,
@@ -54,6 +55,7 @@ DEFAULT_INTENT_PARSER_ACTOR = SessionEventActor(
 
 class SessionEventLogService:
     def __init__(self, session: Session):
+        self._session = session
         self._events = EventLogRepository(session)
 
     def append_event(
@@ -110,13 +112,15 @@ class SessionEventLogService:
         actor: SessionEventActor | None = None,
     ) -> EventLogEntry:
         title = working_title or "Untitled bedtime story"
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_LOCAL_USER_ACTOR,
             event_type=SessionEventType.SESSION_CREATED,
             summary=f"Created session: {title}.",
             payload=SessionCreatedEventPayload(working_title=working_title),
         )
+        self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_stage_state_changed(
         self,
@@ -143,7 +147,7 @@ class SessionEventLogService:
         else:
             summary = f"Updated {stage.value} stage to {status.value}."
 
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_LOCAL_USER_ACTOR,
             event_type=SessionEventType.WORKFLOW_STAGE_CHANGED,
@@ -160,6 +164,8 @@ class SessionEventLogService:
                 overall_status=overall_status,
             ),
         )
+        self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_selection(
         self,
@@ -177,7 +183,7 @@ class SessionEventLogService:
     ) -> EventLogEntry:
         selection_label = label or slug or selection_id or selection_kind.value
         action = "Selected" if accepted else "Recorded candidate"
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_LOCAL_USER_ACTOR,
             event_type=SessionEventType.SELECTION_RECORDED,
@@ -193,6 +199,8 @@ class SessionEventLogService:
                 accepted=accepted,
             ),
         )
+        self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_ai_output(
         self,
@@ -237,7 +245,7 @@ class SessionEventLogService:
         summary_text: str | None = None,
         actor: SessionEventActor | None = None,
     ) -> EventLogEntry:
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_LOCAL_USER_ACTOR,
             event_type=SessionEventType.USER_EDIT_RECORDED,
@@ -253,6 +261,8 @@ class SessionEventLogService:
                 summary_text=summary_text,
             ),
         )
+        self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_chat_message(
         self,
@@ -371,7 +381,7 @@ class SessionEventLogService:
             if progress_percent is not None
             else "Recorded composition progress."
         )
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
             event_type=SessionEventType.COMPOSITION_PROGRESS_RECORDED,
@@ -386,6 +396,9 @@ class SessionEventLogService:
                 segment_id=segment_id,
             ),
         )
+        if _should_refresh_memory_for_job_status(_enum_value(status)):
+            self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_audio_progress(
         self,
@@ -406,7 +419,7 @@ class SessionEventLogService:
             if progress_percent is not None
             else "Recorded audio progress."
         )
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
             event_type=SessionEventType.AUDIO_PROGRESS_RECORDED,
@@ -422,6 +435,19 @@ class SessionEventLogService:
                 estimated_duration_seconds=estimated_duration_seconds,
                 voice_key=voice_key,
             ),
+        )
+        if _should_refresh_memory_for_job_status(_enum_value(status)):
+            self._refresh_memory_snapshot(session_id, event)
+        return event
+
+    def _refresh_memory_snapshot(
+        self,
+        session_id: str,
+        event: EventLogEntry,
+    ) -> None:
+        SessionMemoryService(self._session).refresh_summary(
+            session_id,
+            trigger_event=event,
         )
 
 
@@ -460,3 +486,7 @@ def _truncate_preview(value: str, *, limit: int = 160) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 3].rstrip()}..."
+
+
+def _should_refresh_memory_for_job_status(status: str) -> bool:
+    return status in {"paused", "failed", "cancelled", "completed"}

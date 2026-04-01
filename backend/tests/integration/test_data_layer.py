@@ -43,6 +43,7 @@ EXPECTED_TABLES = {
     "event_log_entries",
     "genres",
     "pitches",
+    "session_memory_snapshots",
     "session_assets",
     "story_briefs",
     "story_sessions",
@@ -83,6 +84,16 @@ EXPECTED_BACKGROUND_JOB_COLUMNS = {
     "error_message",
     "created_at",
     "updated_at",
+}
+EXPECTED_SESSION_MEMORY_COLUMNS = {
+    "id",
+    "session_id",
+    "trigger_event_id",
+    "trigger_event_type",
+    "trigger_event_sequence_number",
+    "summary_text",
+    "summary_data",
+    "created_at",
 }
 
 
@@ -134,6 +145,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
+    assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
+        database_url,
+        "session_memory_snapshots",
+    )
     assert _alembic_version(database_url) == expected_head
 
     command.downgrade(config, "base")
@@ -143,6 +158,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
+    assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
+        database_url,
+        "session_memory_snapshots",
+    )
     assert _alembic_version(database_url) == expected_head
 
 

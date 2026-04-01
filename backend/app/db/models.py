@@ -210,6 +210,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    memory_snapshots: Mapped[list["SessionMemorySnapshot"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_story_sessions_overall_status_updated_at", "overall_status", "updated_at"),
@@ -289,6 +293,9 @@ class EventLogEntry(UUIDPrimaryKeyMixin, Base):
     workflow_stage_states: Mapped[list["WorkflowStageSnapshot"]] = relationship(
         back_populates="last_event",
     )
+    memory_snapshots: Mapped[list["SessionMemorySnapshot"]] = relationship(
+        back_populates="trigger_event"
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -296,6 +303,44 @@ class EventLogEntry(UUIDPrimaryKeyMixin, Base):
         ),
         Index("ix_event_log_entries_session_id_created_at", "session_id", "created_at"),
         Index("ix_event_log_entries_session_id_stage", "session_id", "stage"),
+    )
+
+
+class SessionMemorySnapshot(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "session_memory_snapshots"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    trigger_event_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("event_log_entries.id", ondelete="SET NULL"),
+    )
+    trigger_event_type: Mapped[str | None] = mapped_column(String(120))
+    trigger_event_sequence_number: Mapped[int | None] = mapped_column(Integer)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    session: Mapped["StorySession"] = relationship(back_populates="memory_snapshots")
+    trigger_event: Mapped["EventLogEntry | None"] = relationship(back_populates="memory_snapshots")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "trigger_event_id",
+            name="uq_session_memory_snapshots_trigger_event_id",
+        ),
+        Index(
+            "ix_session_memory_snapshots_session_id_created_at",
+            "session_id",
+            "created_at",
+        ),
     )
 
 

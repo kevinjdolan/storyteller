@@ -17,6 +17,7 @@ EXPECTED_TABLES = {
     "event_log_entries",
     "genres",
     "pitches",
+    "session_memory_snapshots",
     "session_assets",
     "story_briefs",
     "story_sessions",
@@ -58,6 +59,16 @@ EXPECTED_BACKGROUND_JOB_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_SESSION_MEMORY_COLUMNS = {
+    "id",
+    "session_id",
+    "trigger_event_id",
+    "trigger_event_type",
+    "trigger_event_sequence_number",
+    "summary_text",
+    "summary_data",
+    "created_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -94,6 +105,10 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_TABLES <= _get_table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")
+    assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
+        database_url,
+        "session_memory_snapshots",
+    )
 
     command.downgrade(config, "base")
     assert not (EXPECTED_TABLES & _get_table_names(database_url))
@@ -102,3 +117,7 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_TABLES <= _get_table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")
+    assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
+        database_url,
+        "session_memory_snapshots",
+    )

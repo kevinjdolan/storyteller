@@ -7,6 +7,9 @@ from app.models.workflow import get_workflow_stage_definition
 
 
 def build_session_agent_context_summary(snapshot: SessionSnapshot) -> str:
+    if snapshot.conversation_memory is not None:
+        return snapshot.conversation_memory.summary_text
+
     lines = [
         f"Session title: {snapshot.display_title}",
         f"Overall status: {snapshot.overall_status.value}",

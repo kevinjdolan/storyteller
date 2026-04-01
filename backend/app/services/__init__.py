@@ -11,6 +11,7 @@ from app.services.assets import (
     AssetSessionNotFoundError,
     SessionAssetService,
 )
+from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 from app.services.intent_parser import SessionIntentParserService
 from app.services.jobs import (
@@ -44,6 +45,7 @@ __all__ = [
     "SessionActionPolicyService",
     "SessionActionPolicyServiceError",
     "SessionIntentParserService",
+    "SessionMemoryService",
     "SessionNotFoundError",
     "SessionAssetService",
     "SessionEventLogService",

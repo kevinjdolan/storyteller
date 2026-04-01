@@ -137,6 +137,33 @@ class SessionAssetView(BaseModel):
     updated_at: datetime
 
 
+class ConversationMemoryWorkflow(BaseModel):
+    current_stage: WorkflowStage
+    current_stage_status: WorkflowStageState
+    resume_stage: WorkflowStage
+    overall_status: WorkflowStageState
+
+
+class ConversationMemorySummaryData(BaseModel):
+    schema_version: int = Field(default=1, ge=1)
+    session_title: str
+    workflow: ConversationMemoryWorkflow
+    story_decisions: list[str] = Field(default_factory=list)
+    user_preferences: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
+    active_jobs: list[str] = Field(default_factory=list)
+
+
+class ConversationMemorySnapshotView(BaseModel):
+    id: str
+    trigger_event_id: str | None = None
+    trigger_event_type: str | None = None
+    trigger_event_sequence_number: int | None = None
+    summary_text: str
+    summary_data: ConversationMemorySummaryData
+    created_at: datetime
+
+
 class CreateSessionRequest(BaseModel):
     working_title: str | None = None
 
@@ -206,6 +233,7 @@ class SessionSnapshot(BaseModel):
     active_audio_job: AudioJobView | None = None
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
+    conversation_memory: ConversationMemorySnapshotView | None = None
     agent_context_summary: str | None = None
 
 

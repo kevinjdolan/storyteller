@@ -19,6 +19,7 @@ from app.models import (
     BeatSheetView,
     CharacterSheetView,
     CompositionJobView,
+    ConversationMemorySnapshotView,
     PitchView,
     RecentSessionSummary,
     SessionAssetView,
@@ -46,6 +47,7 @@ from app.repositories import (
     WorkflowStageStateRepository,
 )
 from app.services.agent_context import build_session_agent_context_summary
+from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 
 
@@ -82,6 +84,7 @@ class SessionService:
         self._sessions = StorySessionRepository(session)
         self._stage_states = WorkflowStageStateRepository(session)
         self._event_log = SessionEventLogService(session)
+        self._memory = SessionMemoryService(session)
 
     def create_session(
         self,
@@ -105,7 +108,10 @@ class SessionService:
         if aggregate is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
-        return _build_session_snapshot(aggregate)
+        return _build_session_snapshot(
+            aggregate,
+            conversation_memory=self._memory.refresh_summary(session_id),
+        )
 
     def list_recent_sessions(self, *, limit: int = 20) -> list[RecentSessionSummary]:
         if limit <= 0:
@@ -396,7 +402,11 @@ def _build_recent_session_summary(story_session) -> RecentSessionSummary:
     )
 
 
-def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
+def _build_session_snapshot(
+    aggregate: SessionAggregate,
+    *,
+    conversation_memory: ConversationMemorySnapshotView | None,
+) -> SessionSnapshot:
     story_session = aggregate.session
     snapshot = SessionSnapshot(
         id=story_session.id,
@@ -433,8 +443,13 @@ def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
         active_audio_job=_build_audio_job_view(aggregate.active_audio_job),
         latest_story_asset=_build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=_build_session_asset_view(aggregate.latest_audio_asset),
+        conversation_memory=conversation_memory,
     )
-    snapshot.agent_context_summary = build_session_agent_context_summary(snapshot)
+    snapshot.agent_context_summary = (
+        conversation_memory.summary_text
+        if conversation_memory is not None
+        else build_session_agent_context_summary(snapshot)
+    )
     return snapshot
 
 
