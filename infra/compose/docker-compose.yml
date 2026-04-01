@@ -1,10 +1,10 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ../../backend
     working_dir: /app
     volumes:
-      - ./backend:/app
+      - ../../backend:/app
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
@@ -27,7 +27,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../../frontend
     depends_on:
       backend:
         condition: service_healthy
@@ -36,7 +36,7 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       VITE_DEV_PROXY_TARGET: http://backend:8565
     volumes:
-      - ./frontend:/app
+      - ../../frontend:/app
       - /app/node_modules
     ports:
       - "8566:8566"
@@ -57,7 +57,7 @@ services:
 
   browser:
     build:
-      context: ./tools/webapp-qa
+      context: ../../tools/webapp-qa
     depends_on:
       frontend:
         condition: service_healthy
@@ -66,7 +66,7 @@ services:
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       TARGET_BASE_URL: http://frontend:8566
     volumes:
-      - ./:/workspace
+      - ../../:/workspace
       - webapp_qa_node_modules:/workspace/tools/webapp-qa/node_modules
     command: sleep infinity
 
