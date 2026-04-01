@@ -1,0 +1,63 @@
+{
+  "url": "http://frontend:8566",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='sessions-home-route']"
+    },
+    {
+      "action": "assertText",
+      "text": "Pick up where bedtime left off."
+    },
+    {
+      "action": "assertText",
+      "text": "Start a new session"
+    },
+    {
+      "action": "waitForTimeout",
+      "timeout": 900
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false,
+      "outputPath": "../../.artifacts/webapp-qa/prompt-24-home-desktop.png"
+    },
+    {
+      "action": "click",
+      "selector": "button"
+    },
+    {
+      "action": "assertUrlIncludes",
+      "value": "/sessions/"
+    },
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='workspace-route']"
+    },
+    {
+      "action": "assertText",
+      "text": "Chat lane"
+    },
+    {
+      "action": "assertText",
+      "text": "Workflow canvas"
+    },
+    {
+      "action": "assertText",
+      "text": "Workflow progress"
+    },
+    {
+      "action": "waitForTimeout",
+      "timeout": 900
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false,
+      "outputPath": "../../.artifacts/webapp-qa/prompt-24-workspace-desktop.png"
+    }
+  ]
+}

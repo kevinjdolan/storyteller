@@ -11,10 +11,19 @@ import {
 } from '../../features/session/sessionWorkspaceContext.ts'
 import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspaceProvider.tsx'
 import { workflowStageDefinitions } from '../../features/session/workflowStages.ts'
+import {
+  Badge,
+  Panel,
+  ProgressBar,
+  StackedList,
+  StackedListItem,
+  type BadgeTone,
+} from '../../shared/ui/primitives.tsx'
+import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 
-type StatusChipCopy = {
-  className: string
+type StatusBadgeCopy = {
   label: string
+  tone: BadgeTone
 }
 
 type ChatPreviewEntry = {
@@ -37,31 +46,31 @@ function getStageLabel(stageId: string) {
   )
 }
 
-function getStatusChipCopy(status: string): StatusChipCopy {
+function getStatusBadgeCopy(status: string): StatusBadgeCopy {
   if (status === 'completed') {
     return {
       label: 'Complete',
-      className: 'status-chip status-chip--completed',
+      tone: 'success',
     }
   }
 
   if (status === 'needs_regeneration') {
     return {
       label: 'Needs refresh',
-      className: 'status-chip status-chip--needs-regeneration',
+      tone: 'accent',
     }
   }
 
   if (status === 'in_progress') {
     return {
       label: 'In progress',
-      className: 'status-chip status-chip--in-progress',
+      tone: 'brand',
     }
   }
 
   return {
     label: 'Queued',
-    className: 'status-chip status-chip--draft',
+    tone: 'warning',
   }
 }
 
@@ -83,6 +92,34 @@ function getRuntimeConnectionLabel(connectionState: string) {
   }
 
   return 'Live feed idle'
+}
+
+function getRuntimeConnectionTone(connectionState: string): BadgeTone {
+  if (connectionState === 'open') {
+    return 'success'
+  }
+
+  if (connectionState === 'error') {
+    return 'danger'
+  }
+
+  if (connectionState === 'closed') {
+    return 'warning'
+  }
+
+  return 'brand'
+}
+
+function getChatTone(entry: ChatPreviewEntry) {
+  if (entry.speaker === 'assistant') {
+    return 'success' as const
+  }
+
+  if (entry.speaker === 'user') {
+    return 'accent' as const
+  }
+
+  return 'brand' as const
 }
 
 function formatSavedAt(value: string) {
@@ -158,47 +195,47 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
 function buildChatPreview(snapshot: SessionSnapshot): ChatPreviewEntry[] {
   const entries: ChatPreviewEntry[] = [
     {
+      body: `Workspace ready. Resume at ${getStageLabel(snapshot.resume_stage)}.`,
       id: 'workspace-opened',
       speaker: 'system',
-      body: `Workspace ready. Resume at ${getStageLabel(snapshot.resume_stage)}.`,
     },
   ]
 
   if (snapshot.selected_genre) {
     entries.push({
+      body: `Selected genre: ${snapshot.selected_genre.label}`,
       id: 'selected-genre',
       speaker: 'user',
-      body: `Selected genre: ${snapshot.selected_genre.label}`,
     })
   }
 
   if (snapshot.selected_tone_profile) {
     entries.push({
+      body: `Selected tone: ${snapshot.selected_tone_profile.label}`,
       id: 'selected-tone',
       speaker: 'user',
-      body: `Selected tone: ${snapshot.selected_tone_profile.label}`,
     })
   }
 
   if (snapshot.selected_pitch) {
     entries.push({
+      body: `Accepted pitch: ${snapshot.selected_pitch.title}`,
       id: 'selected-pitch',
       speaker: 'assistant',
-      body: `Accepted pitch: ${snapshot.selected_pitch.title}`,
     })
   }
 
   if (snapshot.active_composition_job) {
     entries.push({
+      body: `Composition progress: ${Math.round(snapshot.active_composition_job.progress_percent)}%`,
       id: 'composition-job',
       speaker: 'assistant',
-      body: `Composition progress: ${Math.round(snapshot.active_composition_job.progress_percent)}%`,
     })
   } else {
     entries.push({
+      body: `${formatSavedAt(snapshot.updated_at)}.`,
       id: 'save-status',
       speaker: 'system',
-      body: `${formatSavedAt(snapshot.updated_at)}.`,
     })
   }
 
@@ -208,8 +245,8 @@ function buildChatPreview(snapshot: SessionSnapshot): ChatPreviewEntry[] {
 function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
   return (
     <section
-      className="workspace-page"
       aria-label={`Session workspace for ${sessionId}`}
+      className="workspace-page"
     >
       <header className="panel workspace-topbar" aria-busy="true">
         <div className="workspace-topbar__copy">
@@ -256,24 +293,31 @@ function WorkspaceErrorState({
 }) {
   return (
     <section
-      className="workspace-page"
       aria-label={`Session workspace for ${sessionId}`}
+      className="workspace-page"
     >
-      <article className="panel empty-state">
-        <p className="eyebrow">Session workspace</p>
-        <h1>Workspace unavailable</h1>
-        <p className="body-copy">{errorMessage}</p>
+      <Panel
+        as="article"
+        className="empty-state"
+        description={<p className="body-copy">{errorMessage}</p>}
+        eyebrow="Session workspace"
+        headingLevel={1}
+        title="Workspace unavailable"
+      >
         <button
-          className="ghost-link"
+          className={getButtonClassName({ size: 'compact', tone: 'ghost' })}
           type="button"
           onClick={() => void onRetry()}
         >
           Retry
         </button>
-        <Link className="ghost-link" to={routePaths.home}>
+        <Link
+          className={getButtonClassName({ size: 'compact', tone: 'ghost' })}
+          to={routePaths.home}
+        >
           Return home
         </Link>
-      </article>
+      </Panel>
     </section>
   )
 }
@@ -318,13 +362,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       (stage) => stage.stage === snapshot.current_stage,
     ) ??
     ({
-      stage: snapshot.current_stage,
-      label: getStageLabel(snapshot.current_stage),
       description: '',
+      label: getStageLabel(snapshot.current_stage),
+      stage: snapshot.current_stage,
       status: snapshot.overall_status,
     } as SessionStageStateView)
-  const currentStageStatus = getStatusChipCopy(currentStage.status)
-  const overallStatus = getStatusChipCopy(snapshot.overall_status)
+  const currentStageStatus = getStatusBadgeCopy(currentStage.status)
+  const overallStatus = getStatusBadgeCopy(snapshot.overall_status)
   const progress = buildProgressCopy(snapshot)
   const chatPreview = buildChatPreview(snapshot)
   const runtimeSummary = `${pendingActions.length} pending UI actions / ${eventStream.events.length} buffered live events`
@@ -334,8 +378,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
   return (
     <section
-      className="workspace-page"
       aria-label={`Session workspace for ${snapshot.display_title}`}
+      className="workspace-page"
     >
       <header className="panel workspace-topbar">
         <div className="workspace-topbar__copy">
@@ -352,9 +396,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           <div className="workspace-topbar__status-card">
             <dt>Current stage</dt>
             <dd>
-              <span className={currentStageStatus.className}>
-                {currentStage.label}
-              </span>
+              <Badge tone={currentStageStatus.tone}>{currentStage.label}</Badge>
             </dd>
           </div>
           <div className="workspace-topbar__status-card">
@@ -368,8 +410,11 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         </dl>
 
         <div className="workspace-topbar__actions">
-          <span className={overallStatus.className}>{overallStatus.label}</span>
-          <Link className="ghost-link" to={routePaths.home}>
+          <Badge tone={overallStatus.tone}>{overallStatus.label}</Badge>
+          <Link
+            className={getButtonClassName({ size: 'compact', tone: 'ghost' })}
+            to={routePaths.home}
+          >
             Return home
           </Link>
         </div>
@@ -385,25 +430,29 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 visible while the workflow advances.
               </p>
             </div>
-            <span className="status-chip">{runtimeConnectionLabel}</span>
+            <Badge tone={getRuntimeConnectionTone(eventStream.connectionState)}>
+              {runtimeConnectionLabel}
+            </Badge>
           </div>
 
-          <ol
-            className="workspace-chat-list"
+          <StackedList
             aria-label="Workspace chat preview"
+            as="ol"
+            className="workspace-chat-list"
           >
             {chatPreview.map((entry) => (
-              <li
+              <StackedListItem
                 key={entry.id}
                 className={`workspace-chat-message workspace-chat-message--${entry.speaker}`}
+                tone={getChatTone(entry)}
               >
                 <span className="workspace-chat-message__speaker">
                   {entry.speaker}
                 </span>
                 <p>{entry.body}</p>
-              </li>
+              </StackedListItem>
             ))}
-          </ol>
+          </StackedList>
 
           <div className="workspace-chat-footer">
             <strong>Composer dock</strong>
@@ -424,25 +473,24 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 later composition or audio progress views.
               </p>
             </div>
-            <span className={currentStageStatus.className}>
+            <Badge tone={currentStageStatus.tone}>
               {currentStageStatus.label}
-            </span>
+            </Badge>
           </div>
 
           <section
-            className="workspace-overview-grid"
             aria-label="Workspace overview"
+            className="workspace-overview-grid"
           >
             <article className="workspace-summary-card">
               <p className="workspace-summary-card__label">Progress</p>
-              <strong>{progress.label}</strong>
-              <div aria-hidden="true" className="session-card__progress-bar">
-                <span style={{ width: `${progress.percent}%` }} />
-              </div>
-              <p>
-                Resume at {getStageLabel(snapshot.resume_stage)} with{' '}
-                {progress.percent}% of the workflow currently complete.
-              </p>
+              <ProgressBar
+                aria-label={`${snapshot.display_title} workflow progress`}
+                hint={`Resume at ${getStageLabel(snapshot.resume_stage)} with ${progress.percent}% of the workflow currently complete.`}
+                label="Workflow progress"
+                value={progress.percent}
+                valueText={progress.label}
+              />
             </article>
 
             <article className="workspace-summary-card">
@@ -472,7 +520,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
             <ol className="workspace-stage-grid">
               {snapshot.stage_states.map((stage, index) => {
-                const stageStatus = getStatusChipCopy(stage.status)
+                const stageStatus = getStatusBadgeCopy(stage.status)
                 const isCurrentStage = stage.stage === snapshot.current_stage
 
                 return (
@@ -493,9 +541,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                     </div>
 
                     <div className="workspace-stage-card__meta">
-                      <span className={stageStatus.className}>
-                        {stageStatus.label}
-                      </span>
+                      <Badge tone={stageStatus.tone}>{stageStatus.label}</Badge>
                       <p>
                         {stage.detail ??
                           stage.last_event_summary ??

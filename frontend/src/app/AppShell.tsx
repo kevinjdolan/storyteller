@@ -15,6 +15,9 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#app-main-content">
+        Skip to main content
+      </a>
       <div
         className="app-shell__glow app-shell__glow--left"
         aria-hidden="true"
@@ -70,7 +73,7 @@ export function AppShell() {
           <ToastRegion toasts={shellState.toasts} />
         </section>
 
-        <main className="app-main">
+        <main className="app-main" id="app-main-content">
           <Outlet />
         </main>
       </div>

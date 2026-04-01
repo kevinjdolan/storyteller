@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { routePaths } from '../../app/routePaths.ts'
+import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 
 export function NotFoundPage() {
   const location = useLocation()
@@ -12,7 +13,7 @@ export function NotFoundPage() {
         <p className="body-copy">
           No screen is registered for <code>{location.pathname}</code> yet.
         </p>
-        <Link className="primary-link" to={routePaths.home}>
+        <Link className={getButtonClassName()} to={routePaths.home}>
           Return to sessions home
         </Link>
       </article>

@@ -10,6 +10,14 @@ import {
   useCreateSessionMutation,
   useRecentSessionsQuery,
 } from '../../features/session/sessionQueries.ts'
+import {
+  Badge,
+  Button,
+  Panel,
+  ProgressBar,
+  type BadgeTone,
+} from '../../shared/ui/primitives.tsx'
+import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 
 type SessionLoadState = 'loading' | 'ready' | 'error'
 
@@ -41,32 +49,32 @@ function getStageLabel(stageId: WorkflowStageId) {
 function getSessionStatusCopy(status: WorkflowStageState) {
   if (status === 'completed') {
     return {
-      label: 'Complete',
-      className: 'status-chip status-chip--completed',
       actionLabel: 'Review',
+      label: 'Complete',
+      tone: 'success' as BadgeTone,
     }
   }
 
   if (status === 'needs_regeneration') {
     return {
-      label: 'Needs refresh',
-      className: 'status-chip status-chip--needs-regeneration',
       actionLabel: 'Resume',
+      label: 'Needs refresh',
+      tone: 'accent' as BadgeTone,
     }
   }
 
   if (status === 'in_progress') {
     return {
-      label: 'In progress',
-      className: 'status-chip status-chip--in-progress',
       actionLabel: 'Resume',
+      label: 'In progress',
+      tone: 'brand' as BadgeTone,
     }
   }
 
   return {
-    label: 'Ready to begin',
-    className: 'status-chip status-chip--draft',
     actionLabel: 'Start',
+    label: 'Ready to begin',
+    tone: 'warning' as BadgeTone,
   }
 }
 
@@ -101,12 +109,13 @@ function splitSessionsByStatus(sessions: RecentSessionSummary[]) {
 
 function HomePageLoadingState() {
   return (
-    <article className="panel sessions-panel" aria-busy="true">
-      <div className="panel-heading">
-        <h2>Recent sessions</h2>
-        <p>Loading recent sessions from the durable backend.</p>
-      </div>
-
+    <Panel
+      aria-busy="true"
+      as="article"
+      className="sessions-panel"
+      description="Loading recent sessions from the durable backend."
+      title="Recent sessions"
+    >
       <ul className="session-card-list">
         {Array.from({ length: 3 }).map((_, index) => (
           <li key={index} className="session-card session-card--loading">
@@ -116,47 +125,40 @@ function HomePageLoadingState() {
           </li>
         ))}
       </ul>
-    </article>
+    </Panel>
   )
 }
 
 function HomePageErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <article className="panel sessions-panel">
-      <div className="panel-heading">
-        <h2>Recent sessions</h2>
-        <p>
-          The home screen could not load prior sessions from the backend. Retry
-          once the API is reachable again.
-        </p>
-      </div>
-
+    <Panel
+      as="article"
+      className="sessions-panel"
+      description="The home screen could not load prior sessions from the backend. Retry once the API is reachable again."
+      title="Recent sessions"
+    >
       <div className="empty-state">
         <p className="empty-state__title">Could not load past sessions.</p>
         <p className="body-copy">
           The list request failed before the home screen could show in-progress
           and completed stories.
         </p>
-        <button
-          className="ghost-link"
-          type="button"
-          onClick={() => void onRetry()}
-        >
+        <Button size="compact" tone="ghost" onClick={() => void onRetry()}>
           Retry
-        </button>
+        </Button>
       </div>
-    </article>
+    </Panel>
   )
 }
 
 function EmptySessionsState() {
   return (
-    <article className="panel sessions-panel">
-      <div className="panel-heading">
-        <h2>Recent sessions</h2>
-        <p>Your story history will appear here as soon as you create one.</p>
-      </div>
-
+    <Panel
+      as="article"
+      className="sessions-panel"
+      description="Your story history will appear here as soon as you create one."
+      title="Recent sessions"
+    >
       <div className="empty-state">
         <p className="empty-state__title">No sessions yet.</p>
         <p className="body-copy">
@@ -164,7 +166,7 @@ function EmptySessionsState() {
           session.
         </p>
       </div>
-    </article>
+    </Panel>
   )
 }
 
@@ -184,9 +186,7 @@ function SessionGroup({
           <h3>{title}</h3>
           <p>{description}</p>
         </div>
-        <span className="status-chip status-chip--count">
-          {sessions.length}
-        </span>
+        <Badge tone="brand">{sessions.length}</Badge>
       </div>
 
       <ul className="session-card-list">
@@ -200,9 +200,7 @@ function SessionGroup({
                 <div>
                   <div className="session-card__title-row">
                     <h4>{session.display_title}</h4>
-                    <span className={statusCopy.className}>
-                      {statusCopy.label}
-                    </span>
+                    <Badge tone={statusCopy.tone}>{statusCopy.label}</Badge>
                   </div>
                   <p className="session-card__timestamp">
                     Updated {formatUpdatedAt(session.updated_at)}
@@ -210,7 +208,10 @@ function SessionGroup({
                 </div>
 
                 <Link
-                  className="ghost-link"
+                  className={getButtonClassName({
+                    size: 'compact',
+                    tone: 'ghost',
+                  })}
                   aria-label={`${statusCopy.actionLabel} ${session.display_title}`}
                   to={buildSessionWorkspacePath(session.id)}
                 >
@@ -235,12 +236,13 @@ function SessionGroup({
                 </div>
               </dl>
 
-              <div className="session-card__progress">
-                <div aria-hidden="true" className="session-card__progress-bar">
-                  <span style={{ width: `${progress.percent}%` }} />
-                </div>
-                <p>{progress.label}</p>
-              </div>
+              <ProgressBar
+                aria-label={`${session.display_title} workflow progress`}
+                className="session-card__progress"
+                label="Workflow progress"
+                value={progress.percent}
+                valueText={progress.label}
+              />
             </li>
           )
         })}
@@ -281,20 +283,32 @@ export function HomePage() {
   const totalSessions = sessions.length
 
   return (
-    <section className="sessions-home" aria-label="Past sessions home screen">
-      <article className="panel panel-hero sessions-home__hero">
-        <p className="eyebrow">Past sessions</p>
-        <h1>Pick up where bedtime left off.</h1>
-        <p className="lede">
-          Review in-progress stories, finished reads, and the next session that
-          needs your attention before opening the workspace.
-        </p>
-        <p className="body-copy">
-          The home screen is now the first meaningful route. Sessions come from
-          the backend so you can tell what is underway, what is complete, and
-          what should resume next.
-        </p>
-
+    <section
+      aria-label="Past sessions home screen"
+      className="sessions-home"
+      data-testid="sessions-home-route"
+    >
+      <Panel
+        as="article"
+        className="sessions-home__hero"
+        description={
+          <>
+            <p className="lede">
+              Review in-progress stories, finished reads, and the next session
+              that needs your attention before opening the workspace.
+            </p>
+            <p className="body-copy">
+              The home screen is now the first meaningful route. Sessions come
+              from the backend so you can tell what is underway, what is
+              complete, and what should resume next.
+            </p>
+          </>
+        }
+        eyebrow="Past sessions"
+        headingLevel={1}
+        title="Pick up where bedtime left off."
+        tone="hero"
+      >
         <div className="session-summary-grid" aria-label="Session summary">
           <div className="session-summary-card">
             <strong>{loadState === 'ready' ? totalSessions : '...'}</strong>
@@ -311,22 +325,24 @@ export function HomePage() {
         </div>
 
         <div className="cta-row">
-          <button
-            className="primary-link"
+          <Button
             disabled={isCreatingSession}
-            type="button"
             onClick={() => void handleCreateSession()}
           >
             {isCreatingSession ? 'Starting...' : 'Start a new session'}
-          </button>
+          </Button>
           <p className="cta-note">
             New sessions open directly into the workspace shell so the user can
             move from this list into the guided story flow without a blank
             editor step.
           </p>
         </div>
-        {createError ? <p className="form-feedback">{createError}</p> : null}
-      </article>
+        {createError ? (
+          <p className="form-feedback" role="alert">
+            {createError}
+          </p>
+        ) : null}
+      </Panel>
 
       {loadState === 'loading' ? <HomePageLoadingState /> : null}
       {loadState === 'error' ? (
@@ -336,16 +352,12 @@ export function HomePage() {
         <EmptySessionsState />
       ) : null}
       {loadState === 'ready' && totalSessions > 0 ? (
-        <article className="panel sessions-panel">
-          <div className="panel-heading">
-            <h2>Recent sessions</h2>
-            <p>
-              In-progress and completed stories are grouped separately so it is
-              clear whether you should resume work or revisit a finished bedtime
-              story.
-            </p>
-          </div>
-
+        <Panel
+          as="article"
+          className="sessions-panel"
+          description="In-progress and completed stories are grouped separately so it is clear whether you should resume work or revisit a finished bedtime story."
+          title="Recent sessions"
+        >
           {active.length > 0 ? (
             <SessionGroup
               description="Drafts, active workflows, and sessions that need a refreshed output."
@@ -361,7 +373,7 @@ export function HomePage() {
               title="Finished stories"
             />
           ) : null}
-        </article>
+        </Panel>
       ) : null}
     </section>
   )
