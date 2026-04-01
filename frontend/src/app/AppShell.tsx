@@ -1,6 +1,20 @@
-import { Outlet } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, NavLink, Outlet, matchPath, useLocation } from 'react-router-dom'
+import { useBackendStatus } from '../hooks/useBackendStatus.ts'
+import { ConnectionStatusBadge } from '../shared/ui/ConnectionStatusBadge.tsx'
+import { ToastRegion } from '../shared/ui/ToastRegion.tsx'
+import { createInitialAppShellState } from '../state/appShellStore.ts'
+import { buildSessionWorkspacePath, routePaths } from './routePaths.ts'
+
+const sampleWorkspacePath = buildSessionWorkspacePath('sample-session')
 
 export function AppShell() {
+  const location = useLocation()
+  const backendStatus = useBackendStatus()
+  const [shellState] = useState(createInitialAppShellState)
+  const workspaceNavIsActive =
+    matchPath(routePaths.sessionWorkspace, location.pathname) !== null
+
   return (
     <div className="app-shell">
       <div
@@ -12,18 +26,56 @@ export function AppShell() {
         aria-hidden="true"
       />
 
-      <header className="app-header">
-        <div>
-          <p className="app-kicker">Bedtime story studio</p>
-          <span className="app-brand">Storyteller</span>
-        </div>
+      <div className="app-frame">
+        <header className="app-header">
+          <div className="app-header__brand-block">
+            <p className="app-kicker">Bedtime story studio</p>
+            <Link className="app-brand-link" to={routePaths.home}>
+              <span className="app-brand">Storyteller</span>
+            </Link>
+          </div>
 
-        <p className="app-caption">React + Vite + TypeScript foundation</p>
-      </header>
+          <nav className="app-nav" aria-label="Primary">
+            <NavLink
+              className={({ isActive }) =>
+                isActive
+                  ? 'app-nav__link app-nav__link--active'
+                  : 'app-nav__link'
+              }
+              end
+              to={routePaths.home}
+            >
+              Sessions
+            </NavLink>
+            <Link
+              className={
+                workspaceNavIsActive
+                  ? 'app-nav__link app-nav__link--active'
+                  : 'app-nav__link'
+              }
+              to={sampleWorkspacePath}
+            >
+              Workspace shell
+            </Link>
+          </nav>
 
-      <main className="app-main">
-        <Outlet />
-      </main>
+          <p className="app-caption">
+            Routing, shared chrome, and status surfaces for the staged workflow.
+          </p>
+        </header>
+
+        <section
+          className="app-utility-bar"
+          aria-label="Application utility rail"
+        >
+          <ConnectionStatusBadge status={backendStatus} />
+          <ToastRegion toasts={shellState.toasts} />
+        </section>
+
+        <main className="app-main">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

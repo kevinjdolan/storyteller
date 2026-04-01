@@ -1,0 +1,29 @@
+{
+  "url": "http://localhost:8566/sessions/moonlit-harbor",
+  "outputPath": "../../.artifacts/webapp-qa/prompt-20-session-route.png",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='workspace-route']"
+    },
+    {
+      "action": "assertText",
+      "text": "Session moonlit-harbor"
+    },
+    {
+      "action": "assertText",
+      "text": "/sessions/moonlit-harbor"
+    },
+    {
+      "action": "assertText",
+      "text": "Chat lane"
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}

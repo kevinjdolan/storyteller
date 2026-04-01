@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { resolveApiUrl } from '../../shared/api.ts'
+import { fetchBackendHello } from '../api/system.ts'
 
-type BackendState = 'loading' | 'online' | 'offline'
+export type BackendState = 'loading' | 'online' | 'offline'
 
-type BackendStatus = {
+export type BackendStatus = {
   state: BackendState
   label: string
   detail: string
@@ -14,7 +14,7 @@ const loadingStatus: BackendStatus = {
   state: 'loading',
   label: 'Checking',
   detail: 'Checking whether the local FastAPI backend is reachable.',
-  message: 'Checking /api/hello…',
+  message: 'Checking /api/hello...',
 }
 
 export function useBackendStatus() {
@@ -25,13 +25,7 @@ export function useBackendStatus() {
 
     async function loadBackendStatus() {
       try {
-        const response = await fetch(resolveApiUrl('/api/hello'))
-
-        if (!response.ok) {
-          throw new Error(`Unexpected status code: ${response.status}`)
-        }
-
-        const payload = (await response.json()) as { message?: string }
+        const payload = await fetchBackendHello()
 
         if (!isCurrent) {
           return
@@ -41,7 +35,7 @@ export function useBackendStatus() {
           state: 'online',
           label: 'Online',
           detail:
-            'The frontend is talking to the backend through the Vite dev proxy.',
+            'The app shell is connected to FastAPI through the Vite development proxy.',
           message: payload.message ?? 'Backend responded without a greeting.',
         })
       } catch (error) {
@@ -53,7 +47,7 @@ export function useBackendStatus() {
           state: 'offline',
           label: 'Offline',
           detail:
-            'The app still renders without FastAPI, so npm run dev works in isolation.',
+            'The shell still renders without FastAPI so frontend work can continue in isolation.',
           message: 'Running in frontend-only mode.',
         })
 
