@@ -1,4 +1,5 @@
 import { useBackendStatus } from '../system/useBackendStatus.ts'
+import { workflowStageDefinitions } from '../session/workflowStages.ts'
 
 const sessionPreview = [
   {
@@ -16,19 +17,6 @@ const sessionPreview = [
     status: 'In progress',
     note: 'Skyport bedtime tale with gentle teamwork stakes',
   },
-] as const
-
-const workflowStages = [
-  'Genre',
-  'Tone',
-  'Story brief',
-  'Pitches',
-  'Characters',
-  'Beat sheet',
-  'Preferences',
-  'Composition',
-  'Audio',
-  'Finalize',
 ] as const
 
 const qualitySignals = [
@@ -98,10 +86,10 @@ export function HomeRoute() {
         </div>
 
         <ol className="stage-list">
-          {workflowStages.map((stage, index) => (
-            <li key={stage}>
+          {workflowStageDefinitions.map((stage, index) => (
+            <li key={stage.id}>
               <span>{index + 1}</span>
-              <strong>{stage}</strong>
+              <strong>{stage.label}</strong>
             </li>
           ))}
         </ol>

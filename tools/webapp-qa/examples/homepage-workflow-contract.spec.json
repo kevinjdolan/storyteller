@@ -1,0 +1,33 @@
+{
+  "url": "http://frontend:8566",
+  "outputPath": "/workspace/.artifacts/webapp-qa/homepage-workflow-contract.png",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='app-card']"
+    },
+    {
+      "action": "assertText",
+      "text": "Story studio path"
+    },
+    {
+      "action": "assertText",
+      "text": "Story setup"
+    },
+    {
+      "action": "assertText",
+      "text": "Running in frontend-only mode."
+    },
+    {
+      "action": "assertText",
+      "text": "Offline"
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}
