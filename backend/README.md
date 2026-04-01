@@ -1,17 +1,19 @@
 # Backend
 
-This directory is the home for the FastAPI application, backend-owned workflow logic, and future durable job processing.
+This directory is the home for the FastAPI application, backend-owned workflow logic, durable
+relational models, and future background job processing.
 
 ## Current layout
 
 - `app/`: live application code
   - `api/`: unversioned and versioned route modules
-  - `db/`: database integration points and health placeholders
+  - `db/`: SQLAlchemy metadata, ORM models, engine/session helpers, and health placeholders
   - `models/`: API response models and future domain models
   - `services/`: backend-owned business logic
   - `settings/`: environment-backed application settings
   - `worker/`: future background job runners
-- `migrations/`: reserved for database migrations
+- `alembic.ini`: migration configuration entrypoint
+- `migrations/`: Alembic schema history and migration environment
 - `tests/`: backend test suite
 - `requirements.txt`: Python dependencies
 - `Dockerfile`: backend container image
@@ -51,7 +53,36 @@ pytest
 python -m ruff check app tests
 python -m ruff format app tests
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
+alembic upgrade head
+alembic downgrade base
 ```
+
+## Database migrations
+
+The first PostgreSQL schema now lives in SQLAlchemy models under
+[`backend/app/db`](/Users/kevin/code/storyteller/backend/app/db) and the matching Alembic history
+under [`backend/migrations`](/Users/kevin/code/storyteller/backend/migrations).
+
+Run migrations against the local Compose Postgres instance:
+
+```bash
+cd backend
+STORYTELLER_SECRETS_FILE="" \
+STORYTELLER_DATABASE_URL="postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller" \
+alembic upgrade head
+```
+
+Create a new revision after the models change:
+
+```bash
+cd backend
+STORYTELLER_SECRETS_FILE="" \
+STORYTELLER_DATABASE_URL="postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller" \
+alembic revision --autogenerate -m "describe change"
+```
+
+The migration environment prefers an explicit `sqlalchemy.url` or `STORYTELLER_DATABASE_URL`. If
+neither is supplied, it falls back to the application settings loader.
 
 ## Health routes
 

@@ -552,7 +552,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["superseded_by_segment_id"],
             ["composition_segments.id"],
-            name="fk_composition_segments_superseded_by_segment_id_composition_segments",
+            name="fk_comp_segments_superseded_by",
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_composition_segments"),

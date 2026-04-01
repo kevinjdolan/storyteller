@@ -37,6 +37,11 @@ The session snapshot returned to the UI should eventually include these fields, 
 
 `resume_stage` is the key anti-guessing field. The backend computes it from durable stage states so the frontend does not need to infer where to reopen a session by looking at which panels happen to have data.
 
+Prompt 11 keeps the relational core intentionally one-directional where practical: child records
+such as pitches, character sheets, beat sheets, and setup revisions point back to the owning
+session, and the accepted row is tracked on the child record itself. The API snapshot can still
+surface selected child IDs without forcing the first migration into a web of circular foreign keys.
+
 ## Major Entities
 
 | Entity | Durable role | Key fields | Notes |

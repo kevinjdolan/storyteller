@@ -522,7 +522,11 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     superseded_by_segment_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("composition_segments.id", ondelete="SET NULL"),
+        ForeignKey(
+            "composition_segments.id",
+            ondelete="SET NULL",
+            name="fk_comp_segments_superseded_by",
+        ),
     )
     segment_index: Mapped[int] = mapped_column(Integer, nullable=False)
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

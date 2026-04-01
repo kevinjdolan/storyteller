@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -20,6 +21,11 @@ def _resolve_database_url() -> str:
 
     if configured_url and configured_url != "sqlite:///./storyteller.db":
         return configured_url
+
+    environment_url = os.environ.get("STORYTELLER_DATABASE_URL", "").strip()
+
+    if environment_url:
+        return environment_url
 
     return get_settings().database_url
 
