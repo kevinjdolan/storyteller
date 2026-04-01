@@ -5,11 +5,11 @@
 Use the repository wrapper script from the repo root:
 
 ```bash
-cp secrets.example.yaml secrets.yaml
-./scripts/dev-compose.sh up --build
+make bootstrap
+make up
 ```
 
-That wrapper keeps the Compose file under `infra/` while preserving a simple developer entrypoint.
+The `Makefile` keeps the day-to-day command surface small, while `./scripts/dev-compose.sh` remains the lower-level wrapper that always targets the canonical compose file under `infra/`.
 
 Current local services:
 
@@ -20,3 +20,9 @@ Current local services:
 - `browser` as the containerized QA runner
 
 The backend container reads the repo-root `secrets.yaml` through `STORYTELLER_SECRETS_FILE=/workspace/secrets.yaml`, so the local Gemini API key stays server-side even during Compose development.
+
+Useful follow-up commands:
+
+- `make logs` to follow service logs
+- `make down` to stop containers without removing durable app data
+- `make reset` to stop the stack and remove only the Postgres and fake GCS data volumes
