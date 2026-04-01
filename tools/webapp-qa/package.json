@@ -1,0 +1,13 @@
+{
+  "name": "storyteller-webapp-qa",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "check": "node ./scripts/run-spec.mjs",
+    "check:example": "node ./scripts/run-spec.mjs --spec ./examples/homepage.spec.json"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  }
+}

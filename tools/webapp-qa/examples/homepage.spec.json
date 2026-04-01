@@ -1,0 +1,25 @@
+{
+  "url": "http://frontend:8566",
+  "outputPath": "/workspace/.artifacts/webapp-qa/homepage.png",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='app-card']"
+    },
+    {
+      "action": "assertText",
+      "text": "Hello, world!"
+    },
+    {
+      "action": "assertText",
+      "text": "Hello from FastAPI!"
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}
