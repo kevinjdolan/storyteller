@@ -94,7 +94,7 @@ The current scaffold does not yet include PostgreSQL or the file-backed GCS emul
     └── webapp-qa/
 ```
 
-- `frontend/`: browser client and future TypeScript UI modules
+- `frontend/`: browser client and TypeScript UI foundation
 - `backend/`: API code, worker home, and migration home
 - `infra/`: Compose definitions and infrastructure notes
 - `docs/`: product notes, architecture notes, and future ADRs
