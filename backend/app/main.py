@@ -1,18 +1,67 @@
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-
-app = FastAPI(title="Storyteller API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from app.api.router import router as api_router
+from app.api.v1.router import router as api_v1_router
+from app.settings import AppSettings, get_settings
 
 
-@app.get("/api/hello")
-async def hello() -> dict[str, str]:
-    return {"message": "Hello from FastAPI!"}
+logger = logging.getLogger(__name__)
+
+
+def configure_logging(settings: AppSettings) -> None:
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level, logging.INFO),
+        format="%(levelname)s %(name)s %(message)s",
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    configure_logging(settings)
+    app.state.settings = settings
+
+    logger.info(
+        "Starting %s in %s mode on %s:%s",
+        settings.app_name,
+        settings.environment,
+        settings.host,
+        settings.port,
+    )
+
+    yield
+
+    logger.info("Stopping %s", settings.app_name)
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.version,
+        lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_allowed_origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(api_router)
+    app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+
+    return app
+
+
+app = create_app()

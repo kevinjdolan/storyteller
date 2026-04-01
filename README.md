@@ -75,8 +75,14 @@ The current scaffold does not yet include PostgreSQL or the file-backed GCS emul
 .
 ├── backend/
 │   ├── app/
+│   │   ├── api/
+│   │   ├── db/
+│   │   ├── models/
+│   │   ├── services/
+│   │   ├── settings/
 │   │   ├── main.py
 │   │   └── worker/
+│   ├── tests/
 │   ├── migrations/
 │   ├── Dockerfile
 │   ├── README.md
@@ -95,7 +101,7 @@ The current scaffold does not yet include PostgreSQL or the file-backed GCS emul
 ```
 
 - `frontend/`: browser client and TypeScript UI foundation
-- `backend/`: API code, worker home, and migration home
+- `backend/`: FastAPI API code, settings, services, tests, worker home, and migration home
 - `infra/`: Compose definitions and infrastructure notes
 - `docs/`: product notes, architecture notes, and future ADRs
 - `scripts/`: developer entrypoints such as `dev-compose.sh`
