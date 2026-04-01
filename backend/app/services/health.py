@@ -3,6 +3,7 @@ from typing import Optional
 from app.db.status import get_database_dependency_status
 from app.models import HealthResponse, HelloResponse
 from app.settings import AppSettings
+from app.storage import get_object_storage_dependency_status
 
 
 def build_health_response(
@@ -17,6 +18,7 @@ def build_health_response(
         api_version=api_version,
         dependencies={
             "database": get_database_dependency_status(settings),
+            "object_storage": get_object_storage_dependency_status(settings),
         },
     )
 
