@@ -136,6 +136,10 @@ class SessionAssetView(BaseModel):
     updated_at: datetime
 
 
+class CreateSessionRequest(BaseModel):
+    working_title: str | None = None
+
+
 class RecentSessionSummary(BaseModel):
     id: str
     display_title: str
