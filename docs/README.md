@@ -7,6 +7,8 @@ Current entrypoints:
 - `product-brief.md`: product expectations and workflow
 - `architecture-overview.md`: target system shape and durable boundaries
 - `domain-model.md`: durable session entities, workflow-stage contract, and stage-state rules
+- `chat-to-ui-actions.md`: proposed action contract, action catalog, and default confirmation policy
+- `chat-to-ui-actions.schema.json`: machine-readable schema bundle for chat-to-UI proposed actions
 - `event-taxonomy.md`: append-only event families, payload versioning rules, and helper usage
 - `realtime-events.md`: session-channel contract, live event families, replay rules, and local auth assumptions
 - `realtime-events.schema.json`: machine-readable schema bundle for subscription frames and session events
