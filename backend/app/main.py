@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router as api_router
 from app.api.v1.router import router as api_v1_router
 from app.settings import AppSettings, SettingsValidationError, get_settings
+from app.storage import build_object_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,10 @@ def configure_logging(settings: AppSettings) -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings)
+    object_storage = build_object_storage_service(settings)
     app.state.settings = settings
+    app.state.object_storage = object_storage
+    app.state.storage_paths = object_storage.paths
 
     logger.info(
         "Starting %s in %s mode on %s:%s",
@@ -35,9 +39,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.port,
     )
 
-    yield
-
-    logger.info("Stopping %s", settings.app_name)
+    try:
+        yield
+    finally:
+        object_storage.close()
+        logger.info("Stopping %s", settings.app_name)
 
 
 def create_app() -> FastAPI:

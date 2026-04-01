@@ -110,6 +110,7 @@ The most common daily commands are:
 - `make test`: run backend pytest and frontend Vitest
 - `make build`: run the frontend production build
 - `make check`: run formatting checks, lint, tests, and the frontend build in one pass
+- `make backend-storage-smoke`: round-trip a sample object through the local storage emulator
 
 Suggested daily loop:
 
@@ -121,7 +122,7 @@ Suggested daily loop:
 6. `make check` before handing work off or committing
 7. `make down` when you are done
 
-For frontend-only work, `make frontend-format`, `make frontend-format-check`, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-format`, `make backend-format-check`, `make backend-lint`, and `make backend-test`.
+For frontend-only work, `make frontend-format`, `make frontend-format-check`, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-format`, `make backend-format-check`, `make backend-lint`, `make backend-test`, and `make backend-storage-smoke`.
 
 ## Docker Compose Local Stack
 
@@ -149,6 +150,9 @@ The backend receives the local infrastructure coordinates through environment va
 - `STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568`
 
 The backend settings layer merges defaults, `secrets.yaml`, and environment variables in that order. More detail is in [docs/secrets-and-local-config.md](/Users/kevin/code/storyteller/docs/secrets-and-local-config.md).
+
+Bucket roles and stable object-key conventions for drafts, audio, exports, and debug artifacts live
+in [docs/storage-buckets-and-prefixes.md](/Users/kevin/code/storyteller/docs/storage-buckets-and-prefixes.md).
 
 The root `Makefile` and the scripts under `scripts/` are written for `bash` and are intended for macOS, Linux, or WSL-based development environments. They expect `make`, Docker, `npm`, and Python 3.10 or newer to be available locally.
 

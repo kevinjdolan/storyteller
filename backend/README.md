@@ -11,6 +11,7 @@ relational models, and future background job processing.
   - `models/`: API response models and future domain models
   - `services/`: backend-owned business logic
   - `settings/`: environment-backed application settings
+  - `storage/`: object storage abstraction, bucket/path strategy, and emulator smoke test
   - `worker/`: future background job runners
 - `alembic.ini`: migration configuration entrypoint
 - `migrations/`: Alembic schema history and migration environment
@@ -56,6 +57,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
 alembic upgrade head
 alembic downgrade base
 python -m app.seed_catalog
+python -m app.storage.smoke_test
 ```
 
 ## Database migrations
@@ -108,6 +110,31 @@ python -m app.seed_catalog
 Use `--dry-run` to validate the YAML file and report the expected write counts without committing.
 Catalog provenance and editing guidance live in
 [docs/genre-tone-catalog.md](/Users/kevin/code/storyteller/docs/genre-tone-catalog.md).
+
+## Object storage
+
+The storage abstraction now lives in
+[`backend/app/storage`](/Users/kevin/code/storyteller/backend/app/storage). It hides the current
+GCS JSON API calls behind a small service so later prompts can keep business logic focused on
+session artifacts rather than bucket bootstrapping or emulator-specific HTTP details.
+
+Core entrypoints:
+
+- `build_object_storage_service(settings)`: build the runtime storage client from backend settings
+- `object_storage.paths`: predictable bucket/key builders for draft, audio, export, and debug paths
+- `python -m app.storage.smoke_test`: write and read a sample object through the configured backend
+
+The bucket and prefix conventions are documented in
+[docs/storage-buckets-and-prefixes.md](/Users/kevin/code/storyteller/docs/storage-buckets-and-prefixes.md).
+
+To verify the local fake GCS server from the repository root:
+
+```bash
+make backend-storage-smoke
+```
+
+That target defaults to `http://127.0.0.1:8568` so it can talk to the local emulator from the host
+shell even when the main Compose backend container uses `http://gcs:4443` internally.
 
 ## Health routes
 

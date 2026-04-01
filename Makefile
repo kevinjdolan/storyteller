@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-seed-catalog
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-seed-catalog backend-storage-smoke
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -56,6 +56,19 @@ backend-test: ## Run the backend pytest suite
 
 backend-seed-catalog: ## Seed the backend-owned genre and tone catalog
 	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.seed_catalog; elif command -v python3 >/dev/null 2>&1; then python3 -m app.seed_catalog; else python -m app.seed_catalog; fi
+
+backend-storage-smoke: ## Round-trip a sample object through the configured storage backend
+	@cd backend && \
+	STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}" \
+	STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql://storyteller:storyteller@127.0.0.1:8567/storyteller}" \
+	STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}" \
+	STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}" \
+	STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}" \
+	STORYTELLER_GCS_PUBLIC_URL="$${STORYTELLER_GCS_PUBLIC_URL:-http://127.0.0.1:8568}" \
+	STORYTELLER_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}" \
+	STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}" \
+	STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}" \
+	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.storage.smoke_test; elif command -v python3 >/dev/null 2>&1; then python3 -m app.storage.smoke_test; else python -m app.storage.smoke_test; fi
 
 format: ## Format frontend and backend source files
 	@$(MAKE) frontend-format
