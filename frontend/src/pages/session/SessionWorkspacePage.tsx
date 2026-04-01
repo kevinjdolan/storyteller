@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   type SessionSnapshot,
-  type SessionStageStateView,
 } from '../../api/sessions.ts'
-import { routePaths } from '../../app/routePaths.ts'
+import {
+  buildSessionWorkspacePath,
+  routePaths,
+} from '../../app/routePaths.ts'
 import {
   useSessionChatMessages,
   useCurrentSessionSnapshotQuery,
@@ -19,7 +21,11 @@ import {
   buildMockAssistantChatReply,
   createSessionChatMessage,
 } from '../../features/session/chat/sessionChat.ts'
-import { workflowStageDefinitions } from '../../features/session/workflowStages.ts'
+import {
+  buildSessionWorkspaceStageViews,
+  type SessionWorkspaceStageView,
+} from '../../features/session/sessionStageScaffold.ts'
+import { getWorkflowStageLabel } from '../../features/session/workflowStages.ts'
 import {
   Badge,
   Panel,
@@ -33,19 +39,16 @@ type StatusBadgeCopy = {
   tone: BadgeTone
 }
 
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
   hour: 'numeric',
   minute: '2-digit',
 })
-
-function getStageLabel(stageId: string) {
-  return (
-    workflowStageDefinitions.find((stage) => stage.id === stageId)?.label ??
-    stageId
-  )
-}
 
 function getStatusBadgeCopy(status: string): StatusBadgeCopy {
   if (status === 'completed') {
@@ -123,6 +126,29 @@ function buildProgressCopy(snapshot: SessionSnapshot) {
   return {
     label: `${completedStages} of ${totalStages} stages complete`,
     percent,
+  }
+}
+
+function getStageAvailabilityCopy(
+  availability: SessionWorkspaceStageView['availability'],
+): StatusBadgeCopy {
+  if (availability === 'revisitable') {
+    return {
+      label: 'Revisitable',
+      tone: 'success',
+    }
+  }
+
+  if (availability === 'unlocked') {
+    return {
+      label: 'Unlocked',
+      tone: 'brand',
+    }
+  }
+
+  return {
+    label: 'Locked',
+    tone: 'neutral',
   }
 }
 
@@ -221,6 +247,37 @@ function buildChatActivityState(
   }
 }
 
+function buildStageDetailSummary(stage: SessionWorkspaceStageView) {
+  if (stage.detail) {
+    return stage.detail
+  }
+
+  if (stage.last_event_summary) {
+    return stage.last_event_summary
+  }
+
+  if (stage.isCurrent) {
+    return 'This is the active durable checkpoint for the next structured edit.'
+  }
+
+  if (stage.availability === 'locked') {
+    return 'This panel is intentionally preview-only until the session reaches this later step.'
+  }
+
+  return 'No durable detail is saved here yet, but the scaffold is ready for future controls.'
+}
+
+function buildStageRoutingCopy(
+  currentStage: SessionWorkspaceStageView,
+  selectedStage: SessionWorkspaceStageView,
+) {
+  if (selectedStage.isCurrent) {
+    return 'The route and the durable session stage are aligned. Live editors and job views can mount here later without changing the URL pattern.'
+  }
+
+  return `The route is previewing ${selectedStage.label.toLowerCase()} via the stage query parameter while the durable session state remains at ${currentStage.label.toLowerCase()}.`
+}
+
 function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
   return (
     <section
@@ -310,6 +367,7 @@ function buildWorkspaceErrorMessage(error: Error, sessionId: string) {
 }
 
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
+  const [searchParams] = useSearchParams()
   const snapshotQuery = useCurrentSessionSnapshotQuery()
   const chatMessages = useSessionChatMessages()
   const pendingActions = useSessionPendingActions()
@@ -357,17 +415,12 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     )
   }
 
-  const currentStage =
-    snapshot.stage_states.find(
-      (stage) => stage.stage === snapshot.current_stage,
-    ) ??
-    ({
-      description: '',
-      label: getStageLabel(snapshot.current_stage),
-      stage: snapshot.current_stage,
-      status: snapshot.overall_status,
-    } as SessionStageStateView)
-  const currentStageStatus = getStatusBadgeCopy(currentStage.status)
+  const stageScaffold =
+    buildSessionWorkspaceStageViews(snapshot, searchParams.get('stage'))
+  const selectedStage = stageScaffold.selectedStage
+  const activeStage = stageScaffold.currentStage
+  const stageViews = stageScaffold.stageViews
+  const currentStageStatus = getStatusBadgeCopy(activeStage.status)
   const overallStatus = getStatusBadgeCopy(snapshot.overall_status)
   const progress = buildProgressCopy(snapshot)
   const runtimeConnectionLabel = getRuntimeConnectionLabel(
@@ -376,6 +429,14 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const chatActivityState = buildChatActivityState(
     snapshot,
     pendingActions.length,
+  )
+  const selectedStageStatus = getStatusBadgeCopy(selectedStage.status)
+  const selectedStageAvailability = getStageAvailabilityCopy(
+    selectedStage.availability,
+  )
+  const stageRoutingCopy = buildStageRoutingCopy(activeStage, selectedStage)
+  const selectedStageInvalidations = selectedStage.invalidatesOnEdit.map(
+    getWorkflowStageLabel,
   )
 
   return (
@@ -398,7 +459,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           <div className="workspace-topbar__status-card">
             <dt>Current stage</dt>
             <dd>
-              <Badge tone={currentStageStatus.tone}>{currentStage.label}</Badge>
+              <Badge tone={currentStageStatus.tone}>{activeStage.label}</Badge>
             </dd>
           </div>
           <div className="workspace-topbar__status-card">
@@ -474,6 +535,155 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           </div>
 
           <section
+            aria-label="Workflow scaffold"
+            className="workspace-stage-shell"
+          >
+            <nav
+              aria-label="Stage navigator"
+              className="workspace-stage-navigator"
+            >
+              <div className="panel-heading">
+                <div>
+                  <h2>Stage navigator</h2>
+                  <p>
+                    Every required workflow step is visible now, with URL-backed
+                    panel selection that can coexist with backend-owned stage
+                    truth.
+                  </p>
+                </div>
+              </div>
+
+              <ol className="workspace-stage-nav__list">
+                {stageViews.map((stage) => {
+                  const stageStatus = getStatusBadgeCopy(stage.status)
+                  const availabilityCopy = getStageAvailabilityCopy(
+                    stage.availability,
+                  )
+
+                  return (
+                    <li key={stage.stage}>
+                      <Link
+                        aria-current={stage.isSelected ? 'step' : undefined}
+                        className={cx(
+                          'workspace-stage-nav__link',
+                          stage.isSelected &&
+                            'workspace-stage-nav__link--selected',
+                          stage.isCurrent &&
+                            'workspace-stage-nav__link--current',
+                          stage.availability === 'locked' &&
+                            'workspace-stage-nav__link--locked',
+                        )}
+                        to={buildSessionWorkspacePath(snapshot.id, {
+                          stage: stage.stage,
+                        })}
+                      >
+                        <div className="workspace-stage-nav__header">
+                          <span className="workspace-stage-nav__index">
+                            {(stage.index + 1).toString().padStart(2, '0')}
+                          </span>
+                          <div className="workspace-stage-nav__copy">
+                            <strong>{stage.label}</strong>
+                            <p>{stage.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="workspace-stage-nav__meta">
+                          <Badge tone={stageStatus.tone}>
+                            {stageStatus.label}
+                          </Badge>
+                          <Badge tone={availabilityCopy.tone}>
+                            {availabilityCopy.label}
+                          </Badge>
+                        </div>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
+
+            <article className="workspace-stage-detail">
+              <div className="workspace-stage-detail__hero">
+                <div>
+                  <p className="eyebrow">Stage scaffold</p>
+                  <h2>{selectedStage.scaffoldTitle}</h2>
+                  <p className="body-copy">{selectedStage.scaffoldSummary}</p>
+                </div>
+
+                <div className="workspace-stage-detail__badges">
+                  <Badge tone={selectedStageStatus.tone}>
+                    {selectedStageStatus.label}
+                  </Badge>
+                  <Badge tone={selectedStageAvailability.tone}>
+                    {selectedStageAvailability.label}
+                  </Badge>
+                </div>
+              </div>
+
+              <p className="workspace-stage-detail__note">{stageRoutingCopy}</p>
+
+              <section className="workspace-stage-detail__cards">
+                <article className="workspace-stage-detail-card">
+                  <p className="workspace-summary-card__label">
+                    Current session signal
+                  </p>
+                  <strong>{buildStageDetailSummary(selectedStage)}</strong>
+                  <p>
+                    Accepted detail, last-event summaries, and later live job
+                    progress will land here once this stage receives real
+                    controls.
+                  </p>
+                </article>
+
+                <article className="workspace-stage-detail-card">
+                  <p className="workspace-summary-card__label">Route mapping</p>
+                  <strong className="workspace-stage-detail__route">
+                    ?stage={selectedStage.stage}
+                  </strong>
+                  <p>
+                    The navigator changes the visible panel through routing, not
+                    by mutating the durable session snapshot in the browser.
+                  </p>
+                </article>
+
+                <article className="workspace-stage-detail-card">
+                  <p className="workspace-summary-card__label">
+                    Downstream impact
+                  </p>
+                  <strong>
+                    {selectedStageInvalidations.length > 0
+                      ? `Editing this step can refresh ${selectedStageInvalidations.length} later stage${selectedStageInvalidations.length === 1 ? '' : 's'}.`
+                      : 'This terminal review step does not invalidate anything later.'}
+                  </strong>
+                  <p>
+                    {selectedStageInvalidations.length > 0
+                      ? selectedStageInvalidations.join(', ')
+                      : 'Finalize sits at the end of the workflow and can remain review-only.'}
+                  </p>
+                </article>
+              </section>
+
+              <section className="workspace-stage-detail__list">
+                <div className="panel-heading">
+                  <div>
+                    <h3>Planned controls</h3>
+                    <p>
+                      These placeholder bullets mark the extension points for
+                      the real business logic that will arrive in later prompts.
+                    </p>
+                  </div>
+                </div>
+
+                <ul>
+                  {selectedStage.scaffoldBullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </section>
+            </article>
+          </section>
+
+          <section
             aria-label="Workspace overview"
             className="workspace-overview-grid"
           >
@@ -481,7 +691,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               <p className="workspace-summary-card__label">Progress</p>
               <ProgressBar
                 aria-label={`${snapshot.display_title} workflow progress`}
-                hint={`Resume at ${getStageLabel(snapshot.resume_stage)} with ${progress.percent}% of the workflow currently complete.`}
+                hint={`Resume at ${getWorkflowStageLabel(snapshot.resume_stage)} with ${progress.percent}% of the workflow currently complete.`}
                 label="Workflow progress"
                 value={progress.percent}
                 valueText={progress.label}
@@ -499,56 +709,9 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
             <article className="workspace-summary-card">
               <p className="workspace-summary-card__label">Production</p>
-              <strong>{currentStage.label}</strong>
+              <strong>{activeStage.label}</strong>
               <p>{buildProductionCopy(snapshot)}</p>
             </article>
-          </section>
-
-          <section className="workspace-stage-panel">
-            <div className="panel-heading">
-              <h2>Workflow stages</h2>
-              <p>
-                Stage state stays durable in the backend, so this grid can
-                eventually drive edits, refreshes, and long-running job status.
-              </p>
-            </div>
-
-            <ol className="workspace-stage-grid">
-              {snapshot.stage_states.map((stage, index) => {
-                const stageStatus = getStatusBadgeCopy(stage.status)
-                const isCurrentStage = stage.stage === snapshot.current_stage
-
-                return (
-                  <li
-                    key={stage.stage}
-                    className={
-                      isCurrentStage
-                        ? 'workspace-stage-card workspace-stage-card--current'
-                        : 'workspace-stage-card'
-                    }
-                  >
-                    <div className="workspace-stage-card__header">
-                      <span>{index + 1}</span>
-                      <div>
-                        <strong>{stage.label}</strong>
-                        <p>{stage.description}</p>
-                      </div>
-                    </div>
-
-                    <div className="workspace-stage-card__meta">
-                      <Badge tone={stageStatus.tone}>{stageStatus.label}</Badge>
-                      <p>
-                        {stage.detail ??
-                          stage.last_event_summary ??
-                          (isCurrentStage
-                            ? 'Current checkpoint for the next structured edit.'
-                            : 'No durable updates yet.')}
-                      </p>
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
           </section>
         </section>
       </div>

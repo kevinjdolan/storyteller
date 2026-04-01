@@ -199,6 +199,12 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Selected tone: Hushed Wonder')).toBeInTheDocument()
     expect(screen.getByText('5 of 10 stages complete')).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Stage navigator' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Refine the Save-the-Cat beats' }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute(
       'href',
       '/',
@@ -209,6 +215,36 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText('Midpoint needs one more bedtime-soft pass.'),
+    ).toBeInTheDocument()
+  })
+
+  it('supports route-backed stage preview without changing the durable current step', async () => {
+    mockWorkspaceApi()
+
+    renderWithAppProviders(
+      <MemoryRouter initialEntries={['/sessions/moonlit-harbor?stage=audio']}>
+        <Routes>
+          <Route path="/sessions/:sessionId" element={<SessionWorkspacePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Configure narration and music',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /the route is previewing audio via the stage query parameter/i,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /audio/i }),
+    ).toHaveAttribute('href', '/sessions/moonlit-harbor?stage=audio')
+    expect(
+      screen.getByText('?stage=audio'),
     ).toBeInTheDocument()
   })
 

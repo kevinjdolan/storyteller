@@ -186,6 +186,10 @@ a {
 .workspace-chat-composer p,
 .workspace-stage-card__header p,
 .workspace-stage-card__meta p,
+.workspace-stage-nav__copy p,
+.workspace-stage-detail__note,
+.workspace-stage-detail-card p,
+.workspace-stage-detail__list p,
 .workspace-summary-card p,
 .connection-indicator__detail,
 .toast-region__empty,
@@ -1104,6 +1108,194 @@ h4 {
   font-size: 1.1rem;
 }
 
+.workspace-stage-shell {
+  display: grid;
+  grid-template-columns: minmax(19rem, 0.95fr) minmax(0, 1.35fr);
+  gap: var(--space-4);
+}
+
+.workspace-stage-navigator,
+.workspace-stage-detail,
+.workspace-stage-detail-card {
+  border: 1px solid rgba(39, 69, 99, 0.08);
+  background: var(--color-surface-muted);
+}
+
+.workspace-stage-navigator {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+}
+
+.workspace-stage-nav__list,
+.workspace-stage-detail__list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.workspace-stage-nav__list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.workspace-stage-nav__link {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(39, 69, 99, 0.08);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.72);
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.workspace-stage-nav__link:hover {
+  transform: translateY(-1px);
+}
+
+.workspace-stage-nav__link--selected {
+  border-color: rgba(169, 116, 60, 0.22);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 250, 242, 0.98),
+      rgba(255, 255, 255, 0.78)
+    ),
+    var(--color-surface-strong);
+  box-shadow: var(--shadow-surface-md);
+}
+
+.workspace-stage-nav__link--current {
+  box-shadow: inset 0 0 0 1px rgba(39, 69, 99, 0.12);
+}
+
+.workspace-stage-nav__link--locked {
+  opacity: 0.88;
+}
+
+.workspace-stage-nav__header {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.workspace-stage-nav__index,
+.workspace-stage-detail__route {
+  font-family: var(--font-family-mono);
+}
+
+.workspace-stage-nav__index {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(39, 69, 99, 0.12);
+  color: var(--color-brand);
+  font-weight: 700;
+}
+
+.workspace-stage-nav__copy strong,
+.workspace-stage-detail-card strong,
+.workspace-stage-detail__list h3 {
+  color: var(--color-ink-strong);
+}
+
+.workspace-stage-nav__copy strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.workspace-stage-nav__meta,
+.workspace-stage-detail__badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.workspace-stage-detail {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 252, 247, 0.96),
+      rgba(255, 255, 255, 0.72)
+    ),
+    var(--color-surface-strong);
+}
+
+.workspace-stage-detail__hero {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.workspace-stage-detail__note {
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.workspace-stage-detail__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.workspace-stage-detail-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.workspace-stage-detail-card strong {
+  display: block;
+  margin-bottom: 0;
+  font-size: 1rem;
+}
+
+.workspace-stage-detail__route {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  min-height: 2rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: rgba(39, 69, 99, 0.08);
+  color: var(--color-brand);
+}
+
+.workspace-stage-detail__list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.workspace-stage-detail__list ul {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.workspace-stage-detail__list li {
+  padding: 0.95rem 1rem;
+  border-left: 3px solid rgba(39, 69, 99, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--color-ink-strong);
+}
+
 .workspace-stage-panel {
   display: grid;
   gap: var(--space-4);
@@ -1192,6 +1384,8 @@ h4 {
   .session-summary-grid,
   .session-card__meta,
   .workspace-shell,
+  .workspace-stage-shell,
+  .workspace-stage-detail__cards,
   .workspace-overview-grid,
   .workspace-topbar__status,
   .workspace-stage-grid {
@@ -1232,6 +1426,7 @@ h4 {
   .session-card__header,
   .session-card__title-row,
   .cta-row,
+  .workspace-stage-detail__hero,
   .workspace-chat-composer__header,
   .workspace-chat-composer__footer {
     flex-direction: column;

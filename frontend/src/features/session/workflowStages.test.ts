@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   WORKFLOW_STAGE_SEQUENCE,
   WORKFLOW_STAGE_STATES,
+  getWorkflowStageLabel,
+  isWorkflowStageId,
   getInvalidatedStagesAfterEdit,
   resolveResumeStage,
   workflowStageDefinitions,
@@ -30,6 +32,11 @@ describe('workflowStages', () => {
       'completed',
       'needs_regeneration',
     ])
+    expect(
+      workflowStageDefinitions.every(
+        ({ scaffoldBullets }) => scaffoldBullets.length >= 3,
+      ),
+    ).toBe(true)
   })
 
   it('describes which downstream stages become stale after an edit', () => {
@@ -95,5 +102,12 @@ describe('workflowStages', () => {
         finalize: 'completed',
       }),
     ).toBe('finalize')
+  })
+
+  it('exposes helpers for validating and labeling stage ids', () => {
+    expect(isWorkflowStageId('audio')).toBe(true)
+    expect(isWorkflowStageId('not-a-stage')).toBe(false)
+    expect(getWorkflowStageLabel('story_setup')).toBe('Story setup')
+    expect(getWorkflowStageLabel('mystery-stage')).toBe('mystery-stage')
   })
 })

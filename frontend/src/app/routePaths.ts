@@ -6,6 +6,21 @@ export const routePaths = {
   notFound: '*',
 } as const
 
-export function buildSessionWorkspacePath(sessionId: string) {
-  return generatePath(routePaths.sessionWorkspace, { sessionId })
+export function buildSessionWorkspacePath(
+  sessionId: string,
+  options: {
+    stage?: string | null
+  } = {},
+) {
+  const path = generatePath(routePaths.sessionWorkspace, { sessionId })
+
+  if (options.stage == null || options.stage === '') {
+    return path
+  }
+
+  const searchParams = new URLSearchParams({
+    stage: options.stage,
+  })
+
+  return `${path}?${searchParams.toString()}`
 }
