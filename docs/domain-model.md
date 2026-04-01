@@ -48,8 +48,8 @@ surface selected child IDs without forcing the first migration into a web of cir
 | --- | --- | --- | --- |
 | `story_session` | Root aggregate for one bedtime-story project. | IDs, title, stage pointers, overall status, timestamps. | Owns the current accepted choices and job pointers. |
 | `workflow_stage_state` | Per-stage state for the session. | `session_id`, `stage`, `status`, `updated_at`, `last_event_id`. | Stored explicitly so resume does not depend on sparse child tables. |
-| `genre` | Curated genre catalog entry. | slug, label, description, bedtime-safety notes. | Backend-owned reference data. |
-| `tone_profile` | Curated tone option linked to a genre. | `genre_id`, slug, label, descriptors, bedtime notes. | Tone choices are filtered by genre. |
+| `genre` | Curated genre catalog entry. | slug, label, description, bedtime-safety notes, arc notes. | Backend-owned reference data. |
+| `tone_profile` | Curated tone option linked to a genre. | `genre_id`, slug, label, descriptors, bedtime notes, default planning hints. | Tone choices are filtered by genre. |
 | `story_brief` | User-authored idea plus any normalized planning summary. | raw brief text, normalized summary, revision number. | Keeps user input separate from later generated planning outputs. |
 | `pitch` | One candidate story premise. | batch or generation group, summary, hook, bedtime notes, selection flag. | `selected_pitch_id` on the session represents the accepted pitch; selection does not require a separate table. |
 | `character_sheet` | Accepted cast and character traits for the chosen direction. | protagonist/supporting cast data, revision, generation metadata. | Multiple revisions may exist; the session points at the accepted one. |

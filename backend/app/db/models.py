@@ -119,6 +119,7 @@ class ToneProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     bedtime_notes: Mapped[str | None] = mapped_column(Text)
     descriptors: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    default_planning_hints: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

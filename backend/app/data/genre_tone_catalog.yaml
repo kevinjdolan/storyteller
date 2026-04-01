@@ -1,0 +1,373 @@
+# Initial genre and tone seed catalog for Storyteller.
+# Source context lives in the prompt pack:
+# - prompts/base_prompt.md
+# - prompts/12-seed-genres-and-tones.md
+# - prompts/40-genre-selection-api-and-ui.md
+# - prompts/41-tone-selection-api-and-ui.md
+# - prompts/52-bedtime-safety-and-content-guidelines.md
+genres:
+  - slug: quest-fantasy
+    label: Quest Fantasy
+    description: A bedtime-safe adventure with a clear destination, gentle bravery, and a warm return home.
+    bedtime_safety_notes: Keep the journey wondrous rather than perilous; any danger should feel temporary, buffered by helpers, and resolved before sleep.
+    arc_notes:
+      core_arc: Leave a familiar safe place, face one meaningful but gentle challenge, and return more settled and confident.
+      tension_ceiling: Low to moderate; suspense should come from uncertainty, not threat.
+      bedtime_payoff: The final image should land in shelter, reunion, or visible rest.
+    tones:
+      - slug: hushed-wonder
+        label: Hushed Wonder
+        description: Moonlit awe, soft magic, and quiet courage lead the adventure.
+        bedtime_notes: Avoid sharp reversals or loud triumph; let discoveries feel luminous and safe.
+        descriptors:
+          - luminous
+          - moonlit
+          - gentle
+          - reverent
+        default_planning_hints:
+          pacing: unhurried
+          conflict_style: obstacles yield through patience, observation, or kindness
+          sensory_motifs:
+            - lantern light
+            - silver water
+            - whispering leaves
+          ending_style: return home carrying a small token of wonder
+      - slug: lantern-brave
+        label: Lantern Brave
+        description: A steadier, more active quest tone where bravery feels cozy instead of intense.
+        bedtime_notes: Keep the hero's courage rooted in reassurance from mentors, companions, or familiar rituals.
+        descriptors:
+          - steady
+          - reassuring
+          - warmhearted
+          - lightly adventurous
+        default_planning_hints:
+          pacing: steady
+          conflict_style: one central problem solved through teamwork and persistence
+          sensory_motifs:
+            - lantern glow
+            - packed satchel
+            - firelit path
+          ending_style: celebrate quietly, then settle into rest
+      - slug: fireside-reassurance
+        label: Fireside Reassurance
+        description: The quest still matters, but the emotional center stays on comfort, guidance, and safe return.
+        bedtime_notes: Let tension resolve early enough that the ending can linger in calm reflection.
+        descriptors:
+          - comforting
+          - cozy
+          - reflective
+          - sheltered
+        default_planning_hints:
+          pacing: gentle with brief movement beats
+          conflict_style: uncertainty is eased by maps, stories, and trusted adults
+          sensory_motifs:
+            - blankets
+            - tea steam
+            - crackling fire
+          ending_style: close with gratitude, warmth, and sleep-ready quiet
+
+  - slug: gentle-mystery
+    label: Gentle Mystery
+    description: A puzzle-forward bedtime story driven by clues, curiosity, and a reassuring explanation.
+    bedtime_safety_notes: Mystery should never feel menacing; clues can be strange, but the world must stay emotionally safe and readable.
+    arc_notes:
+      core_arc: Notice a small mystery, gather clues, make a calm discovery, and restore ease.
+      tension_ceiling: Low; suspense comes from curiosity and anticipation rather than fear.
+      bedtime_payoff: The reveal should repair uncertainty and make the world feel kinder than before.
+    tones:
+      - slug: whispered-clues
+        label: Whispered Clues
+        description: Quiet, observant, and slightly magical, with clues tucked into calm nighttime details.
+        bedtime_notes: Keep the unknown intriguing instead of eerie; every clue should feel like an invitation.
+        descriptors:
+          - observant
+          - soft
+          - curious
+          - secretive
+        default_planning_hints:
+          pacing: measured clue-by-clue progress
+          conflict_style: misdirection comes from incomplete information, not threatening forces
+          sensory_motifs:
+            - rustling curtains
+            - tiny footprints
+            - glimmering notes
+          ending_style: reveal the answer with relief and a smile
+      - slug: cozy-sleuthing
+        label: Cozy Sleuthing
+        description: Homey detective energy with snacks, family, and friendly helpers in the loop.
+        bedtime_notes: Let the investigation happen in familiar spaces with emotionally available companions.
+        descriptors:
+          - homey
+          - playful
+          - reassuring
+          - neighborly
+        default_planning_hints:
+          pacing: brisk enough to feel engaging, but never frantic
+          conflict_style: clues are solved through conversation, memory, and shared effort
+          sensory_motifs:
+            - kitchen light
+            - padded footsteps
+            - sleepy pets
+          ending_style: finish with everyone gathered and content
+      - slug: sleepy-reveal
+        label: Sleepy Reveal
+        description: The mystery unfolds with very low stakes and an especially drowsy, comforting finish.
+        bedtime_notes: Keep the payoff tender and emotionally soothing, not twisty or shocking.
+        descriptors:
+          - drowsy
+          - tender
+          - mild
+          - glowing
+        default_planning_hints:
+          pacing: extra calm with longer settling beats
+          conflict_style: the puzzle centers on misunderstanding, misplaced items, or hidden kindness
+          sensory_motifs:
+            - pillow forts
+            - candlelight
+            - quiet giggles
+          ending_style: reveal the answer, tuck everyone in, and fade out softly
+
+  - slug: cozy-animal-adventure
+    label: Cozy Animal Adventure
+    description: Animal characters roam, explore, and solve small problems in a world built for comfort and wonder.
+    bedtime_safety_notes: Keep animal-scale stakes manageable and end with nesting, denning, or other visible signs of safety.
+    arc_notes:
+      core_arc: Venture a short distance from comfort, learn something sweet or useful, and return to a cozy habitat.
+      tension_ceiling: Low; physical risk should be implied lightly and quickly soothed.
+      bedtime_payoff: The ending should emphasize home, family, and rhythmic natural quiet.
+    tones:
+      - slug: playful-ramble
+        label: Playful Ramble
+        description: Light-footed wandering with humor, friendly mishaps, and cheerful discovery.
+        bedtime_notes: Keep humor kind and the mishaps tiny enough that they never feel upsetting.
+        descriptors:
+          - playful
+          - spry
+          - cheerful
+          - earthy
+        default_planning_hints:
+          pacing: light and nimble
+          conflict_style: small detours and mix-ups create movement without distress
+          sensory_motifs:
+            - mossy logs
+            - berry baskets
+            - chirping crickets
+          ending_style: everyone nestles down after a happy meander
+      - slug: nesting-comfort
+        label: Nesting Comfort
+        description: Extra soft and home-centered, with the adventure framed around making a place feel welcoming.
+        bedtime_notes: Favor emotional reassurance, caregiving, and tactile coziness over plot intensity.
+        descriptors:
+          - snuggly
+          - caring
+          - warm
+          - domestic
+        default_planning_hints:
+          pacing: relaxed and cuddly
+          conflict_style: the problem is practical and repairable, like helping someone settle in
+          sensory_motifs:
+            - feathers
+            - quilts
+            - acorn lanterns
+          ending_style: close with everyone tucked safely into the nest or den
+      - slug: riverbank-curiosity
+        label: Riverbank Curiosity
+        description: A calm nature exploration tone with attentive observation and quiet discoveries.
+        bedtime_notes: Water, wind, and night sounds should soothe rather than unsettle.
+        descriptors:
+          - observant
+          - breezy
+          - curious
+          - natural
+        default_planning_hints:
+          pacing: flowing with gentle pauses
+          conflict_style: curiosity leads the plot more than problem-solving does
+          sensory_motifs:
+            - reeds
+            - smooth stones
+            - drifting fireflies
+          ending_style: the river settles, then the characters do too
+
+  - slug: magical-friendship
+    label: Magical Friendship
+    description: Relationship-first stories where enchantment supports connection, trust, and emotional repair.
+    bedtime_safety_notes: Keep interpersonal conflict mild, repair visible, and magic supportive instead of chaotic.
+    arc_notes:
+      core_arc: Meet or reconnect, navigate a gentle emotional misunderstanding, and deepen the bond through care.
+      tension_ceiling: Low; the heart of the story is vulnerability, not peril.
+      bedtime_payoff: End with closeness, belonging, and a felt sense of mutual care.
+    tones:
+      - slug: tender-teamwork
+        label: Tender Teamwork
+        description: Cooperative magic and affectionate problem-solving keep the story grounded in trust.
+        bedtime_notes: Make support explicit; the characters should feel emotionally available to one another.
+        descriptors:
+          - cooperative
+          - affectionate
+          - steady
+          - bright
+        default_planning_hints:
+          pacing: steady with shared action beats
+          conflict_style: friends solve the problem together by combining strengths
+          sensory_motifs:
+            - hand-held lanterns
+            - ribbon trails
+            - warm bread
+          ending_style: finish with a shared ritual or promise
+      - slug: sparkling-silly
+        label: Sparkling Silly
+        description: A more playful friendship mode with gentle comedy and delightfully harmless magic.
+        bedtime_notes: Keep the silliness breezy and never mean-spirited; the laugh should settle into calm.
+        descriptors:
+          - playful
+          - twinkly
+          - goofy
+          - kind
+        default_planning_hints:
+          pacing: buoyant with short comedic beats
+          conflict_style: magical mix-ups create laughter before an easy repair
+          sensory_motifs:
+            - glittering crumbs
+            - floating hats
+            - chiming bells
+          ending_style: resolve with shared laughter, cocoa, and winding down
+      - slug: heart-mending
+        label: Heart Mending
+        description: A softer, emotionally restorative tone for stories about reconnection and reassurance.
+        bedtime_notes: Let hurt feelings be named gently and healed clearly before the ending.
+        descriptors:
+          - healing
+          - sincere
+          - warm
+          - soothing
+        default_planning_hints:
+          pacing: slow enough for emotional clarity
+          conflict_style: the obstacle is relational and eased through honesty, listening, and kindness
+          sensory_motifs:
+            - patchwork light
+            - tea cups
+            - glowing charms
+          ending_style: close on forgiveness, belonging, and sleep-ready quiet
+
+  - slug: dreamworld-voyage
+    label: Dreamworld Voyage
+    description: Drifting, surreal adventures that feel secure, beautiful, and intentionally sleepy.
+    bedtime_safety_notes: Even when dream logic gets strange, maintain orientation through comforting guides, repeated motifs, and gentle landings.
+    arc_notes:
+      core_arc: Drift into an unusual realm, explore a few dreamlike images, and descend into deeper calm.
+      tension_ceiling: Very low; dream shifts should feel curious, not destabilizing.
+      bedtime_payoff: The ending should feel like a soft arrival into sleep itself.
+    tones:
+      - slug: drift-and-glow
+        label: Drift and Glow
+        description: Floating, luminous dream travel with a strong lullaby quality.
+        bedtime_notes: Keep scene transitions smooth and reassuring so the surrealism never jars.
+        descriptors:
+          - floating
+          - luminous
+          - airy
+          - tranquil
+        default_planning_hints:
+          pacing: gliding and atmospheric
+          conflict_style: focus on wonder and orientation rather than obstacles
+          sensory_motifs:
+            - clouds
+            - moonbeams
+            - glowing kites
+          ending_style: let the story exhale into sleep
+      - slug: surreal-cozy
+        label: Surreal Cozy
+        description: Unusual dream imagery wrapped in familiar, tactile comfort.
+        bedtime_notes: Pair every strange image with something grounding like blankets, snacks, or a trusted companion.
+        descriptors:
+          - whimsical
+          - padded
+          - curious
+          - comforting
+        default_planning_hints:
+          pacing: meandering with clear emotional anchors
+          conflict_style: any confusion is softened by immediate reassurance
+          sensory_motifs:
+            - giant pillows
+            - marshmallow clouds
+            - sleepy stairways
+          ending_style: surreal details fade into a cozy bedtime tableau
+      - slug: starlit-lullaby
+        label: Starlit Lullaby
+        description: The most sleep-forward tone in the catalog, built for softness, rhythm, and calm repetition.
+        bedtime_notes: Minimize plot complexity and favor patterned language, repetition, and soothing imagery.
+        descriptors:
+          - lullaby-like
+          - rhythmic
+          - tender
+          - celestial
+        default_planning_hints:
+          pacing: very calm and repetitive in a good way
+          conflict_style: nearly conflict-free, centered on settling and soothing
+          sensory_motifs:
+            - stars
+            - rocking boats
+            - sleepy songs
+          ending_style: fade into a final image of rest, stillness, and safety
+
+  - slug: soft-science-wonder
+    label: Soft Science Wonder
+    description: Science-flavored bedtime stories driven by curiosity, observation, and awe rather than technical complexity.
+    bedtime_safety_notes: Keep scientific concepts accessible, reassuring, and emotionally warm; discovery should never become sterile or high-pressure.
+    arc_notes:
+      core_arc: Notice a natural or cosmic question, explore it with gentle experimentation, and end with bigger wonder plus calm understanding.
+      tension_ceiling: Low; the challenge should be intellectual or practical, not dangerous.
+      bedtime_payoff: The world feels larger, kinder, and more connected by the end.
+    tones:
+      - slug: curious-constellations
+        label: Curious Constellations
+        description: Starry, observant, and reflective, with science woven into sky-gazing wonder.
+        bedtime_notes: Let facts deepen awe and comfort rather than interrupt story flow.
+        descriptors:
+          - observant
+          - starry
+          - reflective
+          - calm
+        default_planning_hints:
+          pacing: thoughtful with short bursts of discovery
+          conflict_style: a question or pattern slowly comes into focus
+          sensory_motifs:
+            - telescopes
+            - dew
+            - constellations
+          ending_style: close under a night sky that feels knowable and safe
+      - slug: inventive-calm
+        label: Inventive Calm
+        description: A maker-minded tone where tinkering feels patient, cozy, and low stakes.
+        bedtime_notes: Keep experiments small, reversible, and supported by encouraging adults or peers.
+        descriptors:
+          - patient
+          - clever
+          - cozy
+          - practical
+        default_planning_hints:
+          pacing: measured build-test-adjust rhythm
+          conflict_style: the prototype needs one or two calm refinements
+          sensory_motifs:
+            - wooden worktables
+            - pencil sketches
+            - warm lamps
+          ending_style: success leads to quiet pride and bedtime wind-down
+      - slug: discovery-at-dusk
+        label: Discovery at Dusk
+        description: Natural science and twilight exploration meet in a mellow, outdoorsy bedtime tone.
+        bedtime_notes: Keep the setting legible and friendly, with twilight framed as beautiful rather than ominous.
+        descriptors:
+          - earthy
+          - dusky
+          - inquisitive
+          - serene
+        default_planning_hints:
+          pacing: gently exploratory
+          conflict_style: discovery comes from patient noticing rather than dramatic events
+          sensory_motifs:
+            - field journals
+            - fireflies
+            - evening breeze
+          ending_style: conclude with a calm fact, a warm feeling, and rest
