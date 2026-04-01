@@ -1,0 +1,39 @@
+{
+  "url": "http://frontend:8566",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='sessions-home-route']"
+    },
+    {
+      "action": "press",
+      "key": "Tab"
+    },
+    {
+      "action": "assertSelector",
+      "selector": "a.skip-link:focus-visible"
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false,
+      "outputPath": "../../.artifacts/webapp-qa/prompt-24-focus-skip-link.png"
+    },
+    {
+      "action": "press",
+      "key": "Tab"
+    },
+    {
+      "action": "assertSelector",
+      "selector": "a.app-brand-link:focus-visible"
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false,
+      "outputPath": "../../.artifacts/webapp-qa/prompt-24-focus-brand-link.png"
+    }
+  ]
+}
