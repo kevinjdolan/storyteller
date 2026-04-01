@@ -1,5 +1,6 @@
 from app.repositories.assets import DOWNLOADABLE_ASSET_KINDS, SessionAssetRepository
 from app.repositories.events import EventLogRepository
+from app.repositories.jobs import POSTGRES_CLAIM_SQL, BackgroundJobRepository
 from app.repositories.sessions import (
     SessionAggregate,
     StorySessionRepository,
@@ -8,7 +9,9 @@ from app.repositories.sessions import (
 
 __all__ = [
     "DOWNLOADABLE_ASSET_KINDS",
+    "BackgroundJobRepository",
     "EventLogRepository",
+    "POSTGRES_CLAIM_SQL",
     "SessionAggregate",
     "SessionAssetRepository",
     "StorySessionRepository",

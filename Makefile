@@ -60,7 +60,7 @@ backend-seed-catalog: ## Seed the backend-owned genre and tone catalog
 backend-storage-smoke: ## Round-trip a sample object through the configured storage backend
 	@cd backend && \
 	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
-	export STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql://storyteller:storyteller@127.0.0.1:8567/storyteller}"; \
+	export STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller}"; \
 	export STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}"; \
 	export STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}"; \
 	export STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}"; \

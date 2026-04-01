@@ -305,9 +305,7 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.progress.in_progress_stages == 1
     assert snapshot.current_stage == WorkflowStage.COMPOSITION
     composition_stage = next(
-        stage
-        for stage in snapshot.stage_states
-        if stage.stage == WorkflowStage.COMPOSITION
+        stage for stage in snapshot.stage_states if stage.stage == WorkflowStage.COMPOSITION
     )
     assert composition_stage.detail == "Writing the middle chapters."
 

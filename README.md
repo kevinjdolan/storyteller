@@ -84,6 +84,7 @@ The local Compose stack includes:
 
 - `frontend` on `http://localhost:8566`
 - `backend` on `http://localhost:8565`
+- `worker` for durable background job execution
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 
@@ -141,7 +142,7 @@ Persistent data lives in named Docker volumes:
 
 The backend receives the local infrastructure coordinates through environment variables in Compose:
 
-- `STORYTELLER_DATABASE_URL=postgresql://storyteller:storyteller@postgres:5432/storyteller`
+- `STORYTELLER_DATABASE_URL=postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller`
 - `STORYTELLER_GCS_ENDPOINT=http://gcs:4443`
 - `STORYTELLER_GCS_SESSIONS_BUCKET_NAME=storyteller-sessions`
 - `STORYTELLER_GCS_AUDIO_BUCKET_NAME=storyteller-audio`
@@ -203,4 +204,4 @@ A new engineer should be able to open this repository and quickly understand:
 - the first screen is the past-sessions home for resume, edit, and create flows
 - the story workflow is staged and ordered
 - the final product writes stories and generates narration audio durably
-- the backend owns AI access, long-running jobs, and persistent state
+- the backend and worker own AI access, long-running jobs, and persistent state

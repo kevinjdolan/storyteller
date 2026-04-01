@@ -114,9 +114,7 @@ def test_realtime_event_contract_rejects_invalid_chunk_payloads() -> None:
 
 
 def test_realtime_schema_bundle_matches_the_checked_in_schema_file() -> None:
-    schema_path = (
-        Path(__file__).resolve().parents[2] / "docs" / "realtime-events.schema.json"
-    )
+    schema_path = Path(__file__).resolve().parents[2] / "docs" / "realtime-events.schema.json"
 
     assert json.loads(schema_path.read_text()) == get_realtime_contract_schema_bundle()
 

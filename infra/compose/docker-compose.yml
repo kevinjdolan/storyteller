@@ -65,7 +65,7 @@ services:
       PYTHONUNBUFFERED: "1"
       STORYTELLER_SECRETS_FILE: /workspace/secrets.yaml
       STORYTELLER_ENVIRONMENT: development
-      STORYTELLER_DATABASE_URL: postgresql://storyteller:storyteller@postgres:5432/storyteller
+      STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
       STORYTELLER_GCS_ENDPOINT: http://gcs:4443
       STORYTELLER_GCS_PROJECT_ID: storyteller-local
       STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
@@ -88,6 +88,41 @@ services:
       timeout: 5s
       retries: 20
       start_period: 5s
+
+  worker:
+    build:
+      context: ../../backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gcs:
+        condition: service_healthy
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - ../../backend:/app
+      - ../../:/workspace:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      STORYTELLER_SECRETS_FILE: ""
+      STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
+      STORYTELLER_GEMINI_API_KEY: ${STORYTELLER_GEMINI_API_KEY:-worker-placeholder-key}
+      STORYTELLER_GCS_ENDPOINT: http://gcs:4443
+      STORYTELLER_GCS_PROJECT_ID: storyteller-local
+      STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
+      STORYTELLER_GCS_SESSIONS_BUCKET_NAME: storyteller-sessions
+      STORYTELLER_GCS_AUDIO_BUCKET_NAME: storyteller-audio
+      STORYTELLER_GCS_EXPORTS_BUCKET_NAME: storyteller-exports
+    command:
+      - python
+      - -m
+      - app.worker
+      - --poll-interval-seconds
+      - "2"
+      - --lease-duration-seconds
+      - "60"
 
   frontend:
     build:

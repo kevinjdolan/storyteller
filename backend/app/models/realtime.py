@@ -98,9 +98,7 @@ class SessionScopedChannelModel(RealtimeContractModel):
     def validate_channel(self) -> SessionScopedChannelModel:
         expected_channel = build_session_channel_name(self.session_id)
         if self.channel != expected_channel:
-            raise ValueError(
-                f"channel must match the session-scoped name {expected_channel!r}"
-            )
+            raise ValueError(f"channel must match the session-scoped name {expected_channel!r}")
 
         return self
 

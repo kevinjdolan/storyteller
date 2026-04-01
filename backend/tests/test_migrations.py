@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, inspect
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_TABLES = {
     "audio_jobs",
+    "background_jobs",
     "beat_sheets",
     "character_sheets",
     "composition_jobs",
@@ -34,6 +35,26 @@ EXPECTED_TONE_PROFILE_COLUMNS = {
     "default_planning_hints",
     "sort_order",
     "is_active",
+    "created_at",
+    "updated_at",
+}
+EXPECTED_BACKGROUND_JOB_COLUMNS = {
+    "id",
+    "session_id",
+    "job_type",
+    "status",
+    "payload",
+    "result_summary",
+    "attempt_count",
+    "lease_owner",
+    "lease_token",
+    "lease_expires_at",
+    "claimed_at",
+    "heartbeat_at",
+    "started_at",
+    "completed_at",
+    "failed_at",
+    "error_message",
     "created_at",
     "updated_at",
 }
@@ -72,6 +93,7 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _get_table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
+    assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")
 
     command.downgrade(config, "base")
     assert not (EXPECTED_TABLES & _get_table_names(database_url))
@@ -79,3 +101,4 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _get_table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
+    assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")

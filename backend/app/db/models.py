@@ -190,6 +190,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    background_jobs: Mapped[list["BackgroundJob"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
     composition_segments: Mapped[list["CompositionSegment"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
@@ -212,6 +216,51 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_story_sessions_resume_stage", "resume_stage"),
         Index("ix_story_sessions_current_stage", "current_stage"),
         Index("ix_story_sessions_selected_genre_id", "selected_genre_id"),
+    )
+
+
+class BackgroundJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "background_jobs"
+
+    session_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+    )
+    job_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[JobStatus] = mapped_column(
+        JOB_STATUS_ENUM,
+        nullable=False,
+        default=JobStatus.QUEUED,
+    )
+    payload: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+    result_summary: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(120))
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    session: Mapped["StorySession | None"] = relationship(back_populates="background_jobs")
+
+    __table_args__ = (
+        Index("ix_background_jobs_status_created_at", "status", "created_at"),
+        Index("ix_background_jobs_status_lease_expires_at", "status", "lease_expires_at"),
+        Index(
+            "ix_background_jobs_job_type_status_created_at",
+            "job_type",
+            "status",
+            "created_at",
+        ),
+        Index("ix_background_jobs_session_id_created_at", "session_id", "created_at"),
     )
 
 

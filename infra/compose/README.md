@@ -15,11 +15,13 @@ Current local services:
 
 - `frontend` on `http://localhost:8566`
 - `backend` on `http://localhost:8565`
+- `worker` as the durable background-job runner
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 - `browser` as the containerized QA runner
 
 The backend container reads the repo-root `secrets.yaml` through `STORYTELLER_SECRETS_FILE=/workspace/secrets.yaml`, so the local Gemini API key stays server-side even during Compose development.
+The worker container defaults to env-only configuration in Compose so it can start independently from the API even when a local `secrets.yaml` contains unrelated provider fields. Override `STORYTELLER_GEMINI_API_KEY` in your shell before `./scripts/dev-compose.sh up -d worker` when a real handler needs Gemini access.
 
 Useful follow-up commands:
 

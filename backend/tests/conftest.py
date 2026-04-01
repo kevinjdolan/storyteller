@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 TEST_ENVIRONMENT_DEFAULTS = {
     "STORYTELLER_SECRETS_FILE": "",
-    "STORYTELLER_DATABASE_URL": ("postgresql://storyteller:storyteller@postgres:5432/storyteller"),
+    "STORYTELLER_DATABASE_URL": (
+        "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
+    ),
     "STORYTELLER_GEMINI_API_KEY": "test-gemini-key",
     "STORYTELLER_GCS_ENDPOINT": "http://gcs:4443",
     "STORYTELLER_GCS_PROJECT_ID": "storyteller-local",

@@ -118,9 +118,7 @@ def test_asset_service_creates_segmented_assets_and_lists_downloadables(db_sessi
         asset_kind=AssetKind.STORY_DOCX,
         storage_bucket="storyteller-exports",
         object_path="sessions/story-1/exports/story.docx",
-        mime_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        mime_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         status=AssetStatus.READY,
     )
     final_audio = service.save_asset_record(
@@ -172,9 +170,7 @@ def test_asset_service_marks_assets_ready_and_failed(db_session) -> None:
         asset_kind=AssetKind.STORY_DOCX,
         storage_bucket="storyteller-exports",
         object_path="sessions/story-2/exports/story.docx",
-        mime_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        mime_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     )
 
     ready_timestamp = datetime.now(timezone.utc)

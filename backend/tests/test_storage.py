@@ -18,7 +18,7 @@ def build_test_settings():
         {
             "STORYTELLER_SECRETS_FILE": "",
             "STORYTELLER_DATABASE_URL": (
-                "postgresql://storyteller:storyteller@postgres:5432/storyteller"
+                "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
             ),
             "STORYTELLER_GEMINI_API_KEY": "test-gemini-key",
             "STORYTELLER_GCS_ENDPOINT": "http://gcs:4443",

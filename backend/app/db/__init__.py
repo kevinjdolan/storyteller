@@ -10,6 +10,7 @@ from app.db.models import (
     AssetKind,
     AssetStatus,
     AudioJob,
+    BackgroundJob,
     BeatSheet,
     CharacterSheet,
     CompositionJob,
@@ -33,6 +34,7 @@ from app.db.session import get_engine, get_session_factory, make_engine
 __all__ = [
     "ASSET_KIND_ENUM",
     "ASSET_STATUS_ENUM",
+    "BackgroundJob",
     "COMPOSITION_JOB_KIND_ENUM",
     "EVENT_ACTOR_TYPE_ENUM",
     "JOB_STATUS_ENUM",

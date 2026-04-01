@@ -1,7 +1,7 @@
 # Backend
 
 This directory is the home for the FastAPI application, backend-owned workflow logic, durable
-relational models, and future background job processing.
+relational models, and durable background job processing.
 
 ## Current layout
 
@@ -12,7 +12,7 @@ relational models, and future background job processing.
   - `services/`: backend-owned business logic
   - `settings/`: environment-backed application settings
   - `storage/`: object storage abstraction, bucket/path strategy, and emulator smoke test
-  - `worker/`: future background job runners
+  - `worker/`: the durable PostgreSQL-backed worker loop and handler registry
 - `alembic.ini`: migration configuration entrypoint
 - `migrations/`: Alembic schema history and migration environment
 - `tests/`: backend test suite
@@ -54,6 +54,7 @@ pytest
 python -m ruff check app tests
 python -m ruff format app tests
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
+python -m app.worker --once
 alembic upgrade head
 alembic downgrade base
 python -m app.seed_catalog
@@ -86,6 +87,22 @@ alembic revision --autogenerate -m "describe change"
 
 The migration environment prefers an explicit `sqlalchemy.url` or `STORYTELLER_DATABASE_URL`. If
 neither is supplied, it falls back to the application settings loader.
+
+## Background jobs
+
+The durable queue now lives in the `background_jobs` table and is claimed directly from PostgreSQL,
+so long-running story and audio work can move out of API request threads without adding Redis or a
+second queue store.
+
+Core entrypoints:
+
+- `BackgroundJobService.enqueue_job(...)`: create a queued job row with a JSON payload
+- `BackgroundJobService.claim_next_job(...)`: lease one queued or expired in-progress job
+- `BackgroundJobService.heartbeat_job(...)`: extend the lease while work is still running
+- `python -m app.worker`: run the polling worker against the configured database
+
+The default worker registry includes a `demo.echo` handler that is useful for smoke tests and
+verification before composition and audio handlers land in later prompts.
 
 ## Seeded catalog
 

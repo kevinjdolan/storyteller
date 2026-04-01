@@ -70,7 +70,7 @@ The hook blocks commits that stage `secrets.yaml`, `.env` files, or obvious Gemi
 
 ```yaml
 database:
-  url: postgresql://storyteller:storyteller@postgres:5432/storyteller
+  url: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
 
 gemini:
   api_key: your-gemini-api-key-here

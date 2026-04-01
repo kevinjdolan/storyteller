@@ -8,6 +8,14 @@ from app.services.assets import (
     SessionAssetService,
 )
 from app.services.event_log import SessionEventLogService
+from app.services.jobs import (
+    BackgroundJobLeaseLostError,
+    BackgroundJobNotFoundError,
+    BackgroundJobRecord,
+    BackgroundJobService,
+    BackgroundJobServiceError,
+    ClaimedBackgroundJob,
+)
 from app.services.sessions import (
     InvalidStageTransitionError,
     SessionNotFoundError,
@@ -20,6 +28,12 @@ __all__ = [
     "AssetOwnershipError",
     "AssetServiceError",
     "AssetSessionNotFoundError",
+    "BackgroundJobLeaseLostError",
+    "BackgroundJobNotFoundError",
+    "BackgroundJobRecord",
+    "BackgroundJobService",
+    "BackgroundJobServiceError",
+    "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
     "SessionNotFoundError",
     "SessionAssetService",

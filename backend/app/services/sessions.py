@@ -232,10 +232,7 @@ class SessionService:
         story_session,
         stage_map: Mapping[WorkflowStage, object],
     ) -> None:
-        statuses = {
-            stage: getattr(stage_map[stage], "status")
-            for stage in stage_map
-        }
+        statuses = {stage: getattr(stage_map[stage], "status") for stage in stage_map}
         resume_stage = resolve_resume_stage(statuses)
         furthest_completed_stage = _resolve_furthest_completed_stage(statuses)
         overall_status = _resolve_overall_status(statuses)
@@ -280,9 +277,7 @@ def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
                 else None
             ),
             raw_brief=(
-                aggregate.active_story_brief.raw_brief
-                if aggregate.active_story_brief
-                else None
+                aggregate.active_story_brief.raw_brief if aggregate.active_story_brief else None
             ),
         ),
         working_title=story_session.working_title,

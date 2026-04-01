@@ -26,7 +26,7 @@ def test_settings_read_required_runtime_values_from_environment(
     monkeypatch.setenv("STORYTELLER_SECRETS_FILE", "")
     monkeypatch.setenv(
         "STORYTELLER_DATABASE_URL",
-        "postgresql://storyteller:storyteller@postgres:5432/storyteller",
+        "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller",
     )
     monkeypatch.setenv("STORYTELLER_GEMINI_API_KEY", "env-api-key")
     monkeypatch.setenv("STORYTELLER_GCS_ENDPOINT", "http://gcs:4443")
@@ -41,7 +41,7 @@ def test_settings_read_required_runtime_values_from_environment(
     settings = get_settings()
 
     assert settings.database_url == (
-        "postgresql://storyteller:storyteller@postgres:5432/storyteller"
+        "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
     )
     assert settings.gemini_api_key == "env-api-key"
     assert settings.gcs_endpoint == "http://gcs:4443"
@@ -60,7 +60,7 @@ def test_settings_merge_local_secrets_file_when_present(tmp_path: Path) -> None:
         tmp_path,
         """
         database:
-          url: postgresql://storyteller:storyteller@localhost:8567/storyteller
+          url: postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller
         gemini:
           api_key: secrets-api-key
         gcs:
@@ -88,7 +88,7 @@ def test_settings_merge_local_secrets_file_when_present(tmp_path: Path) -> None:
     )
 
     assert settings.database_url == (
-        "postgresql://storyteller:storyteller@localhost:8567/storyteller"
+        "postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller"
     )
     assert settings.gemini_api_key == "secrets-api-key"
     assert settings.cors_allowed_origins == (
@@ -104,7 +104,7 @@ def test_environment_values_override_secrets_file(tmp_path: Path) -> None:
         tmp_path,
         """
         database:
-          url: postgresql://storyteller:storyteller@localhost:8567/storyteller
+          url: postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller
         gemini:
           api_key: secrets-api-key
         gcs:
@@ -123,7 +123,7 @@ def test_environment_values_override_secrets_file(tmp_path: Path) -> None:
         {
             "STORYTELLER_SECRETS_FILE": str(secrets_file),
             "STORYTELLER_DATABASE_URL": (
-                "postgresql://storyteller:storyteller@postgres:5432/storyteller"
+                "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
             ),
             "STORYTELLER_GEMINI_API_KEY": "env-api-key",
             "STORYTELLER_CORS_ALLOWED_ORIGINS": (
@@ -135,7 +135,7 @@ def test_environment_values_override_secrets_file(tmp_path: Path) -> None:
     )
 
     assert settings.database_url == (
-        "postgresql://storyteller:storyteller@postgres:5432/storyteller"
+        "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
     )
     assert settings.gemini_api_key == "env-api-key"
     assert settings.cors_allowed_origins == (
@@ -151,7 +151,7 @@ def test_legacy_single_bucket_name_populates_all_runtime_buckets() -> None:
         {
             "STORYTELLER_SECRETS_FILE": "",
             "STORYTELLER_DATABASE_URL": (
-                "postgresql://storyteller:storyteller@postgres:5432/storyteller"
+                "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
             ),
             "STORYTELLER_GEMINI_API_KEY": "env-api-key",
             "STORYTELLER_GCS_ENDPOINT": "http://gcs:4443",
@@ -171,7 +171,7 @@ def test_api_docs_can_be_disabled_with_feature_flag(
     monkeypatch.setenv("STORYTELLER_SECRETS_FILE", "")
     monkeypatch.setenv(
         "STORYTELLER_DATABASE_URL",
-        "postgresql://storyteller:storyteller@postgres:5432/storyteller",
+        "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller",
     )
     monkeypatch.setenv("STORYTELLER_GEMINI_API_KEY", "env-api-key")
     monkeypatch.setenv("STORYTELLER_GCS_ENDPOINT", "http://gcs:4443")
