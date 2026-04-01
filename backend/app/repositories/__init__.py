@@ -1,3 +1,4 @@
+from app.repositories.events import EventLogRepository
 from app.repositories.sessions import (
     SessionAggregate,
     StorySessionRepository,
@@ -5,6 +6,7 @@ from app.repositories.sessions import (
 )
 
 __all__ = [
+    "EventLogRepository",
     "SessionAggregate",
     "StorySessionRepository",
     "WorkflowStageStateRepository",

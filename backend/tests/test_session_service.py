@@ -12,6 +12,8 @@ from app.db import (
     CharacterSheet,
     CompositionJob,
     CompositionJobKind,
+    EventActorType,
+    EventLogEntry,
     ExportAsset,
     Genre,
     JobStatus,
@@ -68,6 +70,28 @@ def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> No
     stored_session = db_session.get(StorySession, snapshot.id)
     assert stored_session is not None
     assert len(stored_session.workflow_stage_states) == len(WorkflowStage)
+
+    event_rows = (
+        db_session.query(EventLogEntry)
+        .filter(EventLogEntry.session_id == snapshot.id)
+        .order_by(EventLogEntry.sequence_number.asc())
+        .all()
+    )
+    assert len(event_rows) == 1
+    assert event_rows[0].sequence_number == 1
+    assert event_rows[0].actor_type == EventActorType.USER
+    assert event_rows[0].event_type == "session.created"
+    assert event_rows[0].payload == {
+        "schema_version": 1,
+        "working_title": "Starlight Ferry",
+    }
+
+    history = service.load_session_history(snapshot.id)
+    assert history.latest_sequence_number == 1
+    assert len(history.events) == 1
+    assert history.events[0].summary == "Created session: Starlight Ferry."
+    assert history.events[0].payload is not None
+    assert history.events[0].payload.working_title == "Starlight Ferry"
 
 
 def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_session) -> None:
@@ -298,6 +322,40 @@ def test_update_stage_state_rejects_skipping_prerequisites(db_session) -> None:
         )
 
 
+def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Timeline Check")
+
+    snapshot = service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.GENRE,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted quest fantasy.",
+    )
+
+    history = service.load_session_history(snapshot.id)
+    assert [event.event_type for event in history.events] == [
+        "session.created",
+        "workflow.stage_changed",
+    ]
+    assert history.latest_sequence_number == 2
+
+    stage_event = history.events[-1]
+    assert stage_event.stage == WorkflowStage.GENRE
+    assert stage_event.payload is not None
+    assert stage_event.payload.previous_status == WorkflowStageState.DRAFT
+    assert stage_event.payload.status == WorkflowStageState.COMPLETED
+    assert stage_event.payload.detail == "Accepted quest fantasy."
+    assert stage_event.payload.invalidated_stages == []
+    assert stage_event.payload.resume_stage == WorkflowStage.TONE
+
+    genre_stage = next(
+        stage for stage in snapshot.stage_states if stage.stage == WorkflowStage.GENRE
+    )
+    assert genre_stage.last_event_type == "workflow.stage_changed"
+    assert genre_stage.last_event_summary == "Updated genre stage to completed."
+
+
 def test_update_stage_state_invalidates_downstream_outputs_after_upstream_edit(db_session) -> None:
     service = SessionService(db_session)
     snapshot = service.create_session(working_title="Regeneration Test")
@@ -343,6 +401,9 @@ def test_update_stage_state_invalidates_downstream_outputs_after_upstream_edit(d
     assert stage_map[WorkflowStage.COMPOSITION].status == WorkflowStageState.NEEDS_REGENERATION
     assert stage_map[WorkflowStage.FINALIZE].status == WorkflowStageState.NEEDS_REGENERATION
     assert stage_map[WorkflowStage.PITCHES].detail == "Accepted a revised brief."
+    assert stage_map[WorkflowStage.PITCHES].last_event_type == "workflow.stage_changed"
+    assert "invalidated pitches" in stage_map[WorkflowStage.BRIEF].last_event_summary
+    assert "invalidated pitches" in stage_map[WorkflowStage.PITCHES].last_event_summary
 
 
 def test_list_recent_sessions_returns_latest_first_with_progress_counts(db_session) -> None:
@@ -375,3 +436,10 @@ def test_load_session_snapshot_raises_for_missing_session(db_session) -> None:
 
     with pytest.raises(SessionNotFoundError):
         service.load_session_snapshot("missing-session-id")
+
+
+def test_load_session_history_raises_for_missing_session(db_session) -> None:
+    service = SessionService(db_session)
+
+    with pytest.raises(SessionNotFoundError):
+        service.load_session_history("missing-session-id")

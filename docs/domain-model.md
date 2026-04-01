@@ -59,7 +59,7 @@ surface selected child IDs without forcing the first migration into a web of cir
 | `composition_segment` | One planned or written segment of the story. | segment index, planned summary, text, revision number, superseded segment, status. | Supports interruption, partial persistence, and rewrites of earlier sections. |
 | `audio_job` | Parent job record for narration generation. | voice, speed, music setting, progress, status, compiled asset pointer. | Audio should be resumable and segment-aware. |
 | `export_asset` | Durable artifact metadata for text and audio outputs. | asset kind, storage key, MIME type, byte size, checksum, readiness status. | Covers `.docx`, final audio, and intermediate durable artifacts when needed. |
-| `event_log_entry` | Append-only session history. | actor, event type, stage context, payload, created_at, version. | Supports replay, resume hydration, debugging, and audit. |
+| `event_log_entry` | Append-only session history. | actor, event type, stage context, payload with `schema_version`, created_at. | Supports replay, resume hydration, debugging, and audit. |
 
 ## Canonical Workflow Stages
 

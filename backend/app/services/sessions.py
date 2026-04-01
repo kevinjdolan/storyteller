@@ -23,6 +23,8 @@ from app.models import (
     PitchView,
     RecentSessionSummary,
     SessionCatalogSelection,
+    SessionEventActor,
+    SessionHistoryView,
     SessionProgress,
     SessionSnapshot,
     SessionStageStateView,
@@ -39,6 +41,7 @@ from app.repositories import (
     StorySessionRepository,
     WorkflowStageStateRepository,
 )
+from app.services.event_log import SessionEventLogService
 
 
 class SessionServiceError(Exception):
@@ -58,11 +61,22 @@ class SessionService:
         self._session = session
         self._sessions = StorySessionRepository(session)
         self._stage_states = WorkflowStageStateRepository(session)
+        self._event_log = SessionEventLogService(session)
 
-    def create_session(self, *, working_title: str | None = None) -> SessionSnapshot:
+    def create_session(
+        self,
+        *,
+        working_title: str | None = None,
+        actor: SessionEventActor | None = None,
+    ) -> SessionSnapshot:
         story_session = self._sessions.create(working_title=_normalize_optional_text(working_title))
         stage_map = self._stage_states.ensure_for_session(story_session)
         self._apply_rollups(story_session, stage_map)
+        self._event_log.record_session_created(
+            story_session.id,
+            working_title=story_session.working_title,
+            actor=actor,
+        )
         self._session.commit()
         return self.load_session_snapshot(story_session.id)
 
@@ -80,6 +94,25 @@ class SessionService:
         sessions = self._sessions.list_recent(limit=limit)
         return [_build_recent_session_summary(story_session) for story_session in sessions]
 
+    def load_session_history(
+        self,
+        session_id: str,
+        *,
+        limit: int | None = None,
+        after_sequence_number: int | None = None,
+    ) -> SessionHistoryView:
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be greater than zero")
+
+        if not self._sessions.exists(session_id):
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        return self._event_log.list_session_history(
+            session_id,
+            limit=limit,
+            after_sequence_number=after_sequence_number,
+        )
+
     def update_stage_state(
         self,
         session_id: str,
@@ -87,6 +120,7 @@ class SessionService:
         stage: WorkflowStage,
         status: WorkflowStageState,
         detail: str | None = None,
+        actor: SessionEventActor | None = None,
     ) -> SessionSnapshot:
         story_session = self._sessions.get_for_update(session_id)
         if story_session is None:
@@ -96,8 +130,10 @@ class SessionService:
         self._validate_stage_transition(stage_map, stage=stage, status=status)
 
         snapshot = stage_map[stage]
+        previous_status = snapshot.status
         now = utc_now()
         snapshot.detail = _normalize_optional_text(detail)
+        invalidated_stages: list[WorkflowStage] = []
 
         if status == WorkflowStageState.DRAFT:
             snapshot.status = WorkflowStageState.DRAFT
@@ -111,12 +147,36 @@ class SessionService:
             snapshot.status = WorkflowStageState.COMPLETED
             snapshot.started_at = snapshot.started_at or now
             snapshot.completed_at = now
-            self._invalidate_dependent_stages(stage_map, stage=stage, detail=snapshot.detail)
+            invalidated_stages = self._invalidate_dependent_stages(
+                stage_map,
+                stage=stage,
+                detail=snapshot.detail,
+            )
         else:
             snapshot.status = WorkflowStageState.NEEDS_REGENERATION
-            self._invalidate_dependent_stages(stage_map, stage=stage, detail=snapshot.detail)
+            invalidated_stages = self._invalidate_dependent_stages(
+                stage_map,
+                stage=stage,
+                detail=snapshot.detail,
+            )
 
         self._apply_rollups(story_session, stage_map)
+        stage_event = self._event_log.record_stage_state_changed(
+            story_session.id,
+            stage=stage,
+            previous_status=previous_status,
+            status=snapshot.status,
+            detail=snapshot.detail,
+            invalidated_stages=invalidated_stages,
+            current_stage=story_session.current_stage,
+            resume_stage=story_session.resume_stage,
+            furthest_completed_stage=story_session.furthest_completed_stage,
+            overall_status=story_session.overall_status,
+            actor=actor,
+        )
+        snapshot.last_event = stage_event
+        for invalidated_stage in invalidated_stages:
+            stage_map[invalidated_stage].last_event = stage_event
         self._session.commit()
         return self.load_session_snapshot(story_session.id)
 
@@ -149,11 +209,12 @@ class SessionService:
         *,
         stage: WorkflowStage,
         detail: str | None,
-    ) -> None:
+    ) -> list[WorkflowStage]:
         if stage == WorkflowStage.FINALIZE:
-            return
+            return []
 
         reason = detail or f"Needs regeneration after {stage.value} changed."
+        invalidated_stages: list[WorkflowStage] = []
 
         for invalidated_stage in get_invalidated_stages_after_edit(stage):
             snapshot = stage_map[invalidated_stage]
@@ -162,6 +223,9 @@ class SessionService:
 
             snapshot.status = WorkflowStageState.NEEDS_REGENERATION
             snapshot.detail = reason
+            invalidated_stages.append(invalidated_stage)
+
+        return invalidated_stages
 
     def _apply_rollups(
         self,

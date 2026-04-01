@@ -7,6 +7,7 @@ Current entrypoints:
 - `product-brief.md`: product expectations and workflow
 - `architecture-overview.md`: target system shape and durable boundaries
 - `domain-model.md`: durable session entities, workflow-stage contract, and stage-state rules
+- `event-taxonomy.md`: append-only event families, payload versioning rules, and helper usage
 - `genre-tone-catalog.md`: curated catalog provenance, editing rules, and seed command
 - `storage-buckets-and-prefixes.md`: bucket roles, stable object-key conventions, and storage usage
 - `system-diagram.md`: one-page runtime diagram for browser, API, worker, storage, and Gemini flows

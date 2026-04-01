@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utc_now
+from app.models.events import EventActorType
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -65,13 +66,6 @@ class AssetStatus(str, Enum):
     READY = "ready"
     FAILED = "failed"
     SUPERSEDED = "superseded"
-
-
-class EventActorType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-    SERVICE = "service"
 
 
 WORKFLOW_STAGE_ENUM = build_enum(WorkflowStage, "workflow_stage")

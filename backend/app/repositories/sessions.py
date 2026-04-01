@@ -71,6 +71,10 @@ class StorySessionRepository:
         )
         return self._session.execute(stmt).scalar_one_or_none()
 
+    def exists(self, session_id: str) -> bool:
+        stmt = select(StorySession.id).where(StorySession.id == session_id).limit(1)
+        return self._session.execute(stmt).scalar_one_or_none() is not None
+
     def get_for_update(self, session_id: str) -> StorySession | None:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)
