@@ -10,6 +10,7 @@ Current entrypoints:
 - `chat-to-ui-actions.md`: proposed action contract, action catalog, default confirmation policy, and deterministic action-policy evaluator
 - `chat-action-echoes.md`: transcript echo rules, durable wiring, and compact summary guidelines for UI and chat actions
 - `chat-to-ui-actions.schema.json`: machine-readable schema bundle for chat-to-UI proposed actions
+- `story-workflow-tool-registry.md`: shared registry for story-operation tools, worker job types, and chat-action mappings
 - `event-taxonomy.md`: append-only event families, payload versioning rules, and helper usage
 - `realtime-events.md`: session-channel contract, live event families, replay rules, and local auth assumptions
 - `realtime-events.schema.json`: machine-readable schema bundle for subscription frames and session events

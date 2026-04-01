@@ -292,6 +292,8 @@ class GeminiIntentParserAdapter:
 
 
 def render_intent_parser_prompt(context: IntentParserPromptContext) -> str:
+    from app.services.story_tools import get_story_workflow_tool_prompt_catalog
+
     template = Template(_read_prompt_template())
     return template.substitute(
         action_catalog_json=json.dumps(_ACTION_CATALOG, indent=2, sort_keys=True),
@@ -302,6 +304,11 @@ def render_intent_parser_prompt(context: IntentParserPromptContext) -> str:
         ),
         stage_context_json=json.dumps(
             context.stage_context.model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        ),
+        story_tool_catalog_json=json.dumps(
+            get_story_workflow_tool_prompt_catalog(),
             indent=2,
             sort_keys=True,
         ),

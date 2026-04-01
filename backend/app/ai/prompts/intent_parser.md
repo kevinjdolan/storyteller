@@ -18,6 +18,9 @@ $action_catalog_json
 Default policy by action type:
 $default_policy_json
 
+Related backend tool registry:
+$story_tool_catalog_json
+
 Current stage context:
 $stage_context_json
 

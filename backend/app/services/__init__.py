@@ -29,6 +29,16 @@ from app.services.sessions import (
     SessionServiceError,
     UnsupportedSessionContextUpdateError,
 )
+from app.services.story_tools import (
+    StoryWorkflowActionRouter,
+    StoryWorkflowToolDefinition,
+    StoryWorkflowToolRegistry,
+    StoryWorkflowToolService,
+    StoryWorkflowToolServiceError,
+    get_story_workflow_tool_prompt_catalog,
+    get_story_workflow_tool_registry,
+    get_story_workflow_tool_schema_bundle,
+)
 
 __all__ = [
     "AssetNotFoundError",
@@ -51,5 +61,13 @@ __all__ = [
     "SessionEventLogService",
     "SessionService",
     "SessionServiceError",
+    "StoryWorkflowActionRouter",
+    "StoryWorkflowToolDefinition",
+    "StoryWorkflowToolRegistry",
+    "StoryWorkflowToolService",
+    "StoryWorkflowToolServiceError",
     "UnsupportedSessionContextUpdateError",
+    "get_story_workflow_tool_prompt_catalog",
+    "get_story_workflow_tool_registry",
+    "get_story_workflow_tool_schema_bundle",
 ]

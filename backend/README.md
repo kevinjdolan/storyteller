@@ -9,7 +9,7 @@ relational models, and durable background job processing.
   - `api/`: unversioned and versioned route modules
   - `db/`: SQLAlchemy metadata, ORM models, engine/session helpers, and health placeholders
   - `models/`: API response models and future domain models
-  - `services/`: backend-owned business logic
+  - `services/`: backend-owned business logic, including the shared story workflow tool registry
   - `settings/`: environment-backed application settings
   - `storage/`: object storage abstraction, bucket/path strategy, and emulator smoke test
   - `worker/`: the durable PostgreSQL-backed worker loop and handler registry
@@ -133,8 +133,18 @@ Core entrypoints:
 - `BackgroundJobService.heartbeat_job(...)`: extend the lease while work is still running
 - `python -m app.worker`: run the polling worker against the configured database
 
-The default worker registry includes a `demo.echo` handler that is useful for smoke tests and
-verification before composition and audio handlers land in later prompts.
+The default worker registry includes:
+
+- `demo.echo`: smoke-test handler for queue verification
+- `story.*`: registry-backed story workflow tool handlers such as pitch generation, setup updates,
+  composition, and audio start-up
+
+The shared story workflow tool registry lives in
+[`backend/app/services/story_tools.py`](/Users/kevin/code/storyteller/backend/app/services/story_tools.py)
+with typed request and result models in
+[`backend/app/models/story_tools.py`](/Users/kevin/code/storyteller/backend/app/models/story_tools.py).
+Reviewer-facing documentation for the registry is in
+[docs/story-workflow-tool-registry.md](/Users/kevin/code/storyteller/docs/story-workflow-tool-registry.md).
 
 ## Seeded catalog
 

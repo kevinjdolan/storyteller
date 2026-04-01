@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, TypeVar
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -18,6 +18,7 @@ from app.services import (
 from app.worker.registry import JobHandlerRegistry
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 @dataclass
@@ -25,6 +26,7 @@ class JobExecutionContext:
     claim: ClaimedBackgroundJob
     worker_id: str
     _heartbeat_callback: Callable[[], BackgroundJobRecord]
+    _session_factory: sessionmaker[Session]
 
     @property
     def job_id(self) -> str:
@@ -44,6 +46,17 @@ class JobExecutionContext:
 
     def heartbeat(self) -> BackgroundJobRecord:
         return self._heartbeat_callback()
+
+    def with_session(self, operation: Callable[[Session], T]) -> T:
+        session = self._session_factory()
+
+        try:
+            return operation(session)
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
 
 class JobWorker:
@@ -97,6 +110,7 @@ class JobWorker:
                     lease_duration=self._lease_duration,
                 )
             ),
+            _session_factory=self._session_factory,
         )
 
         try:
