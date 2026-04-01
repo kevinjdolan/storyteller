@@ -58,21 +58,48 @@ The repo is intended to run locally with Docker Compose. At the current scaffold
 
 - `frontend/` contains a Vite React app served on `http://localhost:8566`
 - `backend/` contains a FastAPI app served on `http://localhost:8565`
+- `infra/compose/` holds the canonical Compose file for local orchestration
 - `tools/webapp-qa/` contains the browser automation container used for local UI verification
 
 Start the current stack with:
 
 ```bash
-docker compose up --build
+./scripts/dev-compose.sh up --build
 ```
 
 The current scaffold does not yet include PostgreSQL or the file-backed GCS emulator, but both are required parts of the target system and will be added through later prompt work. `secrets.yaml` is already gitignored and reserved for local-only credentials.
 
 ## Repository Shape
 
-- `frontend/`: React + Vite client application
-- `backend/`: FastAPI application and future domain services
-- `docs/`: product and architecture notes
+```text
+.
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   └── worker/
+│   ├── migrations/
+│   ├── Dockerfile
+│   ├── README.md
+│   └── requirements.txt
+├── docs/
+├── frontend/
+├── infra/
+│   ├── compose/
+│   │   └── docker-compose.yml
+│   └── persistence/
+├── prompts/
+├── scripts/
+├── test-assets/
+└── tools/
+    └── webapp-qa/
+```
+
+- `frontend/`: browser client and future TypeScript UI modules
+- `backend/`: API code, worker home, and migration home
+- `infra/`: Compose definitions and infrastructure notes
+- `docs/`: product notes, architecture notes, and future ADRs
+- `scripts/`: developer entrypoints such as `dev-compose.sh`
+- `test-assets/`: reusable fixtures for UI, audio, and integration testing
 - `prompts/`: sequential build prompts and task summaries
 - `tools/`: local QA and developer tooling
 
