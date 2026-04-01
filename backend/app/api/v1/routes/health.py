@@ -4,7 +4,6 @@ from app.models import HealthResponse
 from app.services.health import build_health_response
 from app.settings import get_settings
 
-
 router = APIRouter(tags=["health"])
 
 

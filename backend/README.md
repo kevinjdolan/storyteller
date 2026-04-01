@@ -48,6 +48,8 @@ Useful commands:
 
 ```bash
 pytest
+python -m ruff check app tests
+python -m ruff format app tests
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
 ```
 

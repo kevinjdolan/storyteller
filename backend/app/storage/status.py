@@ -4,9 +4,7 @@ from app.settings import AppSettings
 
 def get_object_storage_dependency_status(settings: AppSettings) -> DependencyStatus:
     public_url_detail = (
-        f" Public URL: {settings.gcs_public_url}."
-        if settings.gcs_public_url
-        else ""
+        f" Public URL: {settings.gcs_public_url}." if settings.gcs_public_url else ""
     )
     bucket_detail = ", ".join(
         (

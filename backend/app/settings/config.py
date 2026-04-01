@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
-
 
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:8566",
@@ -22,13 +21,9 @@ FIELD_HINTS = {
     "gemini.api_key": "STORYTELLER_GEMINI_API_KEY or gemini.api_key",
     "gcs.endpoint": "STORYTELLER_GCS_ENDPOINT or gcs.endpoint",
     "gcs.project_id": "STORYTELLER_GCS_PROJECT_ID or gcs.project_id",
-    "gcs.buckets.sessions": (
-        "STORYTELLER_GCS_SESSIONS_BUCKET_NAME or gcs.buckets.sessions"
-    ),
+    "gcs.buckets.sessions": ("STORYTELLER_GCS_SESSIONS_BUCKET_NAME or gcs.buckets.sessions"),
     "gcs.buckets.audio": "STORYTELLER_GCS_AUDIO_BUCKET_NAME or gcs.buckets.audio",
-    "gcs.buckets.exports": (
-        "STORYTELLER_GCS_EXPORTS_BUCKET_NAME or gcs.buckets.exports"
-    ),
+    "gcs.buckets.exports": ("STORYTELLER_GCS_EXPORTS_BUCKET_NAME or gcs.buckets.exports"),
 }
 
 
@@ -191,15 +186,11 @@ def _load_secrets_file(path: Path | None) -> dict[str, Any]:
         raw_data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise SettingsValidationError(
-            (
-                f"Could not read secrets file at {path}: {exc.strerror or exc}",
-            ),
+            (f"Could not read secrets file at {path}: {exc.strerror or exc}",),
         ) from exc
     except yaml.YAMLError as exc:
         raise SettingsValidationError(
-            (
-                f"Could not parse secrets file at {path}: {exc}",
-            ),
+            (f"Could not parse secrets file at {path}: {exc}",),
         ) from exc
 
     if raw_data is None:
@@ -207,9 +198,7 @@ def _load_secrets_file(path: Path | None) -> dict[str, Any]:
 
     if not isinstance(raw_data, dict):
         raise SettingsValidationError(
-            (
-                f"Expected a mapping at the root of {path}, found {type(raw_data).__name__}.",
-            ),
+            (f"Expected a mapping at the root of {path}, found {type(raw_data).__name__}.",),
         )
 
     return raw_data
@@ -311,11 +300,7 @@ def _build_environment_payload(environ: Mapping[str, str]) -> dict[str, Any]:
 
 def _prune_none_values(value: Any) -> Any:
     if isinstance(value, dict):
-        pruned = {
-            key: _prune_none_values(item)
-            for key, item in value.items()
-            if item is not None
-        }
+        pruned = {key: _prune_none_values(item) for key, item in value.items() if item is not None}
         return pruned
 
     return value

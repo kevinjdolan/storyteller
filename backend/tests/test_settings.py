@@ -7,11 +7,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.main import create_app
 from app.settings import SettingsValidationError, get_settings, load_settings
-
+from fastapi.testclient import TestClient
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -198,16 +196,14 @@ def test_missing_required_settings_raise_readable_validation_errors() -> None:
 
     assert "Storyteller configuration is invalid." in message
     assert (
-        "- database.url: missing required setting from "
-        "STORYTELLER_DATABASE_URL or database.url"
+        "- database.url: missing required setting from STORYTELLER_DATABASE_URL or database.url"
     ) in message
     assert (
         "- gemini.api_key: missing required setting from "
         "STORYTELLER_GEMINI_API_KEY or gemini.api_key"
     ) in message
     assert (
-        "- gcs.endpoint: missing required setting from "
-        "STORYTELLER_GCS_ENDPOINT or gcs.endpoint"
+        "- gcs.endpoint: missing required setting from STORYTELLER_GCS_ENDPOINT or gcs.endpoint"
     ) in message
     assert "STORYTELLER_* environment variables" in message
 
