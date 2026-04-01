@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router as api_router
 from app.api.v1.router import router as api_v1_router
-from app.settings import AppSettings, get_settings
+from app.settings import AppSettings, SettingsValidationError, get_settings
 
 
 logger = logging.getLogger(__name__)
@@ -42,12 +42,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
+    try:
+        settings = get_settings()
+    except SettingsValidationError as exc:
+        raise SystemExit(exc.format_for_cli()) from None
+
+    docs_enabled = settings.feature_flags.enable_api_docs
 
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
         lifespan=lifespan,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     app.add_middleware(

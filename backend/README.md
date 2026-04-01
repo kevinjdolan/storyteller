@@ -36,6 +36,14 @@ The local entrypoint reads `STORYTELLER_*` environment variables and defaults to
 - environment: `development`
 - versioned API prefix: `/api/v1`
 
+For local development, copy the repository-root example file and add a Gemini key:
+
+```bash
+cp ../secrets.example.yaml ../secrets.yaml
+```
+
+The settings module merges built-in defaults, `secrets.yaml`, and then `STORYTELLER_*` environment variables. Environment variables win when both sources set the same field. The backend-only Gemini key lives in `secrets.yaml` or the backend process environment and is never sent to the browser.
+
 Useful commands:
 
 ```bash
@@ -48,3 +56,5 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
 - `GET /health`: primary service health endpoint
 - `GET /api/v1/health`: versioned API health endpoint
 - `GET /api/hello`: compatibility endpoint kept for the current frontend scaffold
+
+More detail on file discovery, supported YAML shape, and matching environment variables is in [docs/secrets-and-local-config.md](/Users/kevin/code/storyteller/docs/secrets-and-local-config.md).

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import uvicorn
 
-from app.settings import get_settings
+from app.settings import SettingsValidationError, get_settings
 
 
 def main() -> None:
-    settings = get_settings()
+    try:
+        settings = get_settings()
+    except SettingsValidationError as exc:
+        raise SystemExit(exc.format_for_cli()) from None
 
     uvicorn.run(
         "app.main:app",
