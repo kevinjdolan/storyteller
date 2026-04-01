@@ -7,9 +7,8 @@ Create Date: 2026-03-31 23:25:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260331_02"
@@ -19,7 +18,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("tone_profiles", sa.Column("default_planning_hints", sa.JSON(), nullable=True))
+    op.add_column(
+        "tone_profiles",
+        sa.Column("default_planning_hints", sa.JSON(), nullable=True),
+    )
 
 
 def downgrade() -> None:

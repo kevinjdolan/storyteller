@@ -8,6 +8,7 @@ from app.services.assets import (
     SessionAssetService,
 )
 from app.services.event_log import SessionEventLogService
+from app.services.intent_parser import SessionIntentParserService
 from app.services.jobs import (
     BackgroundJobLeaseLostError,
     BackgroundJobNotFoundError,
@@ -35,6 +36,7 @@ __all__ = [
     "BackgroundJobServiceError",
     "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
+    "SessionIntentParserService",
     "SessionNotFoundError",
     "SessionAssetService",
     "SessionEventLogService",

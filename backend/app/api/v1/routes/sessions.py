@@ -5,8 +5,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db_session
-from app.models import CreateSessionRequest, RecentSessionSummary, SessionSnapshot
+from app.ai import IntentParserAdapter
+from app.api.dependencies import get_db_session, get_intent_parser_adapter
+from app.models import (
+    CreateSessionRequest,
+    ParseChatIntentRequest,
+    ParsedChatIntentResponse,
+    RecentSessionSummary,
+    SessionSnapshot,
+)
+from app.services import SessionIntentParserService
 from app.services.sessions import SessionNotFoundError, SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -55,3 +63,26 @@ def create_session(
     return SessionService(db_session).create_session(
         working_title=payload.working_title if payload is not None else None,
     )
+
+
+@router.post(
+    "/{session_id}/chat/intents",
+    response_model=ParsedChatIntentResponse,
+    summary="Parse a chat message into structured UI actions",
+)
+def parse_chat_intents(
+    session_id: str,
+    payload: ParseChatIntentRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    intent_parser: Annotated[IntentParserAdapter, Depends(get_intent_parser_adapter)],
+) -> ParsedChatIntentResponse:
+    try:
+        return SessionIntentParserService(db_session, intent_parser).parse_user_message(
+            session_id,
+            message=payload.message,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

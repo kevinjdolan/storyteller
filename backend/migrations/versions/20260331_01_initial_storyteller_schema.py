@@ -7,9 +7,8 @@ Create Date: 2026-03-31 22:30:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260331_01"
@@ -187,8 +186,18 @@ def upgrade() -> None:
         ["overall_status", "updated_at"],
         unique=False,
     )
-    op.create_index("ix_story_sessions_resume_stage", "story_sessions", ["resume_stage"], unique=False)
-    op.create_index("ix_story_sessions_current_stage", "story_sessions", ["current_stage"], unique=False)
+    op.create_index(
+        "ix_story_sessions_resume_stage",
+        "story_sessions",
+        ["resume_stage"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_story_sessions_current_stage",
+        "story_sessions",
+        ["current_stage"],
+        unique=False,
+    )
     op.create_index(
         "ix_story_sessions_selected_genre_id",
         "story_sessions",
@@ -264,7 +273,11 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_workflow_stage_states"),
-        sa.UniqueConstraint("session_id", "stage", name="uq_workflow_stage_states_session_id_stage"),
+        sa.UniqueConstraint(
+            "session_id",
+            "stage",
+            name="uq_workflow_stage_states_session_id_stage",
+        ),
     )
     op.create_index(
         "ix_workflow_stage_states_session_id_status",
@@ -293,7 +306,11 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_story_briefs"),
-        sa.UniqueConstraint("session_id", "revision_number", name="uq_story_briefs_session_id_revision_number"),
+        sa.UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_story_briefs_session_id_revision_number",
+        ),
     )
     op.create_index(
         "ix_story_briefs_session_id_is_active",
@@ -413,7 +430,11 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_beat_sheets"),
-        sa.UniqueConstraint("session_id", "revision_number", name="uq_beat_sheets_session_id_revision_number"),
+        sa.UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_beat_sheets_session_id_revision_number",
+        ),
     )
     op.create_index(
         "ix_beat_sheets_session_id_is_selected",
@@ -451,7 +472,11 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_story_setups"),
-        sa.UniqueConstraint("session_id", "revision_number", name="uq_story_setups_session_id_revision_number"),
+        sa.UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_story_setups_session_id_revision_number",
+        ),
     )
     op.create_index(
         "ix_story_setups_session_id_is_selected",
@@ -583,7 +608,12 @@ def upgrade() -> None:
             nullable=False,
             server_default="1.0",
         ),
-        sa.Column("include_background_music", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "include_background_music",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
         sa.Column("music_profile", sa.String(length=120), nullable=True),
         sa.Column("estimated_duration_seconds", sa.Integer(), nullable=True),
         sa.Column("current_segment_index", sa.Integer(), nullable=True),

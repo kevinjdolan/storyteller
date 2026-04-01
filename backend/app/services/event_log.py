@@ -12,6 +12,7 @@ from app.models.events import (
     AIOutputKind,
     AIOutputRecordedEventPayload,
     AudioProgressEventPayload,
+    ChatIntentParsedEventPayload,
     ChatMessageRecordedEventPayload,
     ChatMessageRole,
     CompositionProgressEventPayload,
@@ -30,6 +31,7 @@ from app.models.events import (
     parse_event_payload,
     serialize_event_payload,
 )
+from app.models.intent_parser import ParsedChatIntentResponse
 from app.repositories import EventLogRepository
 
 DEFAULT_LOCAL_USER_ACTOR = SessionEventActor(
@@ -43,6 +45,10 @@ DEFAULT_ASSISTANT_ACTOR = SessionEventActor(
 DEFAULT_SYSTEM_ACTOR = SessionEventActor(
     actor_type=EventActorType.SYSTEM,
     actor_id="worker",
+)
+DEFAULT_INTENT_PARSER_ACTOR = SessionEventActor(
+    actor_type=EventActorType.SERVICE,
+    actor_id="intent-parser",
 )
 
 
@@ -265,6 +271,54 @@ class SessionEventLogService:
                 content_preview=_truncate_preview(normalized_content),
                 content_length=len(normalized_content),
                 source=source,
+            ),
+        )
+
+    def record_chat_intent_parsed(
+        self,
+        session_id: str,
+        *,
+        prompt_version: str,
+        model_id: str,
+        current_stage: WorkflowStage,
+        stage_label: str,
+        stage_description: str,
+        stage_status: WorkflowStageState,
+        stage_detail: str | None,
+        session_summary: str,
+        user_message: str,
+        rendered_prompt: str,
+        result: ParsedChatIntentResponse,
+        raw_response: Mapping[str, Any] | list[Any] | str | None = None,
+        actor: SessionEventActor | None = None,
+    ) -> EventLogEntry:
+        action_count = len(result.proposed_actions.actions)
+        if action_count == 0:
+            summary = "Parsed chat intent without actionable UI changes."
+        elif action_count == 1:
+            summary = "Parsed chat intent into 1 proposed action."
+        else:
+            summary = f"Parsed chat intent into {action_count} proposed actions."
+
+        return self.append_event(
+            session_id,
+            actor=actor or DEFAULT_INTENT_PARSER_ACTOR,
+            event_type=SessionEventType.CHAT_INTENT_PARSED,
+            summary=summary,
+            stage=current_stage,
+            payload=ChatIntentParsedEventPayload(
+                prompt_version=prompt_version,
+                model_id=model_id,
+                current_stage=current_stage,
+                stage_label=stage_label,
+                stage_description=stage_description,
+                stage_status=stage_status,
+                stage_detail=stage_detail,
+                session_summary=session_summary,
+                user_message=user_message,
+                rendered_prompt=rendered_prompt,
+                result=result,
+                raw_response=raw_response,
             ),
         )
 

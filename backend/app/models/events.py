@@ -7,6 +7,7 @@ from typing import Any, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.intent_parser import ParsedChatIntentResponse
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -17,6 +18,7 @@ class SessionEventType(str, Enum):
     AI_OUTPUT_RECORDED = "ai.output.recorded"
     USER_EDIT_RECORDED = "content.user_edit.recorded"
     CHAT_MESSAGE_RECORDED = "chat.message.recorded"
+    CHAT_INTENT_PARSED = "chat.intent.parsed"
     UI_ACTION_RECORDED = "ui.action.recorded"
     COMPOSITION_PROGRESS_RECORDED = "composition.progress.recorded"
     AUDIO_PROGRESS_RECORDED = "audio.progress.recorded"
@@ -127,6 +129,21 @@ class ChatMessageRecordedEventPayload(EventPayload):
     source: str = "chat"
 
 
+class ChatIntentParsedEventPayload(EventPayload):
+    prompt_version: str
+    model_id: str
+    current_stage: WorkflowStage
+    stage_label: str
+    stage_description: str
+    stage_status: WorkflowStageState
+    stage_detail: str | None = None
+    session_summary: str
+    user_message: str
+    rendered_prompt: str
+    result: ParsedChatIntentResponse
+    raw_response: dict[str, Any] | list[Any] | str | None = None
+
+
 class UIActionRecordedEventPayload(EventPayload):
     action: str
     control_id: str | None = None
@@ -161,6 +178,7 @@ SessionEventPayload: TypeAlias = (
     | AIOutputRecordedEventPayload
     | UserEditRecordedEventPayload
     | ChatMessageRecordedEventPayload
+    | ChatIntentParsedEventPayload
     | UIActionRecordedEventPayload
     | CompositionProgressEventPayload
     | AudioProgressEventPayload
@@ -173,6 +191,7 @@ _EVENT_PAYLOAD_MODELS: dict[str, type[EventPayload]] = {
     SessionEventType.AI_OUTPUT_RECORDED.value: AIOutputRecordedEventPayload,
     SessionEventType.USER_EDIT_RECORDED.value: UserEditRecordedEventPayload,
     SessionEventType.CHAT_MESSAGE_RECORDED.value: ChatMessageRecordedEventPayload,
+    SessionEventType.CHAT_INTENT_PARSED.value: ChatIntentParsedEventPayload,
     SessionEventType.UI_ACTION_RECORDED.value: UIActionRecordedEventPayload,
     SessionEventType.COMPOSITION_PROGRESS_RECORDED.value: CompositionProgressEventPayload,
     SessionEventType.AUDIO_PROGRESS_RECORDED.value: AudioProgressEventPayload,
