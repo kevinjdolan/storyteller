@@ -356,6 +356,32 @@ def test_update_stage_state_records_event_history_and_stage_last_event(db_sessio
     assert genre_stage.last_event_summary == "Updated genre stage to completed."
 
 
+def test_record_ui_action_persists_a_history_entry(db_session) -> None:
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Action Echoes")
+
+    event = service.record_ui_action(
+        snapshot.id,
+        action="navigate_to_stage",
+        stage=WorkflowStage.AUDIO,
+        control_id="stage-navigator",
+        value_summary="Audio",
+        origin="workspace",
+    )
+
+    assert event.event_type == "ui.action.recorded"
+    assert event.stage == WorkflowStage.AUDIO
+    assert event.payload is not None
+    assert event.payload.action == "navigate_to_stage"
+    assert event.payload.control_id == "stage-navigator"
+    assert event.payload.value_summary == "Audio"
+    assert event.payload.origin == "workspace"
+
+    history = service.load_session_history(snapshot.id)
+    assert history.latest_sequence_number == 2
+    assert history.events[-1].event_type == "ui.action.recorded"
+
+
 def test_update_stage_state_invalidates_downstream_outputs_after_upstream_edit(db_session) -> None:
     service = SessionService(db_session)
     snapshot = service.create_session(working_title="Regeneration Test")

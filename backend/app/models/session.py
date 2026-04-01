@@ -140,6 +140,14 @@ class CreateSessionRequest(BaseModel):
     working_title: str | None = None
 
 
+class RecordSessionUIActionRequest(BaseModel):
+    action: str = Field(min_length=1)
+    stage: WorkflowStage | None = None
+    control_id: str | None = None
+    value_summary: str | None = None
+    origin: str = Field(default="workspace", min_length=1)
+
+
 class RecentSessionSummary(BaseModel):
     id: str
     display_title: str

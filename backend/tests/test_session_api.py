@@ -99,10 +99,77 @@ def test_get_session_snapshot_endpoint_returns_full_snapshot(
     assert payload["stage_states"][0]["status"] == "draft"
 
 
+def test_get_session_history_endpoint_returns_durable_timeline(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "History Check"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}/history")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["session_id"] == created["id"]
+    assert payload["latest_sequence_number"] == 1
+    assert payload["events"][0]["event_type"] == "session.created"
+
+
+def test_record_session_ui_action_endpoint_returns_recorded_event(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Echo Source"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/ui-actions",
+        json={
+            "action": "navigate_to_stage",
+            "stage": "audio",
+            "control_id": "stage-navigator",
+            "value_summary": "Audio",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+
+    assert payload["event_type"] == "ui.action.recorded"
+    assert payload["stage"] == "audio"
+    assert payload["payload"]["action"] == "navigate_to_stage"
+    assert payload["payload"]["control_id"] == "stage-navigator"
+    assert payload["payload"]["value_summary"] == "Audio"
+    assert payload["payload"]["origin"] == "workspace"
+
+
 def test_get_session_snapshot_endpoint_returns_404_for_missing_session(
     session_api_client: TestClient,
 ) -> None:
     response = session_api_client.get("/api/v1/sessions/missing-session")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "session 'missing-session' was not found",
+    }
+
+
+def test_record_session_ui_action_endpoint_returns_404_for_missing_session(
+    session_api_client: TestClient,
+) -> None:
+    response = session_api_client.post(
+        "/api/v1/sessions/missing-session/ui-actions",
+        json={
+            "action": "navigate_to_stage",
+            "stage": "audio",
+        },
+    )
 
     assert response.status_code == 404
     assert response.json() == {

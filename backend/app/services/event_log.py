@@ -99,6 +99,9 @@ class SessionEventLogService:
             events=[_build_session_event_view(row) for row in rows],
         )
 
+    def build_event_view(self, entry: EventLogEntry) -> SessionEventView:
+        return _build_session_event_view(entry)
+
     def record_session_created(
         self,
         session_id: str,

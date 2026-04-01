@@ -12,8 +12,11 @@ from app.models import (
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
     RecentSessionSummary,
+    RecordSessionUIActionRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
+    SessionEventView,
+    SessionHistoryView,
     SessionSnapshot,
 )
 from app.services import SessionActionPolicyService, SessionIntentParserService
@@ -52,6 +55,30 @@ def get_session_snapshot(
         ) from exc
 
 
+@router.get(
+    "/{session_id}/history",
+    response_model=SessionHistoryView,
+    summary="Load durable session history",
+)
+def get_session_history(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    after_sequence_number: Annotated[int | None, Query(ge=0)] = None,
+) -> SessionHistoryView:
+    try:
+        return SessionService(db_session).load_session_history(
+            session_id,
+            limit=limit,
+            after_sequence_number=after_sequence_number,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
 @router.post(
     "",
     response_model=SessionSnapshot,
@@ -65,6 +92,33 @@ def create_session(
     return SessionService(db_session).create_session(
         working_title=payload.working_title if payload is not None else None,
     )
+
+
+@router.post(
+    "/{session_id}/ui-actions",
+    response_model=SessionEventView,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record a durable UI-originated action",
+)
+def record_session_ui_action(
+    session_id: str,
+    payload: RecordSessionUIActionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionEventView:
+    try:
+        return SessionService(db_session).record_ui_action(
+            session_id,
+            action=payload.action,
+            stage=payload.stage,
+            control_id=payload.control_id,
+            value_summary=payload.value_summary,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(

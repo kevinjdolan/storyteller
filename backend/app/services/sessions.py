@@ -24,6 +24,7 @@ from app.models import (
     SessionAssetView,
     SessionCatalogSelection,
     SessionEventActor,
+    SessionEventView,
     SessionHistoryView,
     SessionProgress,
     SessionSnapshot,
@@ -112,6 +113,32 @@ class SessionService:
             limit=limit,
             after_sequence_number=after_sequence_number,
         )
+
+    def record_ui_action(
+        self,
+        session_id: str,
+        *,
+        action: str,
+        stage: WorkflowStage | None = None,
+        control_id: str | None = None,
+        value_summary: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionEventView:
+        if not self._sessions.exists(session_id):
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        event = self._event_log.record_ui_action(
+            session_id,
+            action=action,
+            stage=stage,
+            control_id=control_id,
+            value_summary=value_summary,
+            origin=origin,
+            actor=actor,
+        )
+        self._session.commit()
+        return self._event_log.build_event_view(event)
 
     def update_stage_state(
         self,
