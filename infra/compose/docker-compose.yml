@@ -8,9 +8,10 @@ services:
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      STORYTELLER_ENVIRONMENT: development
     ports:
       - "8565:8565"
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
+    command: python -m app
     healthcheck:
       test:
         - CMD
@@ -18,7 +19,7 @@ services:
         - -c
         - |
           import sys, urllib.request
-          urllib.request.urlopen("http://127.0.0.1:8565/api/hello")
+          urllib.request.urlopen("http://127.0.0.1:8565/health")
           sys.exit(0)
       interval: 5s
       timeout: 5s
