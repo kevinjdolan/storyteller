@@ -1,7 +1,61 @@
+name: storyteller
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: storyteller
+      POSTGRES_USER: storyteller
+      POSTGRES_PASSWORD: storyteller
+    ports:
+      - "8567:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U storyteller -d storyteller
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  gcs:
+    image: fsouza/fake-gcs-server:1.54.0
+    restart: unless-stopped
+    command:
+      - -scheme
+      - http
+      - -backend
+      - filesystem
+      - -filesystem-root
+      - /data
+      - -public-host
+      - localhost:8568
+      - -external-url
+      - http://localhost:8568
+    ports:
+      - "8568:4443"
+    volumes:
+      - gcs_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:4443/storage/v1/b >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
   backend:
     build:
       context: ../../backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gcs:
+        condition: service_healthy
     working_dir: /app
     volumes:
       - ../../backend:/app
@@ -9,6 +63,11 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_DATABASE_URL: postgresql://storyteller:storyteller@postgres:5432/storyteller
+      STORYTELLER_GCS_BUCKET_NAME: storyteller-dev
+      STORYTELLER_GCS_ENDPOINT: http://gcs:4443
+      STORYTELLER_GCS_PROJECT_ID: storyteller-local
+      STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
     ports:
       - "8565:8565"
     command: python -m app
@@ -38,7 +97,7 @@ services:
       VITE_DEV_PROXY_TARGET: http://backend:8565
     volumes:
       - ../../frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
     ports:
       - "8566:8566"
     command: npm run dev -- --host 0.0.0.0 --port 8566
@@ -72,4 +131,7 @@ services:
     command: sleep infinity
 
 volumes:
+  frontend_node_modules:
+  postgres_data:
+  gcs_data:
   webapp_qa_node_modules:

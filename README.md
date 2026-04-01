@@ -67,7 +67,47 @@ Start the current stack with:
 ./scripts/dev-compose.sh up --build
 ```
 
-The current scaffold does not yet include PostgreSQL or the file-backed GCS emulator, but both are required parts of the target system and will be added through later prompt work. `secrets.yaml` is already gitignored and reserved for local-only credentials.
+The local Compose stack now includes:
+
+- `frontend` on `http://localhost:8566`
+- `backend` on `http://localhost:8565`
+- `postgres` on `localhost:8567`
+- `gcs` on `http://localhost:8568`
+
+`secrets.yaml` is already gitignored and reserved for local-only credentials. The compose file uses local development defaults for Postgres and the GCS emulator so a fresh clone can start without hand-editing configuration.
+
+## Docker Compose Local Stack
+
+Use the repository wrapper so Docker Compose always targets the canonical file under `infra/compose/`:
+
+```bash
+./scripts/dev-compose.sh up --build
+```
+
+Stop the stack without deleting persisted data:
+
+```bash
+./scripts/dev-compose.sh down
+```
+
+Reset the local database and file-backed object storage only when you intentionally want a clean slate:
+
+```bash
+./scripts/dev-compose.sh down --volumes
+```
+
+Persistent data lives in named Docker volumes:
+
+- `storyteller_postgres_data` for PostgreSQL
+- `storyteller_gcs_data` for the file-backed GCS emulator
+
+The backend receives the local infrastructure coordinates through environment variables in Compose:
+
+- `STORYTELLER_DATABASE_URL=postgresql://storyteller:storyteller@postgres:5432/storyteller`
+- `STORYTELLER_GCS_ENDPOINT=http://gcs:4443`
+- `STORYTELLER_GCS_BUCKET_NAME=storyteller-dev`
+- `STORYTELLER_GCS_PROJECT_ID=storyteller-local`
+- `STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568`
 
 ## Repository Shape
 

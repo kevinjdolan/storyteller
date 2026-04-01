@@ -86,9 +86,9 @@ The repository currently contains an initial scaffold:
 - `backend/`: FastAPI app with an app factory, versioned routers, settings loader, models, services, and database placeholders
 - `backend/migrations/`: reserved home for database schema history
 - `backend/app/worker/`: reserved home for background job runners
-- `infra/compose/docker-compose.yml`: local frontend, backend, and browser QA services
+- `infra/compose/docker-compose.yml`: local frontend, backend, PostgreSQL, file-backed GCS emulator, and browser QA services
 - `infra/persistence/`: notes for persistent local infrastructure data
 - `scripts/dev-compose.sh`: convenience entrypoint for the Compose stack
 - `tools/webapp-qa/`: containerized browser automation support
 
-PostgreSQL, the file-backed GCS emulator, background workers, and most domain layers are still planned work. This document records the required direction so later prompts can extend the scaffold without changing the architectural contract.
+Background workers and most domain layers are still planned work. PostgreSQL and the file-backed GCS emulator are now available in the local Compose stack so later prompts can connect durable state and artifact storage without redefining the infrastructure contract.

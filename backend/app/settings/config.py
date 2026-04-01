@@ -56,6 +56,10 @@ class AppSettings:
     api_v1_prefix: str
     cors_allowed_origins: Tuple[str, ...]
     database_url: str
+    gcs_bucket_name: str
+    gcs_endpoint: str
+    gcs_project_id: str
+    gcs_public_url: str
     log_level: str
 
 
@@ -81,5 +85,9 @@ def get_settings() -> AppSettings:
             DEFAULT_CORS_ALLOWED_ORIGINS,
         ),
         database_url=os.getenv("STORYTELLER_DATABASE_URL", "").strip(),
+        gcs_bucket_name=os.getenv("STORYTELLER_GCS_BUCKET_NAME", "").strip(),
+        gcs_endpoint=os.getenv("STORYTELLER_GCS_ENDPOINT", "").strip(),
+        gcs_project_id=os.getenv("STORYTELLER_GCS_PROJECT_ID", "").strip(),
+        gcs_public_url=os.getenv("STORYTELLER_GCS_PUBLIC_URL", "").strip(),
         log_level=os.getenv("STORYTELLER_LOG_LEVEL", "INFO").strip().upper(),
     )
