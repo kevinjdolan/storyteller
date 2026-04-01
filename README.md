@@ -61,47 +61,79 @@ The repo is intended to run locally with Docker Compose. At the current scaffold
 - `infra/compose/` holds the canonical Compose file for local orchestration
 - `tools/webapp-qa/` contains the browser automation container used for local UI verification
 
-Start the current stack with:
+Bootstrap a new clone with:
 
 ```bash
-cp secrets.example.yaml secrets.yaml
-./scripts/install-git-hooks.sh
-./scripts/dev-compose.sh up --build
+make bootstrap
 ```
 
-The local Compose stack now includes:
+That command:
+
+- creates `secrets.yaml` from `secrets.example.yaml` if it does not exist yet
+- installs the repo-managed Git hooks
+- creates or refreshes `backend/.venv`
+- syncs `frontend/node_modules`
+
+Then start the local stack with:
+
+```bash
+make up
+```
+
+The local Compose stack includes:
 
 - `frontend` on `http://localhost:8566`
 - `backend` on `http://localhost:8565`
 - `postgres` on `localhost:8567`
 - `gcs` on `http://localhost:8568`
 
-`secrets.yaml` is already gitignored and reserved for local-only credentials. Copy `secrets.example.yaml` to `secrets.yaml`, add a Gemini API key, and keep the file local. `./scripts/install-git-hooks.sh` enables the repo-managed pre-commit hook that blocks accidental commits of `secrets.yaml`, `.env` files, and obvious live key material. The compose file uses development defaults for Postgres and the GCS emulator, while the backend loads secrets from the repo-root `secrets.yaml` at container startup.
+`secrets.yaml` is already gitignored and reserved for local-only credentials. `make bootstrap` will create it from `secrets.example.yaml` when needed, but you still need to replace the placeholder Gemini API key before using AI-backed workflows. The repo-managed Git hook blocks accidental commits of `secrets.yaml`, `.env` files, and obvious live key material. The compose file uses development defaults for Postgres and the GCS emulator, while the backend loads secrets from the repo-root `secrets.yaml` at container startup.
+
+## Daily Workflow
+
+The repository now exposes a small top-level command surface through the root `Makefile`:
+
+```bash
+make help
+```
+
+The most common daily commands are:
+
+- `make bootstrap`: first-run setup for hooks, local Python deps, frontend deps, and a local `secrets.yaml`
+- `make up`: build and start the Docker Compose stack in detached mode
+- `make logs`: follow the compose logs without restarting anything
+- `make down`: stop the stack and preserve local Postgres and fake GCS data
+- `make reset`: stop the stack and remove only the Postgres and fake GCS data volumes
+- `make lint`: run the currently available lint checks
+- `make test`: run backend pytest and frontend Vitest
+- `make build`: run the frontend production build
+- `make check`: run lint, tests, and the frontend build in one pass
+
+Suggested daily loop:
+
+1. `make up`
+2. make changes in `frontend/` or `backend/`
+3. `make logs` when you need live service output
+4. `make test` for targeted automated coverage
+5. `make check` before handing work off or committing
+6. `make down` when you are done
+
+For frontend-only work, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-test`.
 
 ## Docker Compose Local Stack
 
-Use the repository wrapper so Docker Compose always targets the canonical file under `infra/compose/`:
+Use `make up`, `make down`, and `make logs` for the common compose workflow. The existing wrapper script remains the canonical compose entrypoint underneath those targets, so advanced commands can still go through:
 
 ```bash
-./scripts/dev-compose.sh up --build
-```
-
-Stop the stack without deleting persisted data:
-
-```bash
-./scripts/dev-compose.sh down
-```
-
-Reset the local database and file-backed object storage only when you intentionally want a clean slate:
-
-```bash
-./scripts/dev-compose.sh down --volumes
+./scripts/dev-compose.sh ps
 ```
 
 Persistent data lives in named Docker volumes:
 
 - `storyteller_postgres_data` for PostgreSQL
 - `storyteller_gcs_data` for the file-backed GCS emulator
+
+`make reset` removes only those two data volumes so schema or seed-data changes can start from a clean slate without forcing frontend or QA dependency reinstallation. If you intentionally want a full compose wipe, including cached dependency volumes, `./scripts/dev-compose.sh down --volumes` remains available as the deeper reset path.
 
 The backend receives the local infrastructure coordinates through environment variables in Compose:
 
@@ -114,6 +146,8 @@ The backend receives the local infrastructure coordinates through environment va
 - `STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568`
 
 The backend settings layer merges defaults, `secrets.yaml`, and environment variables in that order. More detail is in [docs/secrets-and-local-config.md](/Users/kevin/code/storyteller/docs/secrets-and-local-config.md).
+
+The root `Makefile` and the scripts under `scripts/` are written for `bash` and are intended for macOS, Linux, or WSL-based development environments. They expect `make`, Docker, `npm`, and Python 3.10 or newer to be available locally.
 
 ## Repository Shape
 

@@ -26,6 +26,7 @@ Current Compose-backed persistent volumes:
 
 Safe cleanup guidance:
 
-- `./scripts/dev-compose.sh down` stops containers and preserves both volumes
-- `./scripts/dev-compose.sh down --volumes` removes the containers and both named volumes
+- `make down` stops containers and preserves both volumes
+- `make reset` stops the stack and removes only `storyteller_postgres_data` and `storyteller_gcs_data`
+- `./scripts/dev-compose.sh down --volumes` removes all compose-declared volumes, including dependency caches
 - avoid deleting volumes unless you want to wipe the local database and object storage state
