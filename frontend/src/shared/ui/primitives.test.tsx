@@ -5,6 +5,7 @@ import {
   ProgressBar,
   StackedList,
   StackedListItem,
+  TextArea,
   TextInput,
 } from './primitives.tsx'
 
@@ -24,6 +25,27 @@ describe('shared ui primitives', () => {
     const describedBy = input.getAttribute('aria-describedby') ?? ''
 
     expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(describedBy).toContain(description.id)
+    expect(describedBy).toContain(error.id)
+  })
+
+  it('connects text areas to labels, descriptions, and errors', () => {
+    render(
+      <TextArea
+        description="Visible to the story-planning assistant."
+        error="Message cannot be blank."
+        label="Chat message"
+      />,
+    )
+
+    const textarea = screen.getByLabelText('Chat message')
+    const description = screen.getByText(
+      'Visible to the story-planning assistant.',
+    )
+    const error = screen.getByRole('alert')
+    const describedBy = textarea.getAttribute('aria-describedby') ?? ''
+
+    expect(textarea).toHaveAttribute('aria-invalid', 'true')
     expect(describedBy).toContain(description.id)
     expect(describedBy).toContain(error.id)
   })

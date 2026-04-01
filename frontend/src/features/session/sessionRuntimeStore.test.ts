@@ -7,6 +7,9 @@ import {
 describe('sessionRuntimeStore', () => {
   it('starts with an idle live stream and no pending actions', () => {
     expect(createInitialSessionRuntimeState()).toEqual({
+      chat: {
+        messages: [],
+      },
       pendingActions: [],
       eventStream: {
         connectionState: 'idle',
@@ -52,6 +55,27 @@ describe('sessionRuntimeStore', () => {
     ])
     expect(store.getState().eventStream.lastEventId).toBe('event-1')
     expect(store.getState().eventStream.lastSequenceNumber).toBe(19)
+  })
+
+  it('tracks chat transcript messages separately from the live event buffer', () => {
+    const store = createSessionRuntimeStore()
+
+    store.appendChatMessage({
+      id: 'chat-1',
+      role: 'system',
+      body: 'Session opened.',
+      createdAt: '2026-04-01T08:00:00Z',
+    })
+
+    expect(store.getState().chat.messages).toEqual([
+      {
+        id: 'chat-1',
+        role: 'system',
+        body: 'Session opened.',
+        createdAt: '2026-04-01T08:00:00Z',
+      },
+    ])
+    expect(store.getState().eventStream.events).toEqual([])
   })
 
   it('updates the connection state and allows failed pending actions', () => {

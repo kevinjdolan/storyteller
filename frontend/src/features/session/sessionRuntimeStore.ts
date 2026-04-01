@@ -1,4 +1,5 @@
 import type { WorkflowStageId } from './workflowStages.ts'
+import type { SessionChatMessage } from './chat/sessionChat.ts'
 
 export type PendingSessionActionStatus = 'pending' | 'confirmed' | 'failed'
 
@@ -41,6 +42,9 @@ export type SessionEventStreamState = {
 }
 
 export type SessionRuntimeState = {
+  chat: {
+    messages: SessionChatMessage[]
+  }
   pendingActions: PendingSessionAction[]
   eventStream: SessionEventStreamState
 }
@@ -54,6 +58,8 @@ type PendingSessionActionInput = Omit<PendingSessionAction, 'status'> & {
 export type SessionRuntimeStore = {
   getState: () => SessionRuntimeState
   subscribe: (listener: SessionRuntimeListener) => () => void
+  replaceChatMessages: (messages: SessionChatMessage[]) => void
+  appendChatMessage: (message: SessionChatMessage) => void
   enqueuePendingAction: (action: PendingSessionActionInput) => void
   resolvePendingAction: (options: {
     actionId?: string
@@ -67,9 +73,13 @@ export type SessionRuntimeStore = {
 }
 
 const maxBufferedLiveEvents = 50
+const maxBufferedChatMessages = 200
 
 export function createInitialSessionRuntimeState(): SessionRuntimeState {
   return {
+    chat: {
+      messages: [],
+    },
     pendingActions: [],
     eventStream: {
       connectionState: 'idle',
@@ -118,6 +128,24 @@ export function createSessionRuntimeStore(): SessionRuntimeStore {
         listeners.delete(listener)
       }
     },
+    replaceChatMessages: (messages) => {
+      setState({
+        ...state,
+        chat: {
+          messages: messages.slice(-maxBufferedChatMessages),
+        },
+      })
+    },
+    appendChatMessage: (message) => {
+      setState({
+        ...state,
+        chat: {
+          messages: [...state.chat.messages, message].slice(
+            -maxBufferedChatMessages,
+          ),
+        },
+      })
+    },
     enqueuePendingAction: (action) => {
       setState({
         ...state,
@@ -157,6 +185,7 @@ export function createSessionRuntimeStore(): SessionRuntimeStore {
       )
 
       setState({
+        ...state,
         pendingActions:
           event.correlationId != null
             ? state.pendingActions.map((action) =>

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   type SessionSnapshot,
@@ -5,18 +6,24 @@ import {
 } from '../../api/sessions.ts'
 import { routePaths } from '../../app/routePaths.ts'
 import {
+  useSessionChatMessages,
   useCurrentSessionSnapshotQuery,
   useSessionEventStream,
   useSessionPendingActions,
+  useSessionRuntimeActions,
 } from '../../features/session/sessionWorkspaceContext.ts'
 import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspaceProvider.tsx'
+import { SessionChatPane } from '../../features/session/chat/SessionChatPane.tsx'
+import {
+  buildInitialSessionChatMessages,
+  buildMockAssistantChatReply,
+  createSessionChatMessage,
+} from '../../features/session/chat/sessionChat.ts'
 import { workflowStageDefinitions } from '../../features/session/workflowStages.ts'
 import {
   Badge,
   Panel,
   ProgressBar,
-  StackedList,
-  StackedListItem,
   type BadgeTone,
 } from '../../shared/ui/primitives.tsx'
 import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
@@ -24,12 +31,6 @@ import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 type StatusBadgeCopy = {
   label: string
   tone: BadgeTone
-}
-
-type ChatPreviewEntry = {
-  body: string
-  id: string
-  speaker: 'assistant' | 'system' | 'user'
 }
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -110,18 +111,6 @@ function getRuntimeConnectionTone(connectionState: string): BadgeTone {
   return 'brand'
 }
 
-function getChatTone(entry: ChatPreviewEntry) {
-  if (entry.speaker === 'assistant') {
-    return 'success' as const
-  }
-
-  if (entry.speaker === 'user') {
-    return 'accent' as const
-  }
-
-  return 'brand' as const
-}
-
 function formatSavedAt(value: string) {
   return `Saved ${timestampFormatter.format(new Date(value))}`
 }
@@ -192,54 +181,44 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
   return 'Composition and audio controls will take over this area once the planning stages are complete.'
 }
 
-function buildChatPreview(snapshot: SessionSnapshot): ChatPreviewEntry[] {
-  const entries: ChatPreviewEntry[] = [
-    {
-      body: `Workspace ready. Resume at ${getStageLabel(snapshot.resume_stage)}.`,
-      id: 'workspace-opened',
-      speaker: 'system',
-    },
-  ]
-
-  if (snapshot.selected_genre) {
-    entries.push({
-      body: `Selected genre: ${snapshot.selected_genre.label}`,
-      id: 'selected-genre',
-      speaker: 'user',
-    })
+function buildChatActivityState(
+  snapshot: SessionSnapshot,
+  pendingActionsCount: number,
+) {
+  if (snapshot.active_audio_job != null) {
+    return {
+      activityLabel:
+        'Narration rendering is active. The transcript remains readable while the audio pass runs.',
+      disabledReason:
+        'The composer is paused while audio generation is active. It will reopen after narration settles.',
+      isBusy: true,
+    }
   }
 
-  if (snapshot.selected_tone_profile) {
-    entries.push({
-      body: `Selected tone: ${snapshot.selected_tone_profile.label}`,
-      id: 'selected-tone',
-      speaker: 'user',
-    })
+  if (snapshot.active_composition_job != null) {
+    return {
+      activityLabel: `Writing is ${Math.round(snapshot.active_composition_job.progress_percent)}% complete. Chat stays available for redirect notes.`,
+      disabledReason: null,
+      isBusy: true,
+    }
   }
 
-  if (snapshot.selected_pitch) {
-    entries.push({
-      body: `Accepted pitch: ${snapshot.selected_pitch.title}`,
-      id: 'selected-pitch',
-      speaker: 'assistant',
-    })
+  if (pendingActionsCount > 0) {
+    const suffix = pendingActionsCount === 1 ? '' : 's'
+
+    return {
+      activityLabel: `${pendingActionsCount} workspace action${suffix} still need confirmation from the live runtime feed.`,
+      disabledReason: null,
+      isBusy: true,
+    }
   }
 
-  if (snapshot.active_composition_job) {
-    entries.push({
-      body: `Composition progress: ${Math.round(snapshot.active_composition_job.progress_percent)}%`,
-      id: 'composition-job',
-      speaker: 'assistant',
-    })
-  } else {
-    entries.push({
-      body: `${formatSavedAt(snapshot.updated_at)}.`,
-      id: 'save-status',
-      speaker: 'system',
-    })
+  return {
+    activityLabel:
+      'Ready for notes, approvals, and stage edits from the conversation lane.',
+    disabledReason: null,
+    isBusy: false,
   }
-
-  return entries.slice(0, 5)
 }
 
 function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
@@ -332,9 +311,30 @@ function buildWorkspaceErrorMessage(error: Error, sessionId: string) {
 
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const snapshotQuery = useCurrentSessionSnapshotQuery()
+  const chatMessages = useSessionChatMessages()
   const pendingActions = useSessionPendingActions()
   const eventStream = useSessionEventStream()
+  const runtimeStore = useSessionRuntimeActions()
   const snapshot = snapshotQuery.data
+
+  useEffect(() => {
+    if (
+      snapshot == null ||
+      snapshotQuery.isPending ||
+      snapshotQuery.isError ||
+      chatMessages.length > 0
+    ) {
+      return
+    }
+
+    runtimeStore.replaceChatMessages(buildInitialSessionChatMessages(snapshot))
+  }, [
+    chatMessages.length,
+    runtimeStore,
+    snapshot,
+    snapshotQuery.isError,
+    snapshotQuery.isPending,
+  ])
 
   if (snapshotQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
@@ -370,10 +370,12 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const currentStageStatus = getStatusBadgeCopy(currentStage.status)
   const overallStatus = getStatusBadgeCopy(snapshot.overall_status)
   const progress = buildProgressCopy(snapshot)
-  const chatPreview = buildChatPreview(snapshot)
-  const runtimeSummary = `${pendingActions.length} pending UI actions / ${eventStream.events.length} buffered live events`
   const runtimeConnectionLabel = getRuntimeConnectionLabel(
     eventStream.connectionState,
+  )
+  const chatActivityState = buildChatActivityState(
+    snapshot,
+    pendingActions.length,
   )
 
   return (
@@ -422,46 +424,39 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
       <div className="workspace-shell" data-testid="workspace-route">
         <aside className="panel workspace-pane workspace-pane--chat">
-          <div className="pane-heading">
-            <div>
-              <h2>Chat lane</h2>
-              <p className="body-copy">
-                Compact messages, action echoes, and interruption controls stay
-                visible while the workflow advances.
-              </p>
-            </div>
-            <Badge tone={getRuntimeConnectionTone(eventStream.connectionState)}>
-              {runtimeConnectionLabel}
-            </Badge>
-          </div>
+          <SessionChatPane
+            activityLabel={chatActivityState.activityLabel}
+            connectionLabel={runtimeConnectionLabel}
+            connectionTone={getRuntimeConnectionTone(
+              eventStream.connectionState,
+            )}
+            disabledReason={chatActivityState.disabledReason}
+            isBusy={chatActivityState.isBusy}
+            messages={chatMessages}
+            onSubmit={async (message) => {
+              const submittedAt = new Date().toISOString()
 
-          <StackedList
-            aria-label="Workspace chat preview"
-            as="ol"
-            className="workspace-chat-list"
-          >
-            {chatPreview.map((entry) => (
-              <StackedListItem
-                key={entry.id}
-                className={`workspace-chat-message workspace-chat-message--${entry.speaker}`}
-                tone={getChatTone(entry)}
-              >
-                <span className="workspace-chat-message__speaker">
-                  {entry.speaker}
-                </span>
-                <p>{entry.body}</p>
-              </StackedListItem>
-            ))}
-          </StackedList>
+              runtimeStore.appendChatMessage(
+                createSessionChatMessage({
+                  role: 'user',
+                  body: message,
+                  createdAt: submittedAt,
+                }),
+              )
 
-          <div className="workspace-chat-footer">
-            <strong>Composer dock</strong>
-            <p>
-              Message input, quick action chips, and live agent summaries will
-              anchor here in the next workflow prompts.
-            </p>
-            <p>{runtimeSummary}.</p>
-          </div>
+              await new Promise((resolve) => {
+                window.setTimeout(resolve, 260)
+              })
+
+              runtimeStore.appendChatMessage(
+                buildMockAssistantChatReply(
+                  message,
+                  snapshot,
+                  new Date().toISOString(),
+                ),
+              )
+            }}
+          />
         </aside>
 
         <section className="panel workspace-pane workspace-pane--canvas">

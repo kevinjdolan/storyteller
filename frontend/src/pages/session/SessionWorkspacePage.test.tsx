@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
@@ -197,13 +197,42 @@ describe('SessionWorkspacePage', () => {
     expect(
       screen.getByText('Selected genre: Quest Fantasy'),
     ).toBeInTheDocument()
+    expect(screen.getByText('Selected tone: Hushed Wonder')).toBeInTheDocument()
     expect(screen.getByText('5 of 10 stages complete')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute(
       'href',
       '/',
     )
+    expect(screen.getByRole('log')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Send message' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByText('Midpoint needs one more bedtime-soft pass.'),
+    ).toBeInTheDocument()
+  })
+
+  it('adds locally submitted messages to the transcript while the agent bridge is still mocked', async () => {
+    mockWorkspaceApi()
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: 'Please make the midpoint gentler before composition starts.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      within(screen.getByRole('log')).getByText(
+        'Please make the midpoint gentler before composition starts.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Captured for beat sheet\./),
     ).toBeInTheDocument()
   })
 

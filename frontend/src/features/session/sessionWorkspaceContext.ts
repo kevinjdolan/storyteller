@@ -47,6 +47,10 @@ export function useSessionPendingActions() {
   return useSessionRuntimeSelector((state) => state.pendingActions)
 }
 
+export function useSessionChatMessages() {
+  return useSessionRuntimeSelector((state) => state.chat.messages)
+}
+
 export function useSessionEventStream() {
   return useSessionRuntimeSelector((state) => state.eventStream)
 }

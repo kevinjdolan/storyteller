@@ -3,6 +3,7 @@ import {
   type ComponentPropsWithoutRef,
   type InputHTMLAttributes,
   type ReactNode,
+  type TextareaHTMLAttributes,
   useId,
 } from 'react'
 import {
@@ -312,6 +313,68 @@ export function TextInput({
         aria-invalid={error != null || undefined}
         className={cx('text-input', inputClassName)}
         id={inputId}
+        {...props}
+      />
+      {error != null ? (
+        <p className="field__error" id={errorId} role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+type TextAreaProps = Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  'rows'
+> & {
+  className?: string
+  description?: ReactNode
+  error?: ReactNode
+  hideLabel?: boolean
+  label: ReactNode
+  rows?: number
+}
+
+export function TextArea({
+  'aria-describedby': ariaDescribedBy,
+  className,
+  description,
+  error,
+  hideLabel = false,
+  id,
+  label,
+  rows = 4,
+  ...props
+}: TextAreaProps) {
+  const generatedId = useId()
+  const inputId = id ?? generatedId
+  const descriptionId =
+    description != null ? `${inputId}-description` : undefined
+  const errorId = error != null ? `${inputId}-error` : undefined
+  const describedBy = [ariaDescribedBy, descriptionId, errorId]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className={cx('field', error != null && 'field--error', className)}>
+      <label
+        className={cx('field__label', hideLabel && 'visually-hidden')}
+        htmlFor={inputId}
+      >
+        {label}
+      </label>
+      {description != null ? (
+        <p className="field__description" id={descriptionId}>
+          {description}
+        </p>
+      ) : null}
+      <textarea
+        aria-describedby={describedBy || undefined}
+        aria-invalid={error != null || undefined}
+        className="text-area"
+        id={inputId}
+        rows={rows}
         {...props}
       />
       {error != null ? (
