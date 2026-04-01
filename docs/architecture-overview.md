@@ -3,6 +3,7 @@
 ## Reference Docs
 
 - [ADR 0001: Core Runtime Architecture](/Users/kevin/code/storyteller/docs/adr/0001-core-runtime-architecture.md)
+- [Domain Model and Session State Machine](/Users/kevin/code/storyteller/docs/domain-model.md)
 - [System Diagram](/Users/kevin/code/storyteller/docs/system-diagram.md)
 
 ## System Picture
