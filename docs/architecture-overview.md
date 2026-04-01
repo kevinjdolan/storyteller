@@ -1,5 +1,10 @@
 # Architecture Overview
 
+## Reference Docs
+
+- [ADR 0001: Core Runtime Architecture](/Users/kevin/code/storyteller/docs/adr/0001-core-runtime-architecture.md)
+- [System Diagram](/Users/kevin/code/storyteller/docs/system-diagram.md)
+
 ## System Picture
 
 Storyteller is a full-stack application with a browser client, a backend-owned workflow engine, durable relational state, durable object storage, and resumable background jobs.
@@ -92,3 +97,5 @@ The repository currently contains an initial scaffold:
 - `tools/webapp-qa/`: containerized browser automation support
 
 Background workers and most domain layers are still planned work. PostgreSQL and the file-backed GCS emulator are now available in the local Compose stack so later prompts can connect durable state and artifact storage without redefining the infrastructure contract.
+
+Story setup preferences such as word count, runtime, and chapter count are planning hints rather than hard limits. The system should use them to guide prompts, estimates, and editing suggestions without forcing exact compliance at the expense of story quality or bedtime tone.
