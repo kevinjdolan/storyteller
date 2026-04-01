@@ -12,9 +12,11 @@ from app.models import (
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
     RecentSessionSummary,
+    SessionActionPolicyEvaluation,
+    SessionActionPolicyEvaluationRequest,
     SessionSnapshot,
 )
-from app.services import SessionIntentParserService
+from app.services import SessionActionPolicyService, SessionIntentParserService
 from app.services.sessions import SessionNotFoundError, SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -80,6 +82,28 @@ def parse_chat_intents(
         return SessionIntentParserService(db_session, intent_parser).parse_user_message(
             session_id,
             message=payload.message,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/actions/evaluate",
+    response_model=SessionActionPolicyEvaluation,
+    summary="Evaluate proposed UI actions against durable session policy",
+)
+def evaluate_session_actions(
+    session_id: str,
+    payload: SessionActionPolicyEvaluationRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionActionPolicyEvaluation:
+    try:
+        return SessionActionPolicyService(db_session).evaluate_request(
+            session_id,
+            request=payload,
         )
     except SessionNotFoundError as exc:
         raise HTTPException(

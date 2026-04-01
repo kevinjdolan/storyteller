@@ -14,8 +14,10 @@ from app.models import (
     ParsedChatIntentResponse,
     SessionSnapshot,
     WorkflowStage,
+    build_action_policy_request_from_batch,
     get_workflow_stage_definition,
 )
+from app.services.action_policy import SessionActionPolicyService
 from app.services.event_log import SessionEventLogService
 from app.services.sessions import SessionNotFoundError, SessionService
 
@@ -56,6 +58,16 @@ class SessionIntentParserService:
             result = _normalize_parser_output(invocation_result.structured_output)
         except (IntentParserTransportError, ValidationError):
             result = _build_failed_result()
+
+        if result.status == IntentParserStatus.PARSED and result.proposed_actions.actions:
+            result.policy_evaluation = SessionActionPolicyService(
+                self._session
+            ).evaluate_request_against_snapshot(
+                snapshot,
+                request=build_action_policy_request_from_batch(result.proposed_actions),
+            )
+        else:
+            result.policy_evaluation = None
 
         self._event_log.record_chat_intent_parsed(
             session_id,

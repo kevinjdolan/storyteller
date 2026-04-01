@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.action_policy import SessionActionPolicyEvaluation
 from app.models.chat_actions import (
     CHAT_TO_UI_ACTION_SCHEMA_VERSION,
     ChatToUIActionBatch,
@@ -124,6 +125,7 @@ class ParsedChatIntentResponse(BaseModel):
     assistant_response: str = Field(min_length=1)
     clarification_reason: str | None = None
     proposed_actions: ChatToUIActionBatch = Field(default_factory=ChatToUIActionBatch)
+    policy_evaluation: SessionActionPolicyEvaluation | None = None
 
     @model_validator(mode="after")
     def validate_status_requirements(self) -> ParsedChatIntentResponse:
@@ -164,4 +166,3 @@ class IntentParserInvocationResult(BaseModel):
     invocation: IntentParserInvocation
     structured_output: IntentParserStructuredOutput
     raw_response: Mapping[str, Any] | list[Any] | str | None = None
-

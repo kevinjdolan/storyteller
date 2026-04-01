@@ -9,6 +9,7 @@ from app.models import (
     ChatToUIActionType,
     IntentParserStatus,
     IntentParserStructuredOutput,
+    SessionActionDecision,
     SessionEventType,
     WorkflowStage,
     WorkflowStageState,
@@ -123,6 +124,11 @@ def test_intent_parser_service_handles_happy_path_updates_and_audits_events(db_s
     assert [action.action_type for action in result.proposed_actions.actions] == [
         ChatToUIActionType.REFINE_BEAT_SHEET,
         ChatToUIActionType.UPDATE_STORY_SETUP,
+    ]
+    assert result.policy_evaluation is not None
+    assert [item.decision for item in result.policy_evaluation.evaluated_actions] == [
+        SessionActionDecision.REJECTED,
+        SessionActionDecision.REJECTED,
     ]
     assert adapter.invocations
     assert '"current_stage": "beats"' in adapter.invocations[0].rendered_prompt

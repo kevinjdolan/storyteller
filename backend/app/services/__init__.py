@@ -1,5 +1,9 @@
 """Domain services for the Storyteller backend."""
 
+from app.services.action_policy import (
+    SessionActionPolicyService,
+    SessionActionPolicyServiceError,
+)
 from app.services.assets import (
     AssetNotFoundError,
     AssetOwnershipError,
@@ -36,6 +40,8 @@ __all__ = [
     "BackgroundJobServiceError",
     "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
+    "SessionActionPolicyService",
+    "SessionActionPolicyServiceError",
     "SessionIntentParserService",
     "SessionNotFoundError",
     "SessionAssetService",

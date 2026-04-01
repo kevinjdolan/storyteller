@@ -103,6 +103,10 @@ def test_parse_chat_intents_endpoint_returns_structured_actions_and_logs_audit_e
     )
     assert payload["proposed_actions"]["actions"][0]["action_type"] == "update_story_setup"
     assert payload["proposed_actions"]["actions"][0]["requires_confirmation"] is False
+    assert payload["policy_evaluation"]["evaluated_actions"][0]["decision"] == "rejected"
+    assert payload["policy_evaluation"]["evaluated_actions"][0]["reasons"][0]["code"] == (
+        "prerequisite_stage_incomplete"
+    )
 
     db_session = get_session_factory()()
     try:

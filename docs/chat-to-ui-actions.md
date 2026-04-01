@@ -110,3 +110,28 @@ Policy expectations:
 Prompt 31 should ask Gemini to emit this batch shape directly. Prompt 32 should
 decide whether each proposed action is accepted, rejected, or upgraded to a
 confirmation gate in the current session state.
+
+## Policy Evaluation
+
+The deterministic evaluator now lives in `backend/app/services/action_policy.py`
+with typed request and response models in `backend/app/models/action_policy.py`.
+
+Two backend entrypoints expose the same engine:
+
+- `POST /api/v1/sessions/{session_id}/actions/evaluate` for direct UI or test-driven policy checks
+- `POST /api/v1/sessions/{session_id}/chat/intents`, which now includes
+  `policy_evaluation` beside the parsed `proposed_actions`
+
+Each evaluated action returns one of four decisions:
+
+- `accepted`
+- `rejected`
+- `requires_confirmation`
+- `accepted_with_side_effects`
+
+The response also carries:
+
+- stable reason codes for blockers or confirmation upgrades
+- prerequisite action hints such as `select_genre` before `select_tone`
+- explicit side effects such as downstream stage invalidation, active-job stops,
+  or stale asset replacement
