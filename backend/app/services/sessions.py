@@ -9,7 +9,7 @@ from app.db import (
     BeatSheet,
     CharacterSheet,
     CompositionJob,
-    ExportAsset,
+    SessionAsset,
     StoryBrief,
 )
 from app.db.base import utc_now
@@ -19,9 +19,9 @@ from app.models import (
     BeatSheetView,
     CharacterSheetView,
     CompositionJobView,
-    ExportAssetView,
     PitchView,
     RecentSessionSummary,
+    SessionAssetView,
     SessionCatalogSelection,
     SessionEventActor,
     SessionHistoryView,
@@ -304,8 +304,8 @@ def _build_session_snapshot(aggregate: SessionAggregate) -> SessionSnapshot:
         selected_story_setup=_build_story_setup_view(aggregate.selected_story_setup),
         active_composition_job=_build_composition_job_view(aggregate.active_composition_job),
         active_audio_job=_build_audio_job_view(aggregate.active_audio_job),
-        latest_story_asset=_build_export_asset_view(aggregate.latest_story_asset),
-        latest_audio_asset=_build_export_asset_view(aggregate.latest_audio_asset),
+        latest_story_asset=_build_session_asset_view(aggregate.latest_story_asset),
+        latest_audio_asset=_build_session_asset_view(aggregate.latest_audio_asset),
     )
 
 
@@ -499,17 +499,23 @@ def _build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:
     )
 
 
-def _build_export_asset_view(row: ExportAsset | None) -> ExportAssetView | None:
+def _build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | None:
     if row is None:
         return None
 
-    return ExportAssetView(
+    return SessionAssetView(
         id=row.id,
         asset_kind=row.asset_kind,
         status=row.status,
+        storage_bucket=row.storage_bucket,
+        object_path=row.object_path,
         mime_type=row.mime_type,
         byte_size=row.byte_size,
+        checksum_sha256=row.checksum_sha256,
+        segment_index=row.segment_index,
+        error_message=row.error_message,
         ready_at=row.ready_at,
+        failed_at=row.failed_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

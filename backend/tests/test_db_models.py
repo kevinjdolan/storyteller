@@ -15,10 +15,10 @@ from app.db import (
     CompositionSegment,
     EventActorType,
     EventLogEntry,
-    ExportAsset,
     Genre,
     JobStatus,
     Pitch,
+    SessionAsset,
     StoryBrief,
     StorySession,
     StorySetup,
@@ -211,13 +211,13 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             estimated_duration_seconds=620,
             completed_at=now,
         )
-        final_audio = ExportAsset(
+        final_audio = SessionAsset(
             session=completed_session,
             audio_job=audio_job,
             asset_kind=AssetKind.FINAL_AUDIO,
             status=AssetStatus.READY,
             storage_bucket="storyteller-exports",
-            storage_key="sessions/final-audio.mp3",
+            object_path="sessions/final-audio.mp3",
             mime_type="audio/mpeg",
             byte_size=2048,
             ready_at=now,
@@ -269,8 +269,8 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
         )
         assert session_rows[1].overall_status == WorkflowStageState.COMPLETED
         assert session_rows[1].audio_jobs[0].status == JobStatus.COMPLETED
-        assert session_rows[1].export_assets[0].asset_kind == AssetKind.FINAL_AUDIO
-        assert session_rows[1].export_assets[0].status == AssetStatus.READY
+        assert session_rows[1].assets[0].asset_kind == AssetKind.FINAL_AUDIO
+        assert session_rows[1].assets[0].status == AssetStatus.READY
     finally:
         db_session.close()
         engine.dispose()
@@ -291,9 +291,9 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "composition_jobs",
             "composition_segments",
             "event_log_entries",
-            "export_assets",
             "genres",
             "pitches",
+            "session_assets",
             "story_briefs",
             "story_sessions",
             "story_setups",
@@ -305,7 +305,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         workflow_indexes = {
             index["name"] for index in inspector.get_indexes("workflow_stage_states")
         }
-        asset_indexes = {index["name"] for index in inspector.get_indexes("export_assets")}
+        asset_indexes = {index["name"] for index in inspector.get_indexes("session_assets")}
 
         assert {
             "ix_story_sessions_current_stage",
@@ -313,7 +313,11 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "ix_story_sessions_resume_stage",
         } <= story_session_indexes
         assert {"ix_workflow_stage_states_session_id_status"} <= workflow_indexes
-        assert {"ix_export_assets_session_id_asset_kind_status"} <= asset_indexes
+        assert {
+            "ix_session_assets_audio_job_id_asset_kind_segment_index",
+            "ix_session_assets_composition_job_id_asset_kind_segment_index",
+            "ix_session_assets_session_id_asset_kind_status",
+        } <= asset_indexes
 
         tone_profile_foreign_keys = {
             fk["constrained_columns"][0]: fk["referred_table"]
@@ -325,7 +329,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         }
         asset_foreign_keys = {
             tuple(fk["constrained_columns"]): fk["referred_table"]
-            for fk in inspector.get_foreign_keys("export_assets")
+            for fk in inspector.get_foreign_keys("session_assets")
         }
 
         assert tone_profile_foreign_keys["genre_id"] == "genres"
@@ -334,5 +338,6 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         assert asset_foreign_keys[("session_id",)] == "story_sessions"
         assert asset_foreign_keys[("audio_job_id",)] == "audio_jobs"
         assert asset_foreign_keys[("composition_job_id",)] == "composition_jobs"
+        assert asset_foreign_keys[("composition_segment_id",)] == "composition_segments"
     finally:
         engine.dispose()

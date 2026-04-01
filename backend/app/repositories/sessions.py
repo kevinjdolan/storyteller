@@ -12,9 +12,9 @@ from app.db import (
     BeatSheet,
     CharacterSheet,
     CompositionJob,
-    ExportAsset,
     JobStatus,
     Pitch,
+    SessionAsset,
     StoryBrief,
     StorySession,
     StorySetup,
@@ -43,8 +43,8 @@ class SessionAggregate:
     selected_story_setup: StorySetup | None
     active_composition_job: CompositionJob | None
     active_audio_job: AudioJob | None
-    latest_story_asset: ExportAsset | None
-    latest_audio_asset: ExportAsset | None
+    latest_story_asset: SessionAsset | None
+    latest_audio_asset: SessionAsset | None
 
 
 class StorySessionRepository:
@@ -183,28 +183,28 @@ class StorySessionRepository:
         )
         return self._session.execute(stmt).scalar_one_or_none()
 
-    def _get_latest_story_asset(self, session_id: str) -> ExportAsset | None:
-        stmt: Select[tuple[ExportAsset]] = (
-            select(ExportAsset)
+    def _get_latest_story_asset(self, session_id: str) -> SessionAsset | None:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
             .where(
-                ExportAsset.session_id == session_id,
-                ExportAsset.asset_kind.in_(STORY_ASSET_KINDS),
-                ExportAsset.status == AssetStatus.READY,
+                SessionAsset.session_id == session_id,
+                SessionAsset.asset_kind.in_(STORY_ASSET_KINDS),
+                SessionAsset.status == AssetStatus.READY,
             )
-            .order_by(ExportAsset.ready_at.desc(), ExportAsset.created_at.desc())
+            .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
 
-    def _get_latest_audio_asset(self, session_id: str) -> ExportAsset | None:
-        stmt: Select[tuple[ExportAsset]] = (
-            select(ExportAsset)
+    def _get_latest_audio_asset(self, session_id: str) -> SessionAsset | None:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
             .where(
-                ExportAsset.session_id == session_id,
-                ExportAsset.asset_kind == AssetKind.FINAL_AUDIO,
-                ExportAsset.status == AssetStatus.READY,
+                SessionAsset.session_id == session_id,
+                SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                SessionAsset.status == AssetStatus.READY,
             )
-            .order_by(ExportAsset.ready_at.desc(), ExportAsset.created_at.desc())
+            .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()

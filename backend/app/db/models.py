@@ -55,6 +55,8 @@ class CompositionJobKind(str, Enum):
 
 
 class AssetKind(str, Enum):
+    DRAFT_TEXT_SNAPSHOT = "draft_text_snapshot"
+    COMPOSITION_SEGMENT = "composition_segment"
     STORY_TEXT = "story_text"
     STORY_DOCX = "story_docx"
     AUDIO_SEGMENT = "audio_segment"
@@ -63,6 +65,7 @@ class AssetKind(str, Enum):
 
 class AssetStatus(str, Enum):
     PENDING = "pending"
+    IN_PROGRESS = "in_progress"
     READY = "ready"
     FAILED = "failed"
     SUPERSEDED = "superseded"
@@ -195,7 +198,7 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
-    export_assets: Mapped[list["ExportAsset"]] = relationship(
+    assets: Mapped[list["SessionAsset"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )
@@ -492,7 +495,7 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="composition_job",
         cascade="all, delete-orphan",
     )
-    export_assets: Mapped[list["ExportAsset"]] = relationship(back_populates="composition_job")
+    assets: Mapped[list["SessionAsset"]] = relationship(back_populates="composition_job")
 
     __table_args__ = (
         Index(
@@ -541,6 +544,7 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     superseded_by_segment: Mapped["CompositionSegment | None"] = relationship(
         remote_side="CompositionSegment.id"
     )
+    assets: Mapped[list["SessionAsset"]] = relationship(back_populates="composition_segment")
 
     __table_args__ = (
         UniqueConstraint(
@@ -589,15 +593,15 @@ class AudioJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     session: Mapped["StorySession"] = relationship(back_populates="audio_jobs")
     source_composition_job: Mapped["CompositionJob | None"] = relationship()
-    export_assets: Mapped[list["ExportAsset"]] = relationship(back_populates="audio_job")
+    assets: Mapped[list["SessionAsset"]] = relationship(back_populates="audio_job")
 
     __table_args__ = (
         Index("ix_audio_jobs_session_id_status_created_at", "session_id", "status", "created_at"),
     )
 
 
-class ExportAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    __tablename__ = "export_assets"
+class SessionAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "session_assets"
 
     session_id: Mapped[str] = mapped_column(
         String(36),
@@ -607,6 +611,10 @@ class ExportAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     composition_job_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("composition_jobs.id", ondelete="SET NULL"),
+    )
+    composition_segment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("composition_segments.id", ondelete="SET NULL"),
     )
     audio_job_id: Mapped[str | None] = mapped_column(
         String(36),
@@ -619,23 +627,42 @@ class ExportAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=AssetStatus.PENDING,
     )
     storage_bucket: Mapped[str] = mapped_column(String(120), nullable=False)
-    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    object_path: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
     byte_size: Mapped[int | None] = mapped_column(Integer)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
     metadata_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    segment_index: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    session: Mapped["StorySession"] = relationship(back_populates="export_assets")
-    composition_job: Mapped["CompositionJob | None"] = relationship(back_populates="export_assets")
-    audio_job: Mapped["AudioJob | None"] = relationship(back_populates="export_assets")
+    session: Mapped["StorySession"] = relationship(back_populates="assets")
+    composition_job: Mapped["CompositionJob | None"] = relationship(back_populates="assets")
+    composition_segment: Mapped["CompositionSegment | None"] = relationship(back_populates="assets")
+    audio_job: Mapped["AudioJob | None"] = relationship(back_populates="assets")
 
     __table_args__ = (
         UniqueConstraint(
-            "storage_bucket", "storage_key", name="uq_export_assets_storage_bucket_storage_key"
+            "storage_bucket", "object_path", name="uq_session_assets_storage_bucket_object_path"
         ),
         Index(
-            "ix_export_assets_session_id_asset_kind_status", "session_id", "asset_kind", "status"
+            "ix_session_assets_session_id_asset_kind_status", "session_id", "asset_kind", "status"
+        ),
+        Index(
+            "ix_session_assets_audio_job_id_asset_kind_segment_index",
+            "audio_job_id",
+            "asset_kind",
+            "segment_index",
+        ),
+        Index(
+            "ix_session_assets_composition_job_id_asset_kind_segment_index",
+            "composition_job_id",
+            "asset_kind",
+            "segment_index",
         ),
     )
+
+
+ExportAsset = SessionAsset

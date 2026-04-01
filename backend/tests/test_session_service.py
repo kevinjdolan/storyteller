@@ -14,10 +14,10 @@ from app.db import (
     CompositionJobKind,
     EventActorType,
     EventLogEntry,
-    ExportAsset,
     Genre,
     JobStatus,
     Pitch,
+    SessionAsset,
     StoryBrief,
     StorySession,
     StorySetup,
@@ -258,24 +258,24 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     )
     db_session.add(audio_job)
 
-    story_asset = ExportAsset(
+    story_asset = SessionAsset(
         session_id=story_session.id,
         composition_job_id=composition_job.id,
         asset_kind=AssetKind.STORY_TEXT,
         status=AssetStatus.READY,
         storage_bucket="storyteller-exports",
-        storage_key="sessions/story-1/story.md",
+        object_path="sessions/story-1/story.md",
         mime_type="text/markdown",
         byte_size=4096,
         ready_at=now,
     )
-    audio_asset = ExportAsset(
+    audio_asset = SessionAsset(
         session_id=story_session.id,
         audio_job_id=audio_job.id,
         asset_kind=AssetKind.FINAL_AUDIO,
         status=AssetStatus.READY,
         storage_bucket="storyteller-exports",
-        storage_key="sessions/story-1/story.mp3",
+        object_path="sessions/story-1/story.mp3",
         mime_type="audio/mpeg",
         byte_size=8192,
         ready_at=now,
@@ -299,6 +299,8 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.active_audio_job is not None
     assert snapshot.latest_story_asset is not None
     assert snapshot.latest_audio_asset is not None
+    assert snapshot.latest_story_asset.object_path == "sessions/story-1/story.md"
+    assert snapshot.latest_audio_asset.object_path == "sessions/story-1/story.mp3"
     assert snapshot.progress.completed_stages == 7
     assert snapshot.progress.in_progress_stages == 1
     assert snapshot.current_stage == WorkflowStage.COMPOSITION

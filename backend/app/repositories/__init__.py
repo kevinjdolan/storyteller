@@ -1,3 +1,4 @@
+from app.repositories.assets import DOWNLOADABLE_ASSET_KINDS, SessionAssetRepository
 from app.repositories.events import EventLogRepository
 from app.repositories.sessions import (
     SessionAggregate,
@@ -6,8 +7,10 @@ from app.repositories.sessions import (
 )
 
 __all__ = [
+    "DOWNLOADABLE_ASSET_KINDS",
     "EventLogRepository",
     "SessionAggregate",
+    "SessionAssetRepository",
     "StorySessionRepository",
     "WorkflowStageStateRepository",
 ]

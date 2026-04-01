@@ -12,7 +12,7 @@ The initial revision creates the first durable relational core for:
 - story briefs, pitches, character sheets, beat sheets, and story setup revisions
 - composition jobs and composition segments
 - audio jobs
-- export assets
+- session asset records
 - append-only event log entries
 
 ## Local commands

@@ -1,5 +1,12 @@
 """Domain services for the Storyteller backend."""
 
+from app.services.assets import (
+    AssetNotFoundError,
+    AssetOwnershipError,
+    AssetServiceError,
+    AssetSessionNotFoundError,
+    SessionAssetService,
+)
 from app.services.event_log import SessionEventLogService
 from app.services.sessions import (
     InvalidStageTransitionError,
@@ -9,8 +16,13 @@ from app.services.sessions import (
 )
 
 __all__ = [
+    "AssetNotFoundError",
+    "AssetOwnershipError",
+    "AssetServiceError",
+    "AssetSessionNotFoundError",
     "InvalidStageTransitionError",
     "SessionNotFoundError",
+    "SessionAssetService",
     "SessionEventLogService",
     "SessionService",
     "SessionServiceError",

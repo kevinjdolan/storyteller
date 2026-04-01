@@ -119,13 +119,19 @@ class AudioJobView(BaseModel):
     updated_at: datetime
 
 
-class ExportAssetView(BaseModel):
+class SessionAssetView(BaseModel):
     id: str
     asset_kind: str
     status: str
+    storage_bucket: str
+    object_path: str
     mime_type: str
     byte_size: int | None = None
+    checksum_sha256: str | None = None
+    segment_index: int | None = None
+    error_message: str | None = None
     ready_at: datetime | None = None
+    failed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -168,5 +174,8 @@ class SessionSnapshot(BaseModel):
     selected_story_setup: StorySetupView | None = None
     active_composition_job: CompositionJobView | None = None
     active_audio_job: AudioJobView | None = None
-    latest_story_asset: ExportAssetView | None = None
-    latest_audio_asset: ExportAssetView | None = None
+    latest_story_asset: SessionAssetView | None = None
+    latest_audio_asset: SessionAssetView | None = None
+
+
+ExportAssetView = SessionAssetView
