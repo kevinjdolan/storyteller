@@ -4,9 +4,7 @@ import { useBackendStatus } from '../hooks/useBackendStatus.ts'
 import { ConnectionStatusBadge } from '../shared/ui/ConnectionStatusBadge.tsx'
 import { ToastRegion } from '../shared/ui/ToastRegion.tsx'
 import { createInitialAppShellState } from '../state/appShellStore.ts'
-import { buildSessionWorkspacePath, routePaths } from './routePaths.ts'
-
-const sampleWorkspacePath = buildSessionWorkspacePath('sample-session')
+import { routePaths } from './routePaths.ts'
 
 export function AppShell() {
   const location = useLocation()
@@ -47,20 +45,20 @@ export function AppShell() {
             >
               Sessions
             </NavLink>
-            <Link
+            <span
               className={
                 workspaceNavIsActive
                   ? 'app-nav__link app-nav__link--active'
-                  : 'app-nav__link'
+                  : 'app-nav__link app-nav__link--muted'
               }
-              to={sampleWorkspacePath}
             >
-              Workspace shell
-            </Link>
+              Workspace
+            </span>
           </nav>
 
           <p className="app-caption">
-            Routing, shared chrome, and status surfaces for the staged workflow.
+            Resume existing stories or open a session workspace when you are
+            ready to continue.
           </p>
         </header>
 

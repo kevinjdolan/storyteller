@@ -1,160 +1,418 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { buildSessionWorkspacePath } from '../../app/routePaths.ts'
-import { workflowStageDefinitions } from '../../features/session/workflowStages.ts'
+import {
+  createSession,
+  fetchRecentSessions,
+  type RecentSessionSummary,
+} from '../../api/sessions.ts'
+import {
+  type WorkflowStageId,
+  type WorkflowStageState,
+  workflowStageDefinitions,
+} from '../../features/session/workflowStages.ts'
 
-const sessionPreview = [
-  {
-    id: 'juniper-lake',
-    title: 'Lanterns Over Juniper Lake',
-    status: 'Drafting beats',
-    note: 'Calm mystery with a reassuring finish',
-  },
-  {
-    id: 'maple-hollow',
-    title: 'The Moss Door in Maple Hollow',
-    status: 'Ready for narration',
-    note: 'Whispery woodland adventure tuned for a shorter read-aloud',
-  },
-  {
-    id: 'cloud-harbor',
-    title: 'Cloud Harbor Night Shift',
-    status: 'In progress',
-    note: 'Skyport teamwork tale with bedtime-safe tension',
-  },
-] as const
+type SessionLoadState = 'loading' | 'ready' | 'error'
 
-const frontendExtensions = [
-  {
-    label: 'pages/',
-    detail:
-      'Route-level screens live here, including the sessions home, workspace shell, and fallback pages.',
-  },
-  {
-    label: 'shared/ui/',
-    detail:
-      'Reusable chrome such as status indicators, layout primitives, and future cards can stay detached from route modules.',
-  },
-  {
-    label: 'hooks/',
-    detail:
-      'Data hooks such as backend status checks now sit outside route components and can grow into loaders or realtime subscriptions.',
-  },
-  {
-    label: 'api/',
-    detail:
-      'Backend-facing helpers have a single home for request wrappers and service-specific clients.',
-  },
-  {
-    label: 'state/',
-    detail:
-      'Shell-level and session-level stores can expand here without overloading components with global coordination logic.',
-  },
-] as const
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+})
 
-export function HomePage() {
+const activeStatuses: ReadonlyArray<WorkflowStageState> = [
+  'draft',
+  'in_progress',
+  'needs_regeneration',
+]
+
+function formatUpdatedAt(value: string) {
+  return dateFormatter.format(new Date(value))
+}
+
+function getStageLabel(stageId: WorkflowStageId) {
   return (
-    <section
-      className="page-grid home-page"
-      aria-label="Storyteller app shell overview"
-    >
-      <article className="panel panel-hero" data-testid="app-card">
-        <p className="eyebrow">Prompt 20 app shell</p>
-        <h1>Storyteller</h1>
-        <p className="lede">
-          Past sessions now live on a real home route, ready to hand off into
-          the workspace shell.
+    workflowStageDefinitions.find((stage) => stage.id === stageId)?.label ??
+    stageId
+  )
+}
+
+function getSessionStatusCopy(status: WorkflowStageState) {
+  if (status === 'completed') {
+    return {
+      label: 'Complete',
+      className: 'status-chip status-chip--completed',
+      actionLabel: 'Review',
+    }
+  }
+
+  if (status === 'needs_regeneration') {
+    return {
+      label: 'Needs refresh',
+      className: 'status-chip status-chip--needs-regeneration',
+      actionLabel: 'Resume',
+    }
+  }
+
+  if (status === 'in_progress') {
+    return {
+      label: 'In progress',
+      className: 'status-chip status-chip--in-progress',
+      actionLabel: 'Resume',
+    }
+  }
+
+  return {
+    label: 'Ready to begin',
+    className: 'status-chip status-chip--draft',
+    actionLabel: 'Start',
+  }
+}
+
+function buildSessionStageSummary(session: RecentSessionSummary) {
+  if (session.overall_status === 'completed') {
+    return 'Finished and ready to revisit.'
+  }
+
+  return `Resume at ${getStageLabel(session.resume_stage)}.`
+}
+
+function buildProgressCopy(session: RecentSessionSummary) {
+  const { completed_stages: completedStages, total_stages: totalStages } =
+    session.progress
+
+  return {
+    label: `${completedStages} of ${totalStages} stages complete`,
+    percent: Math.round((completedStages / totalStages) * 100),
+  }
+}
+
+function splitSessionsByStatus(sessions: RecentSessionSummary[]) {
+  return {
+    active: sessions.filter((session) =>
+      activeStatuses.includes(session.overall_status),
+    ),
+    completed: sessions.filter(
+      (session) => session.overall_status === 'completed',
+    ),
+  }
+}
+
+function HomePageLoadingState() {
+  return (
+    <article className="panel sessions-panel" aria-busy="true">
+      <div className="panel-heading">
+        <h2>Recent sessions</h2>
+        <p>Loading recent sessions from the durable backend.</p>
+      </div>
+
+      <ul className="session-card-list">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <li key={index} className="session-card session-card--loading">
+            <div className="loading-block loading-block--title" />
+            <div className="loading-block loading-block--detail" />
+            <div className="loading-block loading-block--detail loading-block--short" />
+          </li>
+        ))}
+      </ul>
+    </article>
+  )
+}
+
+function HomePageErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <article className="panel sessions-panel">
+      <div className="panel-heading">
+        <h2>Recent sessions</h2>
+        <p>
+          The home screen could not load prior sessions from the backend. Retry
+          once the API is reachable again.
         </p>
+      </div>
+
+      <div className="empty-state">
+        <p className="empty-state__title">Could not load past sessions.</p>
         <p className="body-copy">
-          This screen stays intentionally light while the rest of the
-          bedtime-story workflow arrives behind durable routing and shared
-          chrome.
+          The list request failed before the home screen could show in-progress
+          and completed stories.
         </p>
+        <button
+          className="ghost-link"
+          type="button"
+          onClick={() => void onRetry()}
+        >
+          Retry
+        </button>
+      </div>
+    </article>
+  )
+}
 
-        <div className="cta-row">
-          <Link
-            className="primary-link"
-            to={buildSessionWorkspacePath(sessionPreview[0].id)}
-          >
-            Open sample workspace
-          </Link>
-          <p className="cta-note">
-            The shell now covers home, route-scoped sessions, and a not-found
-            fallback.
-          </p>
+function EmptySessionsState() {
+  return (
+    <article className="panel sessions-panel">
+      <div className="panel-heading">
+        <h2>Recent sessions</h2>
+        <p>Your story history will appear here as soon as you create one.</p>
+      </div>
+
+      <div className="empty-state">
+        <p className="empty-state__title">No sessions yet.</p>
+        <p className="body-copy">
+          Start a fresh bedtime story to open the workspace and begin the first
+          session.
+        </p>
+      </div>
+    </article>
+  )
+}
+
+function SessionGroup({
+  description,
+  sessions,
+  title,
+}: {
+  description: string
+  sessions: RecentSessionSummary[]
+  title: string
+}) {
+  return (
+    <section className="session-group" aria-label={title}>
+      <div className="session-group__header">
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
         </div>
-      </article>
+        <span className="status-chip status-chip--count">
+          {sessions.length}
+        </span>
+      </div>
 
-      <article className="panel">
-        <div className="panel-heading">
-          <h2>Past sessions come first</h2>
-          <p>
-            The home screen is now a dedicated route, ready for durable session
-            loading and resume flows.
-          </p>
-        </div>
+      <ul className="session-card-list">
+        {sessions.map((session) => {
+          const statusCopy = getSessionStatusCopy(session.overall_status)
+          const progress = buildProgressCopy(session)
 
-        <ul className="session-list">
-          {sessionPreview.map((session) => (
-            <li key={session.id} className="session-item">
-              <div>
-                <h3>{session.title}</h3>
-                <p>{session.note}</p>
-              </div>
+          return (
+            <li key={session.id} className="session-card">
+              <div className="session-card__header">
+                <div>
+                  <div className="session-card__title-row">
+                    <h4>{session.display_title}</h4>
+                    <span className={statusCopy.className}>
+                      {statusCopy.label}
+                    </span>
+                  </div>
+                  <p className="session-card__timestamp">
+                    Updated {formatUpdatedAt(session.updated_at)}
+                  </p>
+                </div>
 
-              <div className="session-item__actions">
-                <span className="status-chip">{session.status}</span>
                 <Link
                   className="ghost-link"
+                  aria-label={`${statusCopy.actionLabel} ${session.display_title}`}
                   to={buildSessionWorkspacePath(session.id)}
                 >
-                  Open {session.title}
+                  {statusCopy.actionLabel}
                 </Link>
               </div>
-            </li>
-          ))}
-        </ul>
-      </article>
 
-      <article className="panel">
-        <div className="panel-heading">
-          <h2>Workflow runway</h2>
-          <p>
-            The route shell is still lightweight, but it already reflects the
-            staged story workflow the app has to support.
-          </p>
-        </div>
+              <dl className="session-card__meta">
+                <div>
+                  <dt>Next step</dt>
+                  <dd>{buildSessionStageSummary(session)}</dd>
+                </div>
+                <div>
+                  <dt>Genre</dt>
+                  <dd>{session.selected_genre?.label ?? 'Not selected yet'}</dd>
+                </div>
+                <div>
+                  <dt>Tone</dt>
+                  <dd>
+                    {session.selected_tone_profile?.label ?? 'Not selected yet'}
+                  </dd>
+                </div>
+              </dl>
 
-        <ol className="stage-list">
-          {workflowStageDefinitions.map((stage, index) => (
-            <li key={stage.id}>
-              <span>{index + 1}</span>
-              <div>
-                <strong>{stage.label}</strong>
-                <p>{stage.description}</p>
+              <div className="session-card__progress">
+                <div aria-hidden="true" className="session-card__progress-bar">
+                  <span style={{ width: `${progress.percent}%` }} />
+                </div>
+                <p>{progress.label}</p>
               </div>
             </li>
-          ))}
-        </ol>
-      </article>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
 
-      <article className="panel">
-        <div className="panel-heading">
-          <h2>Frontend extension points</h2>
-          <p>
-            The shell now has predictable landing zones for shared components,
-            hooks, route pages, request helpers, and future state stores.
-          </p>
+export function HomePage() {
+  const navigate = useNavigate()
+  const [sessions, setSessions] = useState<RecentSessionSummary[]>([])
+  const [loadState, setLoadState] = useState<SessionLoadState>('loading')
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isCurrent = true
+
+    async function loadSessionsOnMount() {
+      setLoadState('loading')
+
+      try {
+        const recentSessions = await fetchRecentSessions()
+
+        if (!isCurrent) {
+          return
+        }
+
+        setSessions(recentSessions)
+        setLoadState('ready')
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+
+        setLoadState('error')
+
+        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+          console.warn('Failed to load recent sessions.', error)
+        }
+      }
+    }
+
+    void loadSessionsOnMount()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  function handleRetryLoad() {
+    setLoadState('loading')
+
+    void fetchRecentSessions()
+      .then((recentSessions) => {
+        setSessions(recentSessions)
+        setLoadState('ready')
+      })
+      .catch((error) => {
+        setLoadState('error')
+
+        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+          console.warn('Failed to load recent sessions.', error)
+        }
+      })
+  }
+
+  async function handleCreateSession() {
+    setCreateError(null)
+    setIsCreatingSession(true)
+
+    try {
+      const session = await createSession()
+      navigate(buildSessionWorkspacePath(session.id))
+    } catch (error) {
+      setCreateError('Could not start a new session. Please try again.')
+
+      if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+        console.warn('Failed to create a new session.', error)
+      }
+    } finally {
+      setIsCreatingSession(false)
+    }
+  }
+
+  const { active, completed } = splitSessionsByStatus(sessions)
+  const totalSessions = sessions.length
+
+  return (
+    <section className="sessions-home" aria-label="Past sessions home screen">
+      <article className="panel panel-hero sessions-home__hero">
+        <p className="eyebrow">Past sessions</p>
+        <h1>Pick up where bedtime left off.</h1>
+        <p className="lede">
+          Review in-progress stories, finished reads, and the next session that
+          needs your attention before opening the workspace.
+        </p>
+        <p className="body-copy">
+          The home screen is now the first meaningful route. Sessions come from
+          the backend so you can tell what is underway, what is complete, and
+          what should resume next.
+        </p>
+
+        <div className="session-summary-grid" aria-label="Session summary">
+          <div className="session-summary-card">
+            <strong>{loadState === 'ready' ? totalSessions : '...'}</strong>
+            <span>Total sessions</span>
+          </div>
+          <div className="session-summary-card">
+            <strong>{loadState === 'ready' ? active.length : '...'}</strong>
+            <span>Active or needs attention</span>
+          </div>
+          <div className="session-summary-card">
+            <strong>{loadState === 'ready' ? completed.length : '...'}</strong>
+            <span>Completed stories</span>
+          </div>
         </div>
 
-        <ul className="extension-list">
-          {frontendExtensions.map((entry) => (
-            <li key={entry.label} className="extension-item">
-              <code>{entry.label}</code>
-              <p>{entry.detail}</p>
-            </li>
-          ))}
-        </ul>
+        <div className="cta-row">
+          <button
+            className="primary-link"
+            disabled={isCreatingSession}
+            type="button"
+            onClick={() => void handleCreateSession()}
+          >
+            {isCreatingSession ? 'Starting...' : 'Start a new session'}
+          </button>
+          <p className="cta-note">
+            New sessions open directly into the workspace shell so the user can
+            move from this list into the guided story flow without a blank
+            editor step.
+          </p>
+        </div>
+        {createError ? <p className="form-feedback">{createError}</p> : null}
       </article>
+
+      {loadState === 'loading' ? <HomePageLoadingState /> : null}
+      {loadState === 'error' ? (
+        <HomePageErrorState onRetry={handleRetryLoad} />
+      ) : null}
+      {loadState === 'ready' && totalSessions === 0 ? (
+        <EmptySessionsState />
+      ) : null}
+      {loadState === 'ready' && totalSessions > 0 ? (
+        <article className="panel sessions-panel">
+          <div className="panel-heading">
+            <h2>Recent sessions</h2>
+            <p>
+              In-progress and completed stories are grouped separately so it is
+              clear whether you should resume work or revisit a finished bedtime
+              story.
+            </p>
+          </div>
+
+          {active.length > 0 ? (
+            <SessionGroup
+              description="Drafts, active workflows, and sessions that need a refreshed output."
+              sessions={active}
+              title="Continue building"
+            />
+          ) : null}
+
+          {completed.length > 0 ? (
+            <SessionGroup
+              description="Completed stories that are ready to open again."
+              sessions={completed}
+              title="Finished stories"
+            />
+          ) : null}
+        </article>
+      ) : null}
     </section>
   )
 }

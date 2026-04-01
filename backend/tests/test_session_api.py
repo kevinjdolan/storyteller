@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from fastapi.testclient import TestClient
 from app.db import Base, StorySession
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.models import WorkflowStage, WorkflowStageState
 from app.services.sessions import SessionService
 from app.settings import get_settings
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
