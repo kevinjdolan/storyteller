@@ -203,7 +203,10 @@ describe('SessionWorkspacePage', () => {
       screen.getByRole('navigation', { name: 'Stage navigator' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { level: 2, name: 'Refine the Save-the-Cat beats' }),
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Refine the Save-the-Cat beats',
+      }),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute(
       'href',
@@ -214,8 +217,12 @@ describe('SessionWorkspacePage', () => {
       screen.getByRole('button', { name: 'Send message' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Midpoint needs one more bedtime-soft pass.'),
+      screen.getAllByText('Midpoint needs one more bedtime-soft pass.').length,
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Workflow component kit' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Choice cards')).toBeInTheDocument()
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {
@@ -224,7 +231,10 @@ describe('SessionWorkspacePage', () => {
     renderWithAppProviders(
       <MemoryRouter initialEntries={['/sessions/moonlit-harbor?stage=audio']}>
         <Routes>
-          <Route path="/sessions/:sessionId" element={<SessionWorkspacePage />} />
+          <Route
+            path="/sessions/:sessionId"
+            element={<SessionWorkspacePage />}
+          />
         </Routes>
       </MemoryRouter>,
     )
@@ -240,12 +250,11 @@ describe('SessionWorkspacePage', () => {
         /the route is previewing audio via the stage query parameter/i,
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('link', { name: /audio/i }),
-    ).toHaveAttribute('href', '/sessions/moonlit-harbor?stage=audio')
-    expect(
-      screen.getByText('?stage=audio'),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /audio/i })).toHaveAttribute(
+      'href',
+      '/sessions/moonlit-harbor?stage=audio',
+    )
+    expect(screen.getAllByText('?stage=audio').length).toBeGreaterThan(0)
   })
 
   it('adds locally submitted messages to the transcript while the agent bridge is still mocked', async () => {

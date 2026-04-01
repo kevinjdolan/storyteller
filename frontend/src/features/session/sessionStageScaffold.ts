@@ -1,4 +1,7 @@
-import type { SessionSnapshot, SessionStageStateView } from '../../api/sessions.ts'
+import type {
+  SessionSnapshot,
+  SessionStageStateView,
+} from '../../api/sessions.ts'
 import {
   type WorkflowStageId,
   type WorkflowStageState,

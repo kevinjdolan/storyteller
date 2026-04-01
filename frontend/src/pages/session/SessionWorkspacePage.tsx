@@ -1,12 +1,8 @@
 import { useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import {
-  type SessionSnapshot,
-} from '../../api/sessions.ts'
-import {
-  buildSessionWorkspacePath,
-  routePaths,
-} from '../../app/routePaths.ts'
+import { type SessionSnapshot } from '../../api/sessions.ts'
+import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
+import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import {
   useSessionChatMessages,
   useCurrentSessionSnapshotQuery,
@@ -32,15 +28,17 @@ import {
   ProgressBar,
   type BadgeTone,
 } from '../../shared/ui/primitives.tsx'
+import {
+  CardGrid,
+  EmptyStateBlock,
+  SelectionCard,
+  SummaryPanel,
+} from '../../shared/ui/workflow.tsx'
 import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 
 type StatusBadgeCopy = {
   label: string
   tone: BadgeTone
-}
-
-function cx(...classNames: Array<string | false | null | undefined>) {
-  return classNames.filter(Boolean).join(' ')
 }
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -335,24 +333,37 @@ function WorkspaceErrorState({
       <Panel
         as="article"
         className="empty-state"
-        description={<p className="body-copy">{errorMessage}</p>}
         eyebrow="Session workspace"
         headingLevel={1}
         title="Workspace unavailable"
       >
-        <button
-          className={getButtonClassName({ size: 'compact', tone: 'ghost' })}
-          type="button"
-          onClick={() => void onRetry()}
-        >
-          Retry
-        </button>
-        <Link
-          className={getButtonClassName({ size: 'compact', tone: 'ghost' })}
-          to={routePaths.home}
-        >
-          Return home
-        </Link>
+        <EmptyStateBlock
+          action={
+            <div className="cta-row">
+              <button
+                className={getButtonClassName({
+                  size: 'compact',
+                  tone: 'ghost',
+                })}
+                type="button"
+                onClick={() => void onRetry()}
+              >
+                Retry
+              </button>
+              <Link
+                className={getButtonClassName({
+                  size: 'compact',
+                  tone: 'ghost',
+                })}
+                to={routePaths.home}
+              >
+                Return home
+              </Link>
+            </div>
+          }
+          description={errorMessage}
+          title="The session snapshot could not be loaded."
+        />
       </Panel>
     </section>
   )
@@ -415,8 +426,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     )
   }
 
-  const stageScaffold =
-    buildSessionWorkspaceStageViews(snapshot, searchParams.get('stage'))
+  const stageScaffold = buildSessionWorkspaceStageViews(
+    snapshot,
+    searchParams.get('stage'),
+  )
   const selectedStage = stageScaffold.selectedStage
   const activeStage = stageScaffold.currentStage
   const stageViews = stageScaffold.stageViews
@@ -564,37 +577,39 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                     <li key={stage.stage}>
                       <Link
                         aria-current={stage.isSelected ? 'step' : undefined}
-                        className={cx(
-                          'workspace-stage-nav__link',
-                          stage.isSelected &&
-                            'workspace-stage-nav__link--selected',
-                          stage.isCurrent &&
-                            'workspace-stage-nav__link--current',
-                          stage.availability === 'locked' &&
-                            'workspace-stage-nav__link--locked',
-                        )}
+                        className="workflow-card-link"
                         to={buildSessionWorkspacePath(snapshot.id, {
                           stage: stage.stage,
                         })}
                       >
-                        <div className="workspace-stage-nav__header">
-                          <span className="workspace-stage-nav__index">
-                            {(stage.index + 1).toString().padStart(2, '0')}
-                          </span>
-                          <div className="workspace-stage-nav__copy">
-                            <strong>{stage.label}</strong>
-                            <p>{stage.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="workspace-stage-nav__meta">
-                          <Badge tone={stageStatus.tone}>
-                            {stageStatus.label}
-                          </Badge>
-                          <Badge tone={availabilityCopy.tone}>
-                            {availabilityCopy.label}
-                          </Badge>
-                        </div>
+                        <SelectionCard
+                          description={stage.description}
+                          eyebrow={`Stage ${(stage.index + 1)
+                            .toString()
+                            .padStart(2, '0')}`}
+                          footer={
+                            stage.isCurrent
+                              ? 'This is the durable current stage saved by the backend.'
+                              : stage.availability === 'locked'
+                                ? 'Locked stages stay previewable without implying they are editable yet.'
+                                : 'Available stages can mount richer editors later without changing the shell.'
+                          }
+                          leading={(stage.index + 1)
+                            .toString()
+                            .padStart(2, '0')}
+                          meta={
+                            <>
+                              <Badge tone={stageStatus.tone}>
+                                {stageStatus.label}
+                              </Badge>
+                              <Badge tone={availabilityCopy.tone}>
+                                {availabilityCopy.label}
+                              </Badge>
+                            </>
+                          }
+                          selected={stage.isSelected}
+                          title={stage.label}
+                        />
                       </Link>
                     </li>
                   )
@@ -622,46 +637,43 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
               <p className="workspace-stage-detail__note">{stageRoutingCopy}</p>
 
-              <section className="workspace-stage-detail__cards">
-                <article className="workspace-stage-detail-card">
-                  <p className="workspace-summary-card__label">
-                    Current session signal
-                  </p>
-                  <strong>{buildStageDetailSummary(selectedStage)}</strong>
-                  <p>
-                    Accepted detail, last-event summaries, and later live job
-                    progress will land here once this stage receives real
-                    controls.
-                  </p>
-                </article>
+              <CardGrid className="workspace-stage-detail__cards" columns={3}>
+                <SummaryPanel
+                  description="Accepted detail, last-event summaries, and later live job progress can all drop into the same compact summary shell."
+                  label="Current session signal"
+                  title={buildStageDetailSummary(selectedStage)}
+                />
 
-                <article className="workspace-stage-detail-card">
-                  <p className="workspace-summary-card__label">Route mapping</p>
-                  <strong className="workspace-stage-detail__route">
-                    ?stage={selectedStage.stage}
-                  </strong>
-                  <p>
-                    The navigator changes the visible panel through routing, not
-                    by mutating the durable session snapshot in the browser.
-                  </p>
-                </article>
+                <SummaryPanel
+                  description="Navigator links preview a stage through routing instead of mutating the backend-owned session snapshot in the browser."
+                  label="Route mapping"
+                  title={
+                    <span className="workspace-stage-detail__route">
+                      ?stage={selectedStage.stage}
+                    </span>
+                  }
+                />
 
-                <article className="workspace-stage-detail-card">
-                  <p className="workspace-summary-card__label">
-                    Downstream impact
-                  </p>
-                  <strong>
-                    {selectedStageInvalidations.length > 0
-                      ? `Editing this step can refresh ${selectedStageInvalidations.length} later stage${selectedStageInvalidations.length === 1 ? '' : 's'}.`
-                      : 'This terminal review step does not invalidate anything later.'}
-                  </strong>
-                  <p>
-                    {selectedStageInvalidations.length > 0
+                <SummaryPanel
+                  description={
+                    selectedStageInvalidations.length > 0
                       ? selectedStageInvalidations.join(', ')
-                      : 'Finalize sits at the end of the workflow and can remain review-only.'}
-                  </p>
-                </article>
-              </section>
+                      : 'Finalize sits at the end of the workflow and can remain review-only.'
+                  }
+                  label="Downstream impact"
+                  title={
+                    selectedStageInvalidations.length > 0
+                      ? `Editing this step can refresh ${selectedStageInvalidations.length} later stage${selectedStageInvalidations.length === 1 ? '' : 's'}.`
+                      : 'This terminal review step does not invalidate anything later.'
+                  }
+                />
+              </CardGrid>
+
+              <SessionStageEditorPreview
+                invalidationLabels={selectedStageInvalidations}
+                selectedStage={selectedStage}
+                snapshot={snapshot}
+              />
 
               <section className="workspace-stage-detail__list">
                 <div className="panel-heading">
@@ -687,8 +699,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             aria-label="Workspace overview"
             className="workspace-overview-grid"
           >
-            <article className="workspace-summary-card">
-              <p className="workspace-summary-card__label">Progress</p>
+            <SummaryPanel label="Progress">
               <ProgressBar
                 aria-label={`${snapshot.display_title} workflow progress`}
                 hint={`Resume at ${getWorkflowStageLabel(snapshot.resume_stage)} with ${progress.percent}% of the workflow currently complete.`}
@@ -696,22 +707,19 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 value={progress.percent}
                 valueText={progress.label}
               />
-            </article>
+            </SummaryPanel>
 
-            <article className="workspace-summary-card">
-              <p className="workspace-summary-card__label">Story lane</p>
-              <strong>
-                {snapshot.selected_genre?.label ?? 'Genre pending'} /{' '}
-                {snapshot.selected_tone_profile?.label ?? 'Tone pending'}
-              </strong>
-              <p>{buildPlanFocusCopy(snapshot)}</p>
-            </article>
+            <SummaryPanel
+              description={buildPlanFocusCopy(snapshot)}
+              label="Story lane"
+              title={`${snapshot.selected_genre?.label ?? 'Genre pending'} / ${snapshot.selected_tone_profile?.label ?? 'Tone pending'}`}
+            />
 
-            <article className="workspace-summary-card">
-              <p className="workspace-summary-card__label">Production</p>
-              <strong>{activeStage.label}</strong>
-              <p>{buildProductionCopy(snapshot)}</p>
-            </article>
+            <SummaryPanel
+              description={buildProductionCopy(snapshot)}
+              label="Production"
+              title={activeStage.label}
+            />
           </section>
         </section>
       </div>
