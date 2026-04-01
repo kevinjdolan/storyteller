@@ -82,7 +82,7 @@ The system should persist the following concepts as first-class records:
 
 The repository currently contains an initial scaffold:
 
-- `frontend/`: Vite React app
+- `frontend/`: Vite React TypeScript app
 - `backend/`: FastAPI app
 - `backend/migrations/`: reserved home for database schema history
 - `backend/app/worker/`: reserved home for background job runners
