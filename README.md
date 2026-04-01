@@ -50,7 +50,7 @@ Two architectural rules follow from those constraints:
 - The browser must never hold provider secrets or call Gemini directly.
 - Long-running story composition and narration generation must be durable background jobs with resumable server-side state.
 
-More detail is in [docs/product-brief.md](/Users/kevin/code/storyteller/docs/product-brief.md) and [docs/architecture-overview.md](/Users/kevin/code/storyteller/docs/architecture-overview.md).
+More detail is in [docs/product-brief.md](/Users/kevin/code/storyteller/docs/product-brief.md), [docs/architecture-overview.md](/Users/kevin/code/storyteller/docs/architecture-overview.md), [docs/system-diagram.md](/Users/kevin/code/storyteller/docs/system-diagram.md), and [docs/adr/0001-core-runtime-architecture.md](/Users/kevin/code/storyteller/docs/adr/0001-core-runtime-architecture.md).
 
 ## Local Development Expectations
 
