@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createSession,
   fetchRecentSessions,
+  fetchSessionHistory,
   fetchSessionSnapshot,
 } from '../../api/sessions.ts'
 
@@ -12,6 +13,9 @@ export const sessionQueryKeys = {
   details: () => [...sessionQueryKeys.all, 'detail'] as const,
   detail: (sessionId: string) =>
     [...sessionQueryKeys.details(), sessionId] as const,
+  histories: () => [...sessionQueryKeys.all, 'history'] as const,
+  history: (sessionId: string) =>
+    [...sessionQueryKeys.histories(), sessionId] as const,
 }
 
 export function useRecentSessionsQuery(limit = 20) {
@@ -28,6 +32,15 @@ export function useSessionSnapshotQuery(sessionId: string) {
     queryFn: () => fetchSessionSnapshot(sessionId),
     enabled: sessionId.length > 0,
     staleTime: 10_000,
+  })
+}
+
+export function useSessionHistoryQuery(sessionId: string) {
+  return useQuery({
+    queryKey: sessionQueryKeys.history(sessionId),
+    queryFn: () => fetchSessionHistory(sessionId),
+    enabled: sessionId.length > 0,
+    staleTime: 60_000,
   })
 }
 

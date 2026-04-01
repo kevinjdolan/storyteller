@@ -3,7 +3,7 @@ import {
   type SessionRuntimeState,
   type SessionRuntimeStore,
 } from './sessionRuntimeStore.ts'
-import { useSessionSnapshotQuery } from './sessionQueries.ts'
+import { useSessionHistoryQuery, useSessionSnapshotQuery } from './sessionQueries.ts'
 
 export type SessionWorkspaceContextValue = {
   sessionId: string
@@ -29,6 +29,12 @@ export function useCurrentSessionSnapshotQuery() {
   const { sessionId } = useSessionWorkspaceContext()
 
   return useSessionSnapshotQuery(sessionId)
+}
+
+export function useCurrentSessionHistoryQuery() {
+  const { sessionId } = useSessionWorkspaceContext()
+
+  return useSessionHistoryQuery(sessionId)
 }
 
 export function useSessionRuntimeSelector<T>(

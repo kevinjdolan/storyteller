@@ -1,0 +1,179 @@
+import { describe, expect, it } from 'vitest'
+import {
+  buildIntentActionEchoMessages,
+  buildSessionChatMessagesFromHistory,
+} from './actionEchoes.ts'
+
+describe('actionEchoes', () => {
+  it('rebuilds compact transcript messages from durable history events', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 4,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'session.created',
+            stage: null,
+            summary: 'Created session: Lantern Harbor.',
+            payload: {
+              schema_version: 1,
+              working_title: 'Lantern Harbor',
+            },
+            created_at: '2026-04-01T08:00:00Z',
+          },
+          {
+            id: 'event-2',
+            session_id: 'session-123',
+            sequence_number: 2,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'selection.recorded',
+            stage: 'genre',
+            summary: 'Selected genre: Quest Fantasy.',
+            payload: {
+              schema_version: 1,
+              selection_kind: 'genre',
+              label: 'Quest Fantasy',
+              accepted: true,
+              source: 'ui',
+            },
+            created_at: '2026-04-01T08:01:00Z',
+          },
+          {
+            id: 'event-3',
+            session_id: 'session-123',
+            sequence_number: 3,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'ui.action.recorded',
+            stage: 'audio',
+            summary: 'Recorded UI action: navigate_to_stage.',
+            payload: {
+              schema_version: 1,
+              action: 'navigate_to_stage',
+              control_id: 'stage-navigator',
+              value_summary: 'Audio',
+              origin: 'workspace',
+            },
+            created_at: '2026-04-01T08:02:00Z',
+          },
+          {
+            id: 'event-4',
+            session_id: 'session-123',
+            sequence_number: 4,
+            actor: {
+              actor_type: 'assistant',
+              actor_id: 'story-planner',
+            },
+            event_type: 'chat.message.recorded',
+            stage: 'audio',
+            summary: 'Recorded assistant chat message.',
+            payload: {
+              schema_version: 1,
+              message_role: 'assistant',
+              content_preview: 'Audio settings are ready for review.',
+              content_length: 36,
+              source: 'intent_parser',
+            },
+            created_at: '2026-04-01T08:03:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'beats',
+      } as never,
+    )
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        role: 'system',
+        body: 'Session opened. Resume at Beat sheet.',
+      }),
+      expect.objectContaining({
+        role: 'action_echo',
+        body: 'Selected genre: Quest Fantasy',
+      }),
+      expect.objectContaining({
+        role: 'action_echo',
+        body: 'Opened Audio in the main pane.',
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        body: 'Audio settings are ready for review.',
+      }),
+    ])
+  })
+
+  it('renders blocked chat intent outcomes as compact action echoes', () => {
+    const messages = buildIntentActionEchoMessages({
+      createdAt: '2026-04-01T08:10:00Z',
+      result: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response: 'I can shorten the story once story setup is ready.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              confidence: 0.82,
+              rationale: 'The user asked for a shorter runtime.',
+              requires_confirmation: false,
+              extracted_values: {
+                target_runtime_minutes: 8,
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'session-123',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              decision: 'rejected',
+              summary:
+                'Complete or regenerate beats before changing story_setup.',
+              reasons: [
+                {
+                  code: 'prerequisite_stage_incomplete',
+                  message:
+                    'Complete or regenerate beats before changing story_setup.',
+                  stage: 'story_setup',
+                  related_stages: ['beats'],
+                  related_action_types: [],
+                },
+              ],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        role: 'action_echo',
+        body: "Couldn't update story setup yet. Finish Beat sheet first.",
+      }),
+    ])
+  })
+})

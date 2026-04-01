@@ -143,6 +143,91 @@ const sampleSnapshot = {
   latest_audio_asset: null,
 } as const
 
+const sampleHistory = {
+  session_id: 'moonlit-harbor',
+  latest_sequence_number: 4,
+  events: [
+    {
+      id: 'event-1',
+      session_id: 'moonlit-harbor',
+      sequence_number: 1,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'session.created',
+      stage: null,
+      summary: 'Created session: Lanterns Over Juniper Lake.',
+      payload: {
+        schema_version: 1,
+        working_title: 'Lanterns Over Juniper Lake',
+      },
+      created_at: '2026-04-01T03:00:00Z',
+    },
+    {
+      id: 'event-2',
+      session_id: 'moonlit-harbor',
+      sequence_number: 2,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'genre',
+      summary: 'Selected genre: Quest Fantasy.',
+      payload: {
+        schema_version: 1,
+        selection_kind: 'genre',
+        label: 'Quest Fantasy',
+        accepted: true,
+        source: 'ui',
+      },
+      created_at: '2026-04-01T03:01:00Z',
+    },
+    {
+      id: 'event-3',
+      session_id: 'moonlit-harbor',
+      sequence_number: 3,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'tone',
+      summary: 'Selected tone profile: Hushed Wonder.',
+      payload: {
+        schema_version: 1,
+        selection_kind: 'tone_profile',
+        label: 'Hushed Wonder',
+        accepted: true,
+        source: 'ui',
+      },
+      created_at: '2026-04-01T03:02:00Z',
+    },
+    {
+      id: 'event-4',
+      session_id: 'moonlit-harbor',
+      sequence_number: 4,
+      actor: {
+        actor_type: 'assistant',
+        actor_id: 'story-planner',
+      },
+      event_type: 'chat.message.recorded',
+      stage: 'beats',
+      summary: 'Recorded assistant chat message.',
+      payload: {
+        schema_version: 1,
+        message_role: 'assistant',
+        content_preview:
+          'The current focus is softening the midpoint before composition starts.',
+        content_length: 71,
+        source: 'intent_parser',
+      },
+      created_at: '2026-04-01T03:03:00Z',
+    },
+  ],
+} as const
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -151,17 +236,134 @@ function buildJsonResponse(status: number, body: unknown) {
   } as Response
 }
 
-function mockWorkspaceApi(status = 200, body: unknown = sampleSnapshot) {
+function resolveRequestUrl(input: RequestInfo | URL) {
+  if (typeof input === 'string') {
+    return input
+  }
+
+  if (input instanceof URL) {
+    return input.toString()
+  }
+
+  return input.url
+}
+
+function buildUiActionEvent(body: Record<string, unknown>) {
+  return {
+    id: `ui-event-${String(body.action ?? 'unknown')}`,
+    session_id: 'moonlit-harbor',
+    sequence_number: 8,
+    actor: {
+      actor_type: 'user',
+      actor_id: 'local-user',
+    },
+    event_type: 'ui.action.recorded',
+    stage: body.stage ?? null,
+    summary: `Recorded UI action: ${String(body.action ?? 'unknown')}.`,
+    payload: {
+      schema_version: 1,
+      action: body.action,
+      control_id: body.control_id ?? null,
+      value_summary: body.value_summary ?? null,
+      origin: body.origin ?? 'workspace',
+    },
+    created_at: '2026-04-01T03:04:00Z',
+  }
+}
+
+function mockWorkspaceApi(options?: {
+  history?: unknown
+  snapshot?: unknown
+  snapshotStatus?: number
+  chatIntentResponse?: unknown
+}) {
+  const history = options?.history ?? sampleHistory
+  const snapshot = options?.snapshot ?? sampleSnapshot
+  const snapshotStatus = options?.snapshotStatus ?? 200
+  const chatIntentResponse =
+    options?.chatIntentResponse ??
+    {
+      schema_version: 1,
+      status: 'parsed',
+      needs_clarification: false,
+      assistant_response:
+        'I can open the audio stage so you can review narration settings.',
+      clarification_reason: null,
+      proposed_actions: {
+        schema_version: 1,
+        actions: [
+          {
+            schema_version: 1,
+            action_type: 'navigate_to_stage',
+            target_stage: 'audio',
+            confidence: 0.96,
+            rationale: 'The user asked to move to audio controls.',
+            requires_confirmation: false,
+            extracted_values: {},
+          },
+        ],
+      },
+      policy_evaluation: {
+        schema_version: 1,
+        session_id: 'moonlit-harbor',
+        evaluated_actions: [
+          {
+            action_index: 0,
+            action_type: 'navigate_to_stage',
+            target_stage: 'audio',
+            decision: 'accepted',
+            summary: 'Navigation is allowed.',
+            reasons: [],
+            side_effects: [],
+            prerequisite_action_types: [],
+          },
+        ],
+      },
+    }
+
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input.toString()
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = resolveRequestUrl(input)
+      const { pathname } = new URL(url, 'http://localhost')
 
-      if (url.includes('/api/v1/sessions/moonlit-harbor')) {
-        return Promise.resolve(buildJsonResponse(status, body))
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor' &&
+        (init?.method == null || init.method === 'GET')
+      ) {
+        return Promise.resolve(buildJsonResponse(snapshotStatus, snapshot))
       }
 
-      throw new Error(`Unhandled request: GET ${url}`)
+      if (pathname === '/api/v1/sessions/moonlit-harbor/history') {
+        return Promise.resolve(buildJsonResponse(200, history))
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/chat/intents' &&
+        init?.method === 'POST'
+      ) {
+        return Promise.resolve(
+          chatIntentResponse instanceof Response
+            ? chatIntentResponse
+            : buildJsonResponse(200, chatIntentResponse),
+        )
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/ui-actions' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+
+        return Promise.resolve(
+          buildJsonResponse(201, buildUiActionEvent(requestBody)),
+        )
+      }
+
+      throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
     }),
   )
 }
@@ -219,6 +421,11 @@ describe('SessionWorkspacePage', () => {
       screen.getByRole('button', { name: 'Send message' }),
     ).toBeInTheDocument()
     expect(
+      screen.getByText(
+        'The current focus is softening the midpoint before composition starts.',
+      ),
+    ).toBeInTheDocument()
+    expect(
       screen.getAllByText('Midpoint needs one more bedtime-soft pass.').length,
     ).toBeGreaterThan(0)
     expect(
@@ -259,7 +466,21 @@ describe('SessionWorkspacePage', () => {
     expect(screen.getAllByText('?stage=audio').length).toBeGreaterThan(0)
   })
 
-  it('adds locally submitted messages to the transcript while the agent bridge is still mocked', async () => {
+  it('records direct stage-preview clicks as action echoes in the transcript', async () => {
+    mockWorkspaceApi()
+
+    renderWorkspaceRoute()
+
+    const audioLink = await screen.findByRole('link', { name: /audio/i })
+
+    fireEvent.click(audioLink)
+
+    expect(
+      await screen.findByText('Opened Audio in the main pane.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows chat-driven action echoes when a parsed action changes the visible UI', async () => {
     mockWorkspaceApi()
 
     renderWorkspaceRoute()
@@ -268,23 +489,37 @@ describe('SessionWorkspacePage', () => {
 
     fireEvent.change(composer, {
       target: {
-        value: 'Please make the midpoint gentler before composition starts.',
+        value: 'Take me to the audio settings.',
       },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     expect(
       within(screen.getByRole('log')).getByText(
-        'Please make the midpoint gentler before composition starts.',
+        'Take me to the audio settings.',
       ),
     ).toBeInTheDocument()
     expect(
-      await screen.findByText(/Captured for beat sheet\./),
+      await screen.findByText(
+        'I can open the audio stage so you can review narration settings.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('Opened Audio in the main pane.'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Configure narration and music',
+      }),
     ).toBeInTheDocument()
   })
 
   it('shows a missing-session state when the snapshot request returns 404', async () => {
-    mockWorkspaceApi(404, { detail: 'missing' })
+    mockWorkspaceApi({
+      snapshotStatus: 404,
+      snapshot: { detail: 'missing' },
+    })
 
     renderWorkspaceRoute()
 

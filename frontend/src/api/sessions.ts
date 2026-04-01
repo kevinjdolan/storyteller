@@ -2,6 +2,7 @@ import {
   type WorkflowStageId,
   type WorkflowStageState,
 } from '../features/session/workflowStages.ts'
+import type { ChatToUiActionBatch } from '../features/session/chat/chatToUiActions.ts'
 import { getJson, postJson } from './client.ts'
 
 export type SessionCatalogSelection = {
@@ -108,6 +109,89 @@ export type SessionAssetView = {
   ready_at?: string | null
 }
 
+export type SessionEventActorType = 'user' | 'assistant' | 'system' | 'service'
+
+export type SessionEventActor = {
+  actor_type: SessionEventActorType
+  actor_id?: string | null
+}
+
+export type SessionHistoryEvent = {
+  id: string
+  session_id: string
+  sequence_number: number
+  actor: SessionEventActor
+  event_type: string
+  stage?: WorkflowStageId | null
+  summary: string
+  payload?: Record<string, unknown> | unknown[] | null
+  created_at: string
+}
+
+export type SessionHistory = {
+  session_id: string
+  latest_sequence_number?: number | null
+  events: SessionHistoryEvent[]
+}
+
+export type SessionActionDecision =
+  | 'accepted'
+  | 'rejected'
+  | 'requires_confirmation'
+  | 'accepted_with_side_effects'
+
+export type SessionActionPolicyReason = {
+  code: string
+  message: string
+  stage?: WorkflowStageId | null
+  related_stages: WorkflowStageId[]
+  related_action_types: string[]
+}
+
+export type SessionActionPolicySideEffect = {
+  kind: string
+  message: string
+  stages: WorkflowStageId[]
+  selection_field?: string | null
+  job_kind?: string | null
+  asset_kind?: string | null
+}
+
+export type SessionActionPolicyEvaluationItem = {
+  action_index: number
+  action_type: string
+  target_stage: WorkflowStageId
+  decision: SessionActionDecision
+  summary: string
+  reasons: SessionActionPolicyReason[]
+  side_effects: SessionActionPolicySideEffect[]
+  prerequisite_action_types: string[]
+}
+
+export type SessionActionPolicyEvaluation = {
+  schema_version: number
+  session_id: string
+  evaluated_actions: SessionActionPolicyEvaluationItem[]
+}
+
+export type ParsedChatIntentResponse = {
+  schema_version: number
+  status: 'parsed' | 'needs_clarification' | 'failed'
+  needs_clarification: boolean
+  assistant_response: string
+  clarification_reason?: string | null
+  proposed_actions: ChatToUiActionBatch
+  policy_evaluation?: SessionActionPolicyEvaluation | null
+}
+
+export type RecordSessionUIActionRequest = {
+  action: string
+  stage?: WorkflowStageId | null
+  control_id?: string | null
+  value_summary?: string | null
+  origin?: string
+}
+
 export type SessionSnapshot = RecentSessionSummary & {
   stage_states: SessionStageStateView[]
   story_brief?: StoryBriefView | null
@@ -128,6 +212,26 @@ export function fetchRecentSessions(limit = 20) {
 
 export function fetchSessionSnapshot(sessionId: string) {
   return getJson<SessionSnapshot>(`/api/v1/sessions/${sessionId}`)
+}
+
+export function fetchSessionHistory(sessionId: string) {
+  return getJson<SessionHistory>(`/api/v1/sessions/${sessionId}/history`)
+}
+
+export function recordSessionUiAction(
+  sessionId: string,
+  body: RecordSessionUIActionRequest,
+) {
+  return postJson<SessionHistoryEvent>(`/api/v1/sessions/${sessionId}/ui-actions`, body)
+}
+
+export function parseSessionChatIntent(sessionId: string, message: string) {
+  return postJson<ParsedChatIntentResponse>(
+    `/api/v1/sessions/${sessionId}/chat/intents`,
+    {
+      message,
+    },
+  )
 }
 
 export function createSession(workingTitle?: string) {

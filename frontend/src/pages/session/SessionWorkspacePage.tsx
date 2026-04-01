@@ -1,11 +1,17 @@
-import { useEffect } from 'react'
+import { type MouseEvent, useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { type SessionSnapshot } from '../../api/sessions.ts'
+import {
+  parseSessionChatIntent,
+  recordSessionUiAction,
+  type SessionHistoryEvent,
+  type SessionSnapshot,
+} from '../../api/sessions.ts'
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import {
   useSessionChatMessages,
+  useCurrentSessionHistoryQuery,
   useSessionCurrentSnapshot,
   useCurrentSessionSnapshotQuery,
   useSessionEventStream,
@@ -16,9 +22,13 @@ import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspac
 import { SessionChatPane } from '../../features/session/chat/SessionChatPane.tsx'
 import {
   buildInitialSessionChatMessages,
-  buildMockAssistantChatReply,
   createSessionChatMessage,
 } from '../../features/session/chat/sessionChat.ts'
+import type { ChatToUiAction } from '../../features/session/chat/chatToUiActions.ts'
+import {
+  buildIntentActionEchoMessages,
+  buildSessionChatMessagesFromHistory,
+} from '../../features/session/chat/actionEchoes.ts'
 import { SessionFeedStatusIndicator } from '../../features/session/live/SessionFeedStatusIndicator.tsx'
 import {
   buildSessionWorkspaceStageViews,
@@ -284,6 +294,30 @@ function buildStageRoutingCopy(
   return `The route is previewing ${selectedStage.label.toLowerCase()} via the stage query parameter while the durable session state remains at ${currentStage.label.toLowerCase()}.`
 }
 
+function isPlainLeftClick(event: MouseEvent<HTMLAnchorElement>) {
+  return !(
+    event.button !== 0 ||
+    event.metaKey ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.shiftKey
+  )
+}
+
+function buildChatMessagesFromRecordedEvent(
+  event: SessionHistoryEvent,
+  snapshot?: SessionSnapshot | null,
+) {
+  return buildSessionChatMessagesFromHistory(
+    {
+      session_id: event.session_id,
+      latest_sequence_number: event.sequence_number,
+      events: [event],
+    },
+    snapshot,
+  )
+}
+
 function WorkspaceLoadingState({ sessionId }: { sessionId: string }) {
   return (
     <section
@@ -427,8 +461,9 @@ function getWorkspaceConnectionBanner(connectionState: string): {
 }
 
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const snapshotQuery = useCurrentSessionSnapshotQuery()
+  const historyQuery = useCurrentSessionHistoryQuery()
   const runtimeSnapshot = useSessionCurrentSnapshot()
   const chatMessages = useSessionChatMessages()
   const pendingActions = useSessionPendingActions()
@@ -445,13 +480,24 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   }, [runtimeStore, snapshotQuery.data, snapshotQuery.isError])
 
   useEffect(() => {
-    if (snapshot == null || chatMessages.length > 0) {
+    if (snapshot == null || chatMessages.length > 0 || historyQuery.isPending) {
       return
     }
 
-    runtimeStore.replaceChatMessages(buildInitialSessionChatMessages(snapshot))
+    const historyMessages =
+      historyQuery.data != null
+        ? buildSessionChatMessagesFromHistory(historyQuery.data, snapshot)
+        : []
+
+    runtimeStore.replaceChatMessages(
+      historyMessages.length > 0
+        ? historyMessages
+        : buildInitialSessionChatMessages(snapshot),
+    )
   }, [
     chatMessages.length,
+    historyQuery.data,
+    historyQuery.isPending,
     runtimeStore,
     snapshot,
     snapshotQuery.isError,
@@ -507,6 +553,64 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const selectedStageInvalidations = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
   )
+
+  function appendHistoryEventToChat(event: SessionHistoryEvent) {
+    buildChatMessagesFromRecordedEvent(event, snapshot).forEach((message) => {
+      runtimeStore.appendChatMessage(message)
+    })
+  }
+
+  function setPreviewStage(stageId: SessionWorkspaceStageView['stage']) {
+    const nextSearchParams = new URLSearchParams(searchParams)
+
+    nextSearchParams.set('stage', stageId)
+    setSearchParams(nextSearchParams)
+  }
+
+  async function persistUiAction(options: {
+    action: string
+    stage?: SessionWorkspaceStageView['stage']
+    controlId: string
+    origin: string
+    valueSummary?: string | null
+  }) {
+    const event = await recordSessionUiAction(sessionId, {
+      action: options.action,
+      stage: options.stage,
+      control_id: options.controlId,
+      value_summary: options.valueSummary ?? null,
+      origin: options.origin,
+    })
+
+    appendHistoryEventToChat(event)
+  }
+
+  async function applySupportedChatAction(
+    action: ChatToUiAction,
+  ) {
+    if (action.action_type === 'navigate_to_stage') {
+      setPreviewStage(action.target_stage)
+      await persistUiAction({
+        action: action.action_type,
+        stage: action.target_stage,
+        controlId: 'chat-intent',
+        origin: 'chat',
+        valueSummary: getWorkflowStageLabel(action.target_stage),
+      })
+      return
+    }
+
+    if (action.action_type === 'open_finalize_view') {
+      setPreviewStage('finalize')
+      await persistUiAction({
+        action: action.action_type,
+        stage: 'finalize',
+        controlId: 'chat-intent',
+        origin: 'chat',
+        valueSummary: 'Finalize',
+      })
+    }
+  }
 
   return (
     <section
@@ -594,17 +698,51 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 }),
               )
 
-              await new Promise((resolve) => {
-                window.setTimeout(resolve, 260)
-              })
+              const parsedIntent = await parseSessionChatIntent(sessionId, message)
+              const assistantCreatedAt = new Date().toISOString()
 
               runtimeStore.appendChatMessage(
-                buildMockAssistantChatReply(
-                  message,
-                  snapshot,
-                  new Date().toISOString(),
-                ),
+                createSessionChatMessage({
+                  role: 'assistant',
+                  body: parsedIntent.assistant_response,
+                  createdAt: assistantCreatedAt,
+                }),
               )
+
+              buildIntentActionEchoMessages({
+                result: parsedIntent,
+                createdAt: assistantCreatedAt,
+                idPrefix: `intent-${submittedAt}`,
+              }).forEach((actionEcho) => {
+                runtimeStore.appendChatMessage(actionEcho)
+              })
+
+              const evaluatedActions =
+                parsedIntent.policy_evaluation?.evaluated_actions ?? []
+
+              for (const evaluatedAction of evaluatedActions) {
+                if (
+                  evaluatedAction.decision !== 'accepted' &&
+                  evaluatedAction.decision !== 'accepted_with_side_effects'
+                ) {
+                  continue
+                }
+
+                const action =
+                  parsedIntent.proposed_actions.actions[
+                    evaluatedAction.action_index
+                  ]
+
+                if (
+                  action == null ||
+                  (action.action_type !== 'navigate_to_stage' &&
+                    action.action_type !== 'open_finalize_view')
+                ) {
+                  continue
+                }
+
+                await applySupportedChatAction(action).catch(() => {})
+              }
             }}
           />
         </aside>
@@ -654,6 +792,19 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       <Link
                         aria-current={stage.isSelected ? 'step' : undefined}
                         className="workflow-card-link"
+                        onClick={(event) => {
+                          if (!isPlainLeftClick(event) || stage.isSelected) {
+                            return
+                          }
+
+                          void persistUiAction({
+                            action: 'navigate_to_stage',
+                            stage: stage.stage,
+                            controlId: 'stage-navigator',
+                            origin: 'workspace',
+                            valueSummary: stage.label,
+                          }).catch(() => {})
+                        }}
                         to={buildSessionWorkspacePath(snapshot.id, {
                           stage: stage.stage,
                         })}
