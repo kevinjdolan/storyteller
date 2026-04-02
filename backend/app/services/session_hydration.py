@@ -39,6 +39,7 @@ from app.models import (
     SessionProgress,
     SessionSnapshot,
     SessionStageStateView,
+    SessionUsageSummaryView,
     StoryBriefView,
     StoryOutlineCard,
     StoryOutlineEditView,
@@ -54,6 +55,7 @@ from app.repositories import SessionAggregate, StorySessionRepository
 from app.services.agent_context import build_session_agent_context_summary
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
+from app.services.model_usage import SessionModelUsageService
 
 _ACTIVE_JOB_STATUS_VALUES = {
     JobStatus.QUEUED.value,
@@ -85,6 +87,7 @@ class SessionHydrationService:
         return build_session_snapshot(
             aggregate,
             conversation_memory=self._memory.load_latest_snapshot(session_id),
+            usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
         )
 
     def hydrate_session(
@@ -104,6 +107,7 @@ class SessionHydrationService:
         base_snapshot = build_session_snapshot(
             aggregate,
             conversation_memory=conversation_memory,
+            usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
         )
         recent_history = self._events.list_session_history(session_id, limit=history_limit)
         materialized_sequence = resolve_materialized_sequence_number(
@@ -177,6 +181,7 @@ def build_session_snapshot(
     aggregate: SessionAggregate,
     *,
     conversation_memory: ConversationMemorySnapshotView | None,
+    usage_summary: SessionUsageSummaryView,
 ) -> SessionSnapshot:
     story_session = aggregate.session
     plan_revision_views = build_plan_revision_views(aggregate.plan_revisions)
@@ -232,6 +237,7 @@ def build_session_snapshot(
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
         continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
+        usage_summary=usage_summary,
         conversation_memory=conversation_memory,
     )
     snapshot.agent_context_summary = build_session_agent_context_summary(

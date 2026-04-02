@@ -58,6 +58,7 @@ from app.models import (
     SessionStoryBriefResponse,
     SessionStoryOutlineResponse,
     SessionStorySetupResponse,
+    SessionUsageDiagnosticsView,
     StoryWorkflowToolName,
     WorkflowStage,
 )
@@ -161,6 +162,30 @@ def get_session_history(
             session_id,
             limit=limit,
             after_sequence_number=after_sequence_number,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{session_id}/usage",
+    response_model=SessionUsageDiagnosticsView,
+    summary="Load developer-facing model usage diagnostics for a story session",
+)
+def get_session_usage_diagnostics(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    recent_limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    leaderboard_limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> SessionUsageDiagnosticsView:
+    try:
+        return SessionService(db_session).load_session_usage_diagnostics(
+            session_id,
+            recent_limit=recent_limit,
+            leaderboard_limit=leaderboard_limit,
         )
     except SessionNotFoundError as exc:
         raise HTTPException(

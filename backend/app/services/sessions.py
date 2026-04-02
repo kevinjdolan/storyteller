@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
@@ -27,6 +28,8 @@ from app.models import (
     ExistingBeatSheetContext,
     ExistingCharacterSheetContext,
     ExistingSelectedPitchContext,
+    ModelCallOutcome,
+    ModelUsageBucket,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
@@ -42,6 +45,7 @@ from app.models import (
     SessionSelectionResponse,
     SessionSnapshot,
     SessionStoryBriefResponse,
+    SessionUsageDiagnosticsView,
     StoryBriefEditMode,
     UserEditTargetKind,
     WorkflowStage,
@@ -69,6 +73,7 @@ from app.services.character_generation import (
 from app.services.character_sheet_changes import infer_character_change_impact
 from app.services.continuity import SessionContinuityService
 from app.services.event_log import SessionEventLogService
+from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
 from app.services.plan_revisions import PlanRevisionService
 from app.services.session_hydration import (
@@ -213,6 +218,26 @@ class SessionService:
             session_id,
             limit=limit,
             after_sequence_number=after_sequence_number,
+        )
+
+    def load_session_usage_diagnostics(
+        self,
+        session_id: str,
+        *,
+        recent_limit: int = 20,
+        leaderboard_limit: int = 5,
+    ) -> SessionUsageDiagnosticsView:
+        if recent_limit <= 0:
+            raise ValueError("recent_limit must be greater than zero")
+        if leaderboard_limit <= 0:
+            raise ValueError("leaderboard_limit must be greater than zero")
+        if not self._sessions.exists(session_id):
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        return SessionModelUsageService(self._session).load_session_diagnostics(
+            session_id,
+            recent_limit=recent_limit,
+            leaderboard_limit=leaderboard_limit,
         )
 
     def record_ui_action(
@@ -486,6 +511,7 @@ class SessionService:
                 model_output=current_brief.model_output,
             )
         else:
+            normalization_started_at = perf_counter()
             normalization_result = self._brief_normalizer.normalize_brief(
                 raw_brief=resolved_brief["raw_brief"],
                 genre_label=(
@@ -503,6 +529,18 @@ class SessionService:
                 key_images=resolved_brief["key_images"],
                 audience_notes=resolved_brief["audience_notes"],
                 must_have_elements=resolved_brief["must_have_elements"],
+            )
+            _record_session_model_usage(
+                session=self._session,
+                session_id=story_session.id,
+                usage_bucket="planning",
+                workflow_stage=WorkflowStage.BRIEF,
+                purpose="brief_normalization",
+                source=normalization_result.source,
+                model_id=normalization_result.model_id,
+                prompt_version=normalization_result.prompt_version,
+                raw_response=normalization_result.raw_response,
+                elapsed_ms=_elapsed_ms_since(normalization_started_at),
             )
 
         normalization_result = apply_brief_normalization_overrides(
@@ -635,6 +673,7 @@ class SessionService:
 
         generator = pitch_generation_service or PitchGenerationService()
         current_selected_pitch = self._sessions.get_selected_pitch(session_id)
+        pitch_generation_started_at = perf_counter()
         generation_result = generator.generate_pitches(
             candidate_count=candidate_count,
             generation_goal="alternatives",
@@ -683,6 +722,18 @@ class SessionService:
             selected_pitch=_build_selected_pitch_context(current_selected_pitch)
             if current_selected_pitch is not None
             else None,
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.PITCHES,
+            purpose="pitch_generation",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(pitch_generation_started_at),
         )
         if not generation_result.evaluation.passed:
             raise SessionPitchGenerationError(
@@ -831,6 +882,7 @@ class SessionService:
         source_pitch = matches[0]
         previous_selected_pitch = self._sessions.get_selected_pitch(session_id)
         generator = pitch_generation_service or PitchGenerationService()
+        pitch_refinement_started_at = perf_counter()
         generation_result = generator.generate_pitches(
             candidate_count=1,
             generation_goal="refinement",
@@ -877,6 +929,18 @@ class SessionService:
             ),
             guidance=normalized_instructions,
             selected_pitch=_build_selected_pitch_context(source_pitch),
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.PITCHES,
+            purpose="pitch_refinement",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(pitch_refinement_started_at),
         )
         if not generation_result.evaluation.passed or not generation_result.pitches:
             raise SessionPitchGenerationError(
@@ -1138,6 +1202,7 @@ class SessionService:
         raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
         normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = character_generation_service or CharacterGenerationService()
+        character_generation_started_at = perf_counter()
         generation_result = generator.generate_character_sheets(
             candidate_count=candidate_count,
             generation_goal="alternatives",
@@ -1191,6 +1256,18 @@ class SessionService:
                 if current_selected_character_sheet is not None
                 else None
             ),
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.CHARACTERS,
+            purpose="character_generation",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(character_generation_started_at),
         )
         if not generation_result.evaluation.passed:
             raise SessionCharacterSheetGenerationError(
@@ -1367,6 +1444,7 @@ class SessionService:
         raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
         normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = character_generation_service or CharacterGenerationService()
+        character_refinement_started_at = perf_counter()
         generation_result = generator.generate_character_sheets(
             candidate_count=1,
             generation_goal="refinement",
@@ -1420,6 +1498,18 @@ class SessionService:
             existing_character_sheet=_build_existing_character_sheet_context(
                 source_character_sheet
             ),
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.CHARACTERS,
+            purpose="character_refinement",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(character_refinement_started_at),
         )
         if not generation_result.evaluation.passed or not generation_result.character_sheets:
             raise SessionCharacterSheetGenerationError(
@@ -1740,6 +1830,7 @@ class SessionService:
         raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
         normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = beat_sheet_generation_service or BeatSheetGenerationService()
+        beat_generation_started_at = perf_counter()
         generation_result = generator.generate_beat_sheet(
             generation_goal="initial",
             selected_pitch=_build_selected_pitch_context(selected_pitch),
@@ -1798,6 +1889,18 @@ class SessionService:
                 and current_selected_beat_sheet.character_sheet_id == selected_character_sheet.id
                 else None
             ),
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.BEATS,
+            purpose="beat_sheet_generation",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(beat_generation_started_at),
         )
         if not generation_result.evaluation.passed:
             raise SessionBeatSheetGenerationError(
@@ -1948,6 +2051,7 @@ class SessionService:
         normalized_beat_names = _normalize_beat_name_list(beat_names)
         normalized_bedtime_goal = _normalize_optional_text(bedtime_goal)
         generator = beat_sheet_generation_service or BeatSheetGenerationService()
+        beat_refinement_started_at = perf_counter()
         generation_result = generator.generate_beat_sheet(
             generation_goal="refinement",
             selected_pitch=_build_selected_pitch_context(selected_pitch),
@@ -2001,6 +2105,18 @@ class SessionService:
             focus_beats=normalized_beat_names,
             bedtime_goal=normalized_bedtime_goal,
             existing_beat_sheet=_build_existing_beat_sheet_context(source_beat_sheet),
+        )
+        _record_session_model_usage(
+            session=self._session,
+            session_id=story_session.id,
+            usage_bucket="planning",
+            workflow_stage=WorkflowStage.BEATS,
+            purpose="beat_sheet_refinement",
+            source=generation_result.source,
+            model_id=generation_result.model_id,
+            prompt_version=generation_result.prompt_version,
+            raw_response=generation_result.raw_response,
+            elapsed_ms=_elapsed_ms_since(beat_refinement_started_at),
         )
         if not generation_result.evaluation.passed:
             raise SessionBeatSheetGenerationError(
@@ -4101,3 +4217,68 @@ def _truncate_story_brief_text(value: str, *, limit: int) -> str:
         return value
 
     return f"{value[: limit - 3].rstrip()}..."
+
+
+def _elapsed_ms_since(started_at: float) -> int:
+    return max(round((perf_counter() - started_at) * 1000), 0)
+
+
+def _record_session_model_usage(
+    *,
+    session: Session,
+    session_id: str,
+    usage_bucket: str,
+    workflow_stage: WorkflowStage | None,
+    purpose: str,
+    source: str,
+    model_id: str | None,
+    prompt_version: str | None,
+    raw_response: Any,
+    elapsed_ms: int,
+) -> None:
+    if model_id is None:
+        return
+
+    SessionModelUsageService(session).record_model_call(
+        context=ModelUsageContext(
+            session_id=session_id,
+            usage_bucket=ModelUsageBucket(usage_bucket),
+            workflow_stage=workflow_stage,
+            purpose=purpose,
+            model_id=model_id,
+            prompt_version=prompt_version,
+        ),
+        elapsed_ms=elapsed_ms,
+        outcome=_resolve_model_usage_outcome(source=source, raw_response=raw_response),
+        raw_response=raw_response,
+        error_message=_extract_model_usage_error_message(raw_response),
+    )
+
+
+def _resolve_model_usage_outcome(
+    *,
+    source: str,
+    raw_response: Any,
+) -> ModelCallOutcome:
+    if source != "heuristic":
+        return ModelCallOutcome.SUCCEEDED
+
+    if isinstance(raw_response, Mapping) and isinstance(
+        raw_response.get("adapter_raw_response"),
+        Mapping,
+    ):
+        return ModelCallOutcome.SUCCEEDED_WITH_FALLBACK
+
+    return ModelCallOutcome.FAILED
+
+
+def _extract_model_usage_error_message(raw_response: Any) -> str | None:
+    if not isinstance(raw_response, Mapping):
+        return None
+
+    fallback_reason = raw_response.get("fallback_reason")
+    if fallback_reason is None:
+        return None
+
+    normalized = str(fallback_reason).strip()
+    return normalized or None

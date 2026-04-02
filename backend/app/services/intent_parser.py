@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,8 @@ from app.models import (
     IntentParserStageContext,
     IntentParserStatus,
     IntentParserStructuredOutput,
+    ModelCallOutcome,
+    ModelUsageBucket,
     ParsedChatIntentResponse,
     SessionSnapshot,
     WorkflowStage,
@@ -28,6 +32,7 @@ from app.models import (
 from app.services.action_policy import SessionActionPolicyService
 from app.services.agent_context import build_session_agent_context_summary
 from app.services.event_log import SessionEventLogService
+from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.sessions import SessionNotFoundError, SessionService
 
 
@@ -89,11 +94,33 @@ class SessionIntentParserService:
             model_id = invocation.model_id
             rendered_prompt = invocation.rendered_prompt
 
+            parser_started_at = perf_counter()
             try:
                 invocation_result = self._parser.parse(invocation)
                 raw_response = invocation_result.raw_response
                 result = _normalize_parser_output(invocation_result.structured_output)
-            except (IntentParserTransportError, ValidationError):
+                _record_intent_parser_model_usage(
+                    session=self._session,
+                    session_id=session_id,
+                    current_stage=context.stage_context.current_stage,
+                    model_id=model_id,
+                    prompt_version=prompt_version,
+                    raw_response=raw_response,
+                    elapsed_ms=_elapsed_ms_since(parser_started_at),
+                    outcome=ModelCallOutcome.SUCCEEDED,
+                )
+            except (IntentParserTransportError, ValidationError) as exc:
+                _record_intent_parser_model_usage(
+                    session=self._session,
+                    session_id=session_id,
+                    current_stage=context.stage_context.current_stage,
+                    model_id=model_id,
+                    prompt_version=prompt_version,
+                    raw_response=raw_response,
+                    elapsed_ms=_elapsed_ms_since(parser_started_at),
+                    outcome=ModelCallOutcome.FAILED,
+                    error_message=str(exc),
+                )
                 result = _build_failed_result()
 
         if result.status == IntentParserStatus.PARSED and result.proposed_actions.actions:
@@ -295,3 +322,35 @@ def _build_plan_summary_response(snapshot: SessionSnapshot) -> str:
     plan_summary = ", ".join(plan_parts) if plan_parts else "the story plan is still taking shape"
     focus_tail = f" {current_detail}" if current_detail else ""
     return f"Current focus is {current_focus.lower()}.{focus_tail} Plan so far: {plan_summary}."
+
+
+def _elapsed_ms_since(started_at: float) -> int:
+    return max(round((perf_counter() - started_at) * 1000), 0)
+
+
+def _record_intent_parser_model_usage(
+    *,
+    session: Session,
+    session_id: str,
+    current_stage: WorkflowStage,
+    model_id: str,
+    prompt_version: str,
+    raw_response,
+    elapsed_ms: int,
+    outcome: ModelCallOutcome,
+    error_message: str | None = None,
+) -> None:
+    SessionModelUsageService(session).record_model_call(
+        context=ModelUsageContext(
+            session_id=session_id,
+            usage_bucket=ModelUsageBucket.PLANNING,
+            workflow_stage=current_stage,
+            purpose="chat_intent_parser",
+            model_id=model_id,
+            prompt_version=prompt_version,
+        ),
+        elapsed_ms=elapsed_ms,
+        outcome=outcome,
+        raw_response=raw_response,
+        error_message=error_message,
+    )

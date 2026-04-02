@@ -44,6 +44,13 @@ def test_settings_read_required_runtime_values_from_environment(
         "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
     )
     assert settings.gemini_api_key == "env-api-key"
+    assert (
+        settings.gemini.approximate_pricing.planning.input_cost_per_million_tokens_usd == 0.30
+    )
+    assert (
+        settings.gemini.approximate_pricing.composition.output_cost_per_million_tokens_usd
+        == 5.00
+    )
     assert settings.gcs_endpoint == "http://gcs:4443"
     assert settings.gcs_project_id == "storyteller-local"
     assert settings.gcs_public_url == "http://localhost:8568"
@@ -63,6 +70,13 @@ def test_settings_merge_local_secrets_file_when_present(tmp_path: Path) -> None:
           url: postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller
         gemini:
           api_key: secrets-api-key
+          approximate_pricing:
+            planning:
+              input_cost_per_million_tokens_usd: 0.45
+              output_cost_per_million_tokens_usd: 1.25
+            composition:
+              input_cost_per_million_tokens_usd: 1.8
+              output_cost_per_million_tokens_usd: 6.4
         gcs:
           endpoint: http://localhost:8568
           project_id: storyteller-local
@@ -91,6 +105,13 @@ def test_settings_merge_local_secrets_file_when_present(tmp_path: Path) -> None:
         "postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller"
     )
     assert settings.gemini_api_key == "secrets-api-key"
+    assert (
+        settings.gemini.approximate_pricing.planning.input_cost_per_million_tokens_usd == 0.45
+    )
+    assert (
+        settings.gemini.approximate_pricing.composition.output_cost_per_million_tokens_usd
+        == 6.4
+    )
     assert settings.cors_allowed_origins == (
         "http://localhost:8566",
         "http://127.0.0.1:8566",

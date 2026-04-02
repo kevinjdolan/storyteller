@@ -17,7 +17,9 @@ EXPECTED_TABLES = {
     "continuity_bibles",
     "event_log_entries",
     "genres",
+    "model_usage_events",
     "pitches",
+    "session_usage_rollups",
     "session_memory_snapshots",
     "session_assets",
     "story_briefs",
@@ -134,6 +136,51 @@ EXPECTED_STORY_OUTLINE_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_MODEL_USAGE_EVENT_COLUMNS = {
+    "id",
+    "session_id",
+    "usage_bucket",
+    "workflow_stage",
+    "purpose",
+    "provider",
+    "model_id",
+    "prompt_version",
+    "outcome",
+    "elapsed_ms",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cached_input_tokens",
+    "thought_tokens",
+    "approximate_cost_usd",
+    "error_message",
+    "created_at",
+}
+EXPECTED_SESSION_USAGE_ROLLUP_COLUMNS = {
+    "id",
+    "session_id",
+    "usage_bucket",
+    "total_calls",
+    "succeeded_calls",
+    "failed_calls",
+    "fallback_calls",
+    "token_metadata_call_count",
+    "cost_estimate_call_count",
+    "total_elapsed_ms",
+    "max_elapsed_ms",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cached_input_tokens",
+    "thought_tokens",
+    "approximate_cost_usd_total",
+    "models_json",
+    "last_model_id",
+    "last_purpose",
+    "last_called_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -173,6 +220,14 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _get_column_names(database_url, "story_briefs")
     assert EXPECTED_STORY_OUTLINE_COLUMNS <= _get_column_names(database_url, "story_outlines")
     assert EXPECTED_STORY_SETUP_COLUMNS <= _get_column_names(database_url, "story_setups")
+    assert EXPECTED_MODEL_USAGE_EVENT_COLUMNS <= _get_column_names(
+        database_url,
+        "model_usage_events",
+    )
+    assert EXPECTED_SESSION_USAGE_ROLLUP_COLUMNS <= _get_column_names(
+        database_url,
+        "session_usage_rollups",
+    )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
         database_url,
         "session_memory_snapshots",
@@ -192,6 +247,14 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _get_column_names(database_url, "story_briefs")
     assert EXPECTED_STORY_OUTLINE_COLUMNS <= _get_column_names(database_url, "story_outlines")
     assert EXPECTED_STORY_SETUP_COLUMNS <= _get_column_names(database_url, "story_setups")
+    assert EXPECTED_MODEL_USAGE_EVENT_COLUMNS <= _get_column_names(
+        database_url,
+        "model_usage_events",
+    )
+    assert EXPECTED_SESSION_USAGE_ROLLUP_COLUMNS <= _get_column_names(
+        database_url,
+        "session_usage_rollups",
+    )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
         database_url,
         "session_memory_snapshots",

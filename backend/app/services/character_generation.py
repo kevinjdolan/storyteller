@@ -170,11 +170,11 @@ class CharacterGenerationService:
         )
 
         if self._adapter is not None:
+            invocation = build_character_generation_invocation(
+                context,
+                model_id=self._adapter.model_id,
+            )
             try:
-                invocation = build_character_generation_invocation(
-                    context,
-                    model_id=self._adapter.model_id,
-                )
                 result = self._adapter.generate(invocation)
                 evaluation = evaluate_character_sheet_batch(
                     result.structured_output.character_sheets,
@@ -193,11 +193,15 @@ class CharacterGenerationService:
                     context,
                     fallback_reason=_build_validation_failure_reason(evaluation),
                     adapter_raw_response=result.raw_response,
+                    model_id=invocation.model_id,
+                    prompt_version=invocation.prompt_version,
                 )
             except Exception as exc:
                 return _build_heuristic_result(
                     context,
                     fallback_reason=str(exc),
+                    model_id=invocation.model_id,
+                    prompt_version=invocation.prompt_version,
                 )
 
         return _build_heuristic_result(context)
@@ -321,6 +325,8 @@ def _build_heuristic_result(
     *,
     fallback_reason: str | None = None,
     adapter_raw_response: dict[str, Any] | list[Any] | str | None = None,
+    model_id: str | None = None,
+    prompt_version: str | None = None,
 ) -> CharacterGenerationResult:
     character_sheets = _build_heuristic_character_sheets(context)
     evaluation = evaluate_character_sheet_batch(
@@ -337,6 +343,8 @@ def _build_heuristic_result(
 
     return CharacterGenerationResult(
         source="heuristic",
+        model_id=model_id,
+        prompt_version=prompt_version,
         character_sheets=character_sheets,
         evaluation=evaluation,
         raw_response=raw_response,

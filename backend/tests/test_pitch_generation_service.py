@@ -165,6 +165,8 @@ def test_eval_fallback_resilience_uses_heuristics_when_adapter_fails() -> None:
     )
 
     assert result.source == "heuristic"
+    assert result.model_id == "gemini-3.1-pro"
+    assert result.prompt_version == "pitch_generation.v3"
     assert len(result.pitches) == 4
     assert result.evaluation.passed is True
     assert result.raw_response is not None
@@ -182,6 +184,8 @@ def test_eval_validation_guardrail_falls_back_when_adapter_returns_trivial_rewri
     )
 
     assert result.source == "heuristic"
+    assert result.model_id == "gemini-3.1-pro"
+    assert result.prompt_version == "pitch_generation.v3"
     assert result.raw_response is not None
     assert "titles_are_distinct" in result.raw_response["fallback_reason"]
     assert "hooks_are_distinct" in result.raw_response["fallback_reason"]

@@ -187,6 +187,16 @@ from app.models.intent_parser import (
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
 )
+from app.models.model_usage import (
+    ModelCallOutcome,
+    ModelTokenUsageView,
+    ModelUsageBucket,
+    SessionUsageBucketSummaryView,
+    SessionUsageDiagnosticsView,
+    SessionUsageEventView,
+    SessionUsageStageBreakdownView,
+    SessionUsageSummaryView,
+)
 from app.models.pitch_generation import (
     PITCH_GENERATION_PROMPT_VERSION,
     PITCH_GENERATION_SCHEMA_VERSION,
@@ -504,6 +514,9 @@ __all__ = [
     "PitchGenerationStructuredOutput",
     "PitchView",
     "ParsedChatIntentResponse",
+    "ModelCallOutcome",
+    "ModelTokenUsageView",
+    "ModelUsageBucket",
     "RealtimeDeliveryMode",
     "RealtimeEventType",
     "RealtimeReplayStrategy",
@@ -586,6 +599,11 @@ __all__ = [
     "SessionStoryBriefResponse",
     "SessionStoryOutlineResponse",
     "SessionStorySetupResponse",
+    "SessionUsageBucketSummaryView",
+    "SessionUsageDiagnosticsView",
+    "SessionUsageEventView",
+    "SessionUsageStageBreakdownView",
+    "SessionUsageSummaryView",
     "StageOperationToolResult",
     "StoryBriefView",
     "StoryBriefEditMode",

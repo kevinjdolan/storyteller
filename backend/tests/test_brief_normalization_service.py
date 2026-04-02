@@ -100,6 +100,8 @@ def test_eval_fallback_resilience_uses_heuristics_when_adapter_fails() -> None:
     )
 
     assert result.source == "heuristic"
+    assert result.model_id == "gemini-3.1-flash-lite"
+    assert result.prompt_version == "brief_normalizer.v1"
     assert result.normalized_summary is not None
     assert result.normalized_preferences.protagonist_type == "A child and an otter guardian"
     assert any(

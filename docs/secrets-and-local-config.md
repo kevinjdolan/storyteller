@@ -74,6 +74,16 @@ database:
 
 gemini:
   api_key: your-gemini-api-key-here
+  approximate_pricing:
+    planning:
+      input_cost_per_million_tokens_usd: 0.30
+      output_cost_per_million_tokens_usd: 0.80
+      cached_input_cost_per_million_tokens_usd: 0.03
+    composition:
+      input_cost_per_million_tokens_usd: 1.25
+      output_cost_per_million_tokens_usd: 5.00
+      cached_input_cost_per_million_tokens_usd: 0.13
+    audio: {}
 
 gcs:
   endpoint: http://gcs:4443
@@ -105,6 +115,10 @@ The required values today are:
 - `gcs.buckets.exports`
 
 `gcs.public_url` is optional.
+
+`gemini.approximate_pricing` is optional but recommended for usable cost diagnostics. The
+checked-in defaults are intentionally lightweight approximations for local development, and you
+can override them in `secrets.yaml` if your configured models use different pricing.
 
 ## Matching Environment Variables
 

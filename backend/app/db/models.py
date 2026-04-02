@@ -226,12 +226,102 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    model_usage_events: Mapped[list["ModelUsageEvent"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    model_usage_rollups: Mapped[list["SessionUsageRollup"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_story_sessions_overall_status_updated_at", "overall_status", "updated_at"),
         Index("ix_story_sessions_resume_stage", "resume_stage"),
         Index("ix_story_sessions_current_stage", "current_stage"),
         Index("ix_story_sessions_selected_genre_id", "selected_genre_id"),
+    )
+
+
+class ModelUsageEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "model_usage_events"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    usage_bucket: Mapped[str] = mapped_column(String(32), nullable=False)
+    workflow_stage: Mapped[WorkflowStage | None] = mapped_column(WORKFLOW_STAGE_ENUM)
+    purpose: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    prompt_version: Mapped[str | None] = mapped_column(String(120))
+    outcome: Mapped[str] = mapped_column(String(40), nullable=False)
+    elapsed_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    cached_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    thought_tokens: Mapped[int | None] = mapped_column(Integer)
+    approximate_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False))
+    error_message: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    session: Mapped["StorySession"] = relationship(back_populates="model_usage_events")
+
+    __table_args__ = (
+        Index("ix_model_usage_events_session_id_created_at", "session_id", "created_at"),
+        Index("ix_model_usage_events_session_id_usage_bucket", "session_id", "usage_bucket"),
+        Index("ix_model_usage_events_session_id_elapsed_ms", "session_id", "elapsed_ms"),
+    )
+
+
+class SessionUsageRollup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "session_usage_rollups"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    usage_bucket: Mapped[str] = mapped_column(String(32), nullable=False)
+    total_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    succeeded_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fallback_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_metadata_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_estimate_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_elapsed_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_elapsed_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    thought_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    approximate_cost_usd_total: Mapped[float] = mapped_column(
+        Numeric(12, 6, asdecimal=False),
+        nullable=False,
+        default=0,
+    )
+    models_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    last_model_id: Mapped[str | None] = mapped_column(String(120))
+    last_purpose: Mapped[str | None] = mapped_column(String(120))
+    last_called_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped["StorySession"] = relationship(back_populates="model_usage_rollups")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "usage_bucket",
+            name="uq_session_usage_rollups_session_id_usage_bucket",
+        ),
+        Index("ix_session_usage_rollups_session_id_last_called_at", "session_id", "last_called_at"),
     )
 
 

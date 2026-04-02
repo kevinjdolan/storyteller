@@ -23,6 +23,8 @@ from app.models import (
     GeneratedCharacterProfile,
     GeneratedCharacterSheetCandidate,
     GeneratedPitchCandidate,
+    ModelCallOutcome,
+    ModelUsageBucket,
     NormalizedBriefPreferences,
     PitchGenerationInvocation,
     PitchGenerationInvocationResult,
@@ -31,6 +33,7 @@ from app.models import (
     WorkflowStageState,
 )
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
+from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.sessions import SessionService
 from app.settings import get_settings
 from fastapi.testclient import TestClient
@@ -59,7 +62,14 @@ class StubBriefNormalizationAdapter:
                     candidate_motifs=["floating lanterns", "moonlit water"],
                 ),
             ),
-            raw_response={"stub": True},
+            raw_response={
+                "stub": True,
+                "usageMetadata": {
+                    "promptTokenCount": 240,
+                    "candidatesTokenCount": 72,
+                    "totalTokenCount": 312,
+                },
+            },
         )
 
     def close(self) -> None:
@@ -125,7 +135,14 @@ class StubPitchGenerationAdapter:
                     ),
                 ]
             ),
-            raw_response={"stub": True},
+            raw_response={
+                "stub": True,
+                "usageMetadata": {
+                    "promptTokenCount": 540,
+                    "candidatesTokenCount": 210,
+                    "totalTokenCount": 750,
+                },
+            },
         )
 
     def close(self) -> None:
@@ -294,7 +311,14 @@ class StubCharacterGenerationAdapter:
                     ),
                 ]
             ),
-            raw_response={"stub": True},
+            raw_response={
+                "stub": True,
+                "usageMetadata": {
+                    "promptTokenCount": 640,
+                    "candidatesTokenCount": 260,
+                    "totalTokenCount": 900,
+                },
+            },
         )
 
     def close(self) -> None:
@@ -357,7 +381,14 @@ class StubBeatSheetGenerationAdapter:
                     ],
                 )
             ),
-            raw_response={"stub": True},
+            raw_response={
+                "stub": True,
+                "usageMetadata": {
+                    "promptTokenCount": 820,
+                    "candidatesTokenCount": 340,
+                    "totalTokenCount": 1160,
+                },
+            },
         )
 
     def close(self) -> None:
@@ -438,6 +469,73 @@ def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
     assert payload[0]["progress"]["completed_stages"] == 1
     assert payload[1]["overall_status"] == "draft"
     assert payload[1]["progress"]["completed_stages"] == 0
+
+
+def test_session_usage_endpoint_returns_rollups_and_recent_calls(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post("/api/v1/sessions", json={"working_title": "Usage"})
+    assert create_response.status_code == 201
+    session_id = create_response.json()["id"]
+
+    db_session = get_session_factory()()
+    try:
+        usage = SessionModelUsageService(db_session)
+        usage.record_model_call(
+            context=ModelUsageContext(
+                session_id=session_id,
+                usage_bucket=ModelUsageBucket.PLANNING,
+                workflow_stage=WorkflowStage.BRIEF,
+                purpose="brief_normalization",
+                model_id="gemini-3.1-flash-lite",
+                prompt_version="brief_normalizer.v1",
+            ),
+            elapsed_ms=420,
+            outcome=ModelCallOutcome.SUCCEEDED,
+            raw_response={
+                "usageMetadata": {
+                    "promptTokenCount": 240,
+                    "candidatesTokenCount": 72,
+                    "totalTokenCount": 312,
+                }
+            },
+        )
+        usage.record_model_call(
+            context=ModelUsageContext(
+                session_id=session_id,
+                usage_bucket=ModelUsageBucket.PLANNING,
+                workflow_stage=WorkflowStage.PITCHES,
+                purpose="pitch_generation",
+                model_id="gemini-3.1-pro",
+                prompt_version="pitch_generation.v3",
+            ),
+            elapsed_ms=860,
+            outcome=ModelCallOutcome.SUCCEEDED,
+            raw_response={
+                "usageMetadata": {
+                    "promptTokenCount": 540,
+                    "candidatesTokenCount": 210,
+                    "totalTokenCount": 750,
+                }
+            },
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    usage_response = session_api_client.get(f"/api/v1/sessions/{session_id}/usage")
+    assert usage_response.status_code == 200
+    payload = usage_response.json()
+
+    planning_bucket = next(
+        bucket for bucket in payload["summary"]["buckets"] if bucket["usage_bucket"] == "planning"
+    )
+    assert planning_bucket["total_calls"] == 2
+    assert planning_bucket["token_usage"]["total_tokens"] == 1062
+    assert planning_bucket["approximate_cost_usd"] is not None
+    assert planning_bucket["models_used"] == ["gemini-3.1-flash-lite", "gemini-3.1-pro"]
+    assert payload["recent_calls"][0]["purpose"] == "pitch_generation"
+    assert payload["recent_calls"][1]["purpose"] == "brief_normalization"
 
 
 def test_get_session_snapshot_endpoint_returns_full_snapshot(

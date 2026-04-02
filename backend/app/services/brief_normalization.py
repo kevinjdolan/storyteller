@@ -139,11 +139,11 @@ class BriefNormalizationService:
         )
 
         if self._adapter is not None:
+            invocation = build_brief_normalization_invocation(
+                context,
+                model_id=self._adapter.model_id,
+            )
             try:
-                invocation = build_brief_normalization_invocation(
-                    context,
-                    model_id=self._adapter.model_id,
-                )
                 result = self._adapter.normalize(invocation)
                 return BriefNormalizationResult(
                     source="gemini",
@@ -157,6 +157,8 @@ class BriefNormalizationService:
                 return _build_heuristic_result(
                     context,
                     fallback_reason=str(exc),
+                    model_id=invocation.model_id,
+                    prompt_version=invocation.prompt_version,
                 )
 
         return _build_heuristic_result(context)
@@ -264,6 +266,8 @@ def _build_heuristic_result(
     context: BriefNormalizationPromptContext,
     *,
     fallback_reason: str | None = None,
+    model_id: str | None = None,
+    prompt_version: str | None = None,
 ) -> BriefNormalizationResult:
     preferences = NormalizedBriefPreferences(
         protagonist_type=_infer_protagonist_type(context),
@@ -285,6 +289,8 @@ def _build_heuristic_result(
 
     return BriefNormalizationResult(
         source="heuristic",
+        model_id=model_id,
+        prompt_version=prompt_version,
         normalized_summary=normalized_summary,
         normalized_preferences=preferences,
         raw_response=raw_response,

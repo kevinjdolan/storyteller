@@ -218,7 +218,21 @@ def _build_default_payload(environment: str) -> dict[str, Any]:
             "allowed_origins": DEFAULT_CORS_ALLOWED_ORIGINS,
         },
         "database": {},
-        "gemini": {},
+        "gemini": {
+            "approximate_pricing": {
+                "planning": {
+                    "input_cost_per_million_tokens_usd": 0.30,
+                    "output_cost_per_million_tokens_usd": 0.80,
+                    "cached_input_cost_per_million_tokens_usd": 0.03,
+                },
+                "composition": {
+                    "input_cost_per_million_tokens_usd": 1.25,
+                    "output_cost_per_million_tokens_usd": 5.00,
+                    "cached_input_cost_per_million_tokens_usd": 0.13,
+                },
+                "audio": {},
+            },
+        },
         "gcs": {
             "buckets": {},
         },
@@ -368,6 +382,9 @@ class GeminiSettings(BaseSettingsModel):
     planning_model: str = "gemini-3.1-flash-lite"
     composition_model: str = "gemini-3.1-pro"
     tts_model: str = "gemini-tts"
+    approximate_pricing: "GeminiApproximatePricingSettings" = Field(
+        default_factory=lambda: GeminiApproximatePricingSettings()
+    )
 
     @field_validator("api_key", mode="before")
     @classmethod
@@ -378,6 +395,30 @@ class GeminiSettings(BaseSettingsModel):
             _raise_missing_required_setting("gemini.api_key")
 
         return normalized
+
+
+class GeminiPricingBucketSettings(BaseSettingsModel):
+    input_cost_per_million_tokens_usd: float | None = Field(default=None, ge=0)
+    output_cost_per_million_tokens_usd: float | None = Field(default=None, ge=0)
+    cached_input_cost_per_million_tokens_usd: float | None = Field(default=None, ge=0)
+
+
+class GeminiApproximatePricingSettings(BaseSettingsModel):
+    planning: GeminiPricingBucketSettings = Field(
+        default_factory=lambda: GeminiPricingBucketSettings(
+            input_cost_per_million_tokens_usd=0.30,
+            output_cost_per_million_tokens_usd=0.80,
+            cached_input_cost_per_million_tokens_usd=0.03,
+        )
+    )
+    composition: GeminiPricingBucketSettings = Field(
+        default_factory=lambda: GeminiPricingBucketSettings(
+            input_cost_per_million_tokens_usd=1.25,
+            output_cost_per_million_tokens_usd=5.00,
+            cached_input_cost_per_million_tokens_usd=0.13,
+        )
+    )
+    audio: GeminiPricingBucketSettings = Field(default_factory=GeminiPricingBucketSettings)
 
 
 class StorageBucketsSettings(BaseSettingsModel):

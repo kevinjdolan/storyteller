@@ -188,6 +188,8 @@ def test_eval_fallback_resilience_uses_heuristics_when_adapter_fails() -> None:
     )
 
     assert result.source == "heuristic"
+    assert result.model_id == "gemini-3.1-pro"
+    assert result.prompt_version == "beat_sheet_generation.v2"
     assert len(result.beat_sheet.beats) == 15
     assert result.evaluation.passed is True
     assert result.raw_response is not None
@@ -209,6 +211,8 @@ def test_eval_validation_guardrail_falls_back_when_adapter_misses_required_beats
     )
 
     assert result.source == "heuristic"
+    assert result.model_id == "gemini-3.1-pro"
+    assert result.prompt_version == "beat_sheet_generation.v2"
     assert result.raw_response is not None
     assert "all_required_beats_present" in result.raw_response["fallback_reason"]
     assert "beat_order_matches_framework" in result.raw_response["fallback_reason"]
