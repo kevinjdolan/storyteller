@@ -5,27 +5,37 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.ai import BriefNormalizationAdapter, IntentParserAdapter, PitchGenerationAdapter
+from app.ai import (
+    BriefNormalizationAdapter,
+    CharacterGenerationAdapter,
+    IntentParserAdapter,
+    PitchGenerationAdapter,
+)
 from app.api.dependencies import (
     get_brief_normalization_adapter,
+    get_character_generation_adapter,
     get_db_session,
     get_intent_parser_adapter,
     get_pitch_generation_adapter,
 )
 from app.models import (
     CreateSessionRequest,
+    GenerateSessionCharacterSheetsRequest,
     GenerateSessionPitchesRequest,
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
     SaveSessionStoryBriefRequest,
+    SelectSessionCharacterSheetRequest,
     SelectSessionGenreRequest,
     SelectSessionPitchRequest,
     SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
+    SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
     SessionEventView,
@@ -38,6 +48,7 @@ from app.models import (
 )
 from app.services import (
     BriefNormalizationService,
+    CharacterGenerationService,
     PitchGenerationService,
     SessionActionPolicyService,
     SessionIntentParserService,
@@ -45,6 +56,8 @@ from app.services import (
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
     InvalidStageTransitionError,
+    SessionCharacterSheetGenerationError,
+    SessionCharacterSheetSelectionError,
     SessionGenreSelectionError,
     SessionNotFoundError,
     SessionPitchGenerationError,
@@ -389,6 +402,130 @@ def select_session_pitch(
     except InvalidStageTransitionError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/characters/generate",
+    response_model=SessionCharacterSheetGenerationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate a durable character-sheet batch for a story session",
+)
+def generate_session_character_sheets(
+    session_id: str,
+    payload: GenerateSessionCharacterSheetsRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    character_generation_adapter: Annotated[
+        CharacterGenerationAdapter,
+        Depends(get_character_generation_adapter),
+    ],
+) -> SessionCharacterSheetGenerationResponse:
+    try:
+        return SessionService(db_session).generate_character_sheets(
+            session_id,
+            candidate_count=payload.candidate_count,
+            guidance=payload.guidance,
+            origin=payload.origin,
+            character_generation_service=CharacterGenerationService(
+                adapter=character_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionCharacterSheetGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/characters/refine",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate and select a refined character sheet for a story session",
+)
+def refine_session_character_sheet(
+    session_id: str,
+    payload: RefineSessionCharacterSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    character_generation_adapter: Annotated[
+        CharacterGenerationAdapter,
+        Depends(get_character_generation_adapter),
+    ],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).refine_character_sheet(
+            session_id,
+            character_sheet_id=payload.character_sheet_id,
+            revision_number=payload.revision_number,
+            title=payload.title,
+            instructions=payload.instructions,
+            focus_character_names=payload.focus_character_names,
+            change_summary=payload.change_summary,
+            origin=payload.origin,
+            character_generation_service=CharacterGenerationService(
+                adapter=character_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (SessionCharacterSheetSelectionError, SessionCharacterSheetGenerationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/selections/character-sheet",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist the selected character sheet for a story session",
+)
+def select_session_character_sheet(
+    session_id: str,
+    payload: SelectSessionCharacterSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).select_character_sheet(
+            session_id,
+            character_sheet_id=payload.character_sheet_id,
+            revision_number=payload.revision_number,
+            title=payload.title,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionCharacterSheetSelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

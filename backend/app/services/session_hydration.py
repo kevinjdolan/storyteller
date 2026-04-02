@@ -12,6 +12,8 @@ from app.models import (
     AudioJobView,
     AudioProgressEventPayload,
     BeatSheetView,
+    CharacterProfileView,
+    CharacterSheetBatchView,
     CharacterSheetView,
     CompositionJobView,
     CompositionProgressEventPayload,
@@ -197,6 +199,7 @@ def build_session_snapshot(
         story_brief=build_story_brief_view(aggregate.active_story_brief),
         pitch_batches=build_pitch_batch_views(aggregate.pitches),
         selected_pitch=build_pitch_view(aggregate.selected_pitch),
+        character_sheet_batches=build_character_sheet_batch_views(aggregate.character_sheets),
         selected_character_sheet=build_character_sheet_view(aggregate.selected_character_sheet),
         selected_beat_sheet=build_beat_sheet_view(aggregate.selected_beat_sheet),
         selected_story_setup=build_story_setup_view(aggregate.selected_story_setup),
@@ -831,20 +834,235 @@ def _read_pitch_refinement_metadata(row) -> dict[str, Any]:
     return dict(refinement_metadata) if isinstance(refinement_metadata, Mapping) else {}
 
 
+def _read_character_candidate_data(row) -> dict[str, Any]:
+    if not isinstance(getattr(row, "character_data", None), Mapping):
+        return {}
+
+    candidate = row.character_data.get("candidate")
+    return dict(candidate) if isinstance(candidate, Mapping) else {}
+
+
+def _read_character_batch_metadata(row) -> dict[str, Any]:
+    if not isinstance(getattr(row, "character_data", None), Mapping):
+        return {}
+
+    batch_metadata = row.character_data.get("batch_metadata")
+    return dict(batch_metadata) if isinstance(batch_metadata, Mapping) else {}
+
+
+def _read_character_refinement_metadata(row) -> dict[str, Any]:
+    if not isinstance(getattr(row, "character_data", None), Mapping):
+        return {}
+
+    refinement_metadata = row.character_data.get("refinement")
+    return dict(refinement_metadata) if isinstance(refinement_metadata, Mapping) else {}
+
+
+def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: str) -> str | None:
+    value = data.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _resolve_character_batch_key(row) -> str:
+    return _read_character_batch_metadata(row).get(
+        "generation_key",
+        f"legacy-character-{getattr(row, 'revision_number', 'unknown')}",
+    )
+
+
+def _resolve_character_candidate_index(row) -> int:
+    candidate_index = _read_character_batch_metadata(row).get("candidate_index")
+    if isinstance(candidate_index, int) and candidate_index >= 1:
+        return candidate_index
+
+    revision_number = getattr(row, "revision_number", None)
+    return revision_number if isinstance(revision_number, int) and revision_number >= 1 else 1
+
+
+def _read_character_visual_motifs(candidate_payload: Mapping[str, Any]) -> list[str]:
+    visual_motifs = candidate_payload.get("visual_motifs")
+    if not isinstance(visual_motifs, list):
+        return []
+
+    return [value for value in visual_motifs if isinstance(value, str)]
+
+
+def build_character_profile_view(
+    value,
+    *,
+    fallback_name: str | None = None,
+) -> CharacterProfileView | None:
+    if isinstance(value, Mapping):
+        name = value.get("name") if isinstance(value.get("name"), str) else fallback_name
+        if name is None:
+            return None
+
+        return CharacterProfileView(
+            name=name,
+            role=value.get("role") if isinstance(value.get("role"), str) else None,
+            goal=value.get("goal") if isinstance(value.get("goal"), str) else None,
+            flaw=value.get("flaw") if isinstance(value.get("flaw"), str) else None,
+            comfort_trait=(
+                value.get("comfort_trait")
+                if isinstance(value.get("comfort_trait"), str)
+                else None
+            ),
+            bedtime_safety_notes=(
+                value.get("bedtime_safety_notes")
+                if isinstance(value.get("bedtime_safety_notes"), str)
+                else None
+            ),
+            relationships=[
+                entry
+                for entry in value.get("relationships", [])
+                if isinstance(entry, str)
+            ]
+            if isinstance(value.get("relationships"), list)
+            else [],
+            visual_anchors=[
+                entry
+                for entry in value.get("visual_anchors", [])
+                if isinstance(entry, str)
+            ]
+            if isinstance(value.get("visual_anchors"), list)
+            else [],
+        )
+
+    if fallback_name is not None:
+        return CharacterProfileView(name=fallback_name)
+
+    return None
+
+
+def build_character_supporting_cast_views(
+    value,
+    *,
+    fallback,
+) -> list[CharacterProfileView]:
+    if isinstance(value, list):
+        cast = [build_character_profile_view(entry) for entry in value]
+        return [entry for entry in cast if entry is not None]
+
+    if isinstance(fallback, list):
+        cast = [build_character_profile_view(entry) for entry in fallback]
+        return [entry for entry in cast if entry is not None]
+
+    if isinstance(fallback, Mapping):
+        return [
+            CharacterProfileView(
+                name=str(name),
+                role=role if isinstance(role, str) else None,
+            )
+            for name, role in fallback.items()
+        ]
+
+    return []
+
+
 def build_character_sheet_view(row) -> CharacterSheetView | None:
     if row is None:
         return None
 
+    candidate_payload = _read_character_candidate_data(row)
+    refinement_metadata = _read_character_refinement_metadata(row)
+    batch_metadata = _read_character_batch_metadata(row)
+
     return CharacterSheetView(
         id=row.id,
         revision_number=row.revision_number,
+        generation_key=batch_metadata.get("generation_key"),
+        candidate_index=batch_metadata.get("candidate_index"),
         title=row.title,
         protagonist_name=row.protagonist_name,
         summary=row.summary,
-        supporting_cast=row.supporting_cast,
+        story_function=_read_optional_mapping_text(candidate_payload, "story_function"),
+        protagonist=build_character_profile_view(
+            candidate_payload.get("protagonist"),
+            fallback_name=row.protagonist_name,
+        ),
+        supporting_cast=build_character_supporting_cast_views(
+            candidate_payload.get("supporting_cast"),
+            fallback=row.supporting_cast,
+        ),
         bedtime_notes=row.bedtime_notes,
+        bedtime_safety_notes=(
+            _read_optional_mapping_text(candidate_payload, "bedtime_safety_notes")
+            or row.bedtime_notes
+        ),
+        visual_motifs=_read_character_visual_motifs(candidate_payload),
+        generation_kind=batch_metadata.get("generation_kind", "generated"),
+        source_pitch_id=refinement_metadata.get("source_pitch_id"),
+        source_pitch_title=refinement_metadata.get("source_pitch_title"),
+        source_character_sheet_id=refinement_metadata.get("source_character_sheet_id"),
+        source_character_sheet_title=refinement_metadata.get("source_character_sheet_title"),
+        refinement_instructions=refinement_metadata.get("refinement_instructions"),
+        selection_rationale=refinement_metadata.get("selection_rationale"),
+        is_selected=row.is_selected,
         accepted_at=row.accepted_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
+
+
+def build_character_sheet_batch_views(rows) -> list[CharacterSheetBatchView]:
+    batches: dict[str, list] = {}
+    batch_created_at: dict[str, datetime] = {}
+
+    for row in rows or []:
+        generation_key = _resolve_character_batch_key(row)
+        batches.setdefault(generation_key, []).append(row)
+        existing_created_at = batch_created_at.get(generation_key)
+        if existing_created_at is None or normalize_sortable_datetime(
+            row.created_at
+        ) < normalize_sortable_datetime(existing_created_at):
+            batch_created_at[generation_key] = row.created_at
+
+    ordered_keys = sorted(
+        batches,
+        key=lambda generation_key: (
+            normalize_sortable_datetime(batch_created_at[generation_key]),
+            generation_key,
+        ),
+        reverse=True,
+    )
+
+    return [
+        CharacterSheetBatchView(
+            generation_key=generation_key,
+            candidate_count=len(batches[generation_key]),
+            created_at=batch_created_at[generation_key],
+            generation_kind=_read_character_batch_metadata(batches[generation_key][0]).get(
+                "generation_kind",
+                "generated",
+            ),
+            guidance=_read_character_batch_metadata(batches[generation_key][0]).get("guidance"),
+            source_pitch_id=_read_character_refinement_metadata(batches[generation_key][0]).get(
+                "source_pitch_id"
+            ),
+            source_pitch_title=_read_character_refinement_metadata(
+                batches[generation_key][0]
+            ).get("source_pitch_title"),
+            source_character_sheet_id=_read_character_refinement_metadata(
+                batches[generation_key][0]
+            ).get("source_character_sheet_id"),
+            source_character_sheet_title=_read_character_refinement_metadata(
+                batches[generation_key][0]
+            ).get("source_character_sheet_title"),
+            refinement_instructions=_read_character_refinement_metadata(
+                batches[generation_key][0]
+            ).get("refinement_instructions"),
+            character_sheets=[
+                build_character_sheet_view(row)
+                for row in sorted(
+                    batches[generation_key],
+                    key=lambda character_sheet: _resolve_character_candidate_index(
+                        character_sheet
+                    ),
+                )
+            ],
+        )
+        for generation_key in ordered_keys
+    ]
 
 
 def build_beat_sheet_view(row) -> BeatSheetView | None:

@@ -3,11 +3,14 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
+  generateSessionCharacterSheets,
   generateSessionPitches,
   parseSessionChatIntent,
+  refineSessionCharacterSheet,
   refineSessionPitch,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  selectSessionCharacterSheet,
   selectSessionPitch,
   type NormalizedBriefPreferencesView,
   type SessionHistoryEvent,
@@ -16,6 +19,7 @@ import {
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
+import { CharacterSelectionStage } from '../../features/session/CharacterSelectionStage.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
 import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
@@ -397,6 +401,12 @@ function buildPendingChatConfirmationTitle(action: ChatToUiAction) {
       return 'Refine this pitch'
     case 'select_pitch':
       return 'Select this pitch'
+    case 'regenerate_character_sheet':
+      return 'Generate a new character batch'
+    case 'refine_character_sheet':
+      return 'Refine this character sheet'
+    case 'select_character_sheet':
+      return 'Select this character sheet'
     default:
       return 'Apply chat change'
   }
@@ -411,6 +421,9 @@ function canApplyChatAction(action: ChatToUiAction) {
     action.action_type === 'regenerate_pitches' ||
     action.action_type === 'refine_pitch' ||
     action.action_type === 'select_pitch' ||
+    action.action_type === 'regenerate_character_sheet' ||
+    action.action_type === 'refine_character_sheet' ||
+    action.action_type === 'select_character_sheet' ||
     action.action_type === 'open_finalize_view'
   )
 }
@@ -920,6 +933,78 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyCharacterSheetGeneration(options: {
+    candidateCount: number
+    guidance?: string | null
+    origin: string
+    previewCurrentStage?: boolean
+  }) {
+    const result = await generateSessionCharacterSheets(sessionId, {
+      candidate_count: options.candidateCount,
+      guidance: options.guidance ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
+  async function applyCharacterSheetSelection(options: {
+    origin: string
+    characterSheetId?: string | null
+    previewCurrentStage?: boolean
+    revisionNumber?: number | null
+    title?: string | null
+  }) {
+    const result = await selectSessionCharacterSheet(sessionId, {
+      character_sheet_id: options.characterSheetId ?? null,
+      revision_number: options.revisionNumber ?? null,
+      title: options.title ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
+  async function applyCharacterSheetRefinement(options: {
+    instructions: string
+    origin: string
+    changeSummary?: string | null
+    characterSheetId?: string | null
+    focusCharacterNames?: string[]
+    revisionNumber?: number | null
+    title?: string | null
+  }) {
+    const result = await refineSessionCharacterSheet(sessionId, {
+      character_sheet_id: options.characterSheetId ?? null,
+      revision_number: options.revisionNumber ?? null,
+      title: options.title ?? null,
+      instructions: options.instructions,
+      focus_character_names: options.focusCharacterNames ?? [],
+      change_summary: options.changeSummary ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage(result.snapshot.current_stage)
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1000,6 +1085,36 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         pitchId: action.extracted_values.pitch_id ?? null,
         generationKey: action.extracted_values.generation_key ?? null,
         pitchIndex: action.extracted_values.pitch_index ?? null,
+        title: action.extracted_values.title ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'regenerate_character_sheet') {
+      await applyCharacterSheetGeneration({
+        candidateCount: 3,
+        guidance: action.extracted_values.guidance ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'refine_character_sheet') {
+      await applyCharacterSheetRefinement({
+        instructions: action.extracted_values.instructions,
+        focusCharacterNames:
+          action.extracted_values.focus_character_names ?? [],
+        changeSummary: action.extracted_values.change_summary ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'select_character_sheet') {
+      await applyCharacterSheetSelection({
+        characterSheetId: action.extracted_values.character_sheet_id ?? null,
+        revisionNumber: action.extracted_values.revision_number ?? null,
         title: action.extracted_values.title ?? null,
         origin: 'chat',
       })
@@ -1403,6 +1518,15 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onPreviewStage={setPreviewStage}
                   onRefinePitch={applyPitchRefinement}
                   onSelectPitch={applyPitchSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'characters' ? (
+                <CharacterSelectionStage
+                  onGenerateCharacterSheets={applyCharacterSheetGeneration}
+                  onPreviewStage={setPreviewStage}
+                  onRefineCharacterSheet={applyCharacterSheetRefinement}
+                  onSelectCharacterSheet={applyCharacterSheetSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />

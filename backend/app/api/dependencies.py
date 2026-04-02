@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.ai import (
     BriefNormalizationAdapter,
+    CharacterGenerationAdapter,
     GeminiBriefNormalizationAdapter,
+    GeminiCharacterGenerationAdapter,
     GeminiIntentParserAdapter,
     GeminiPitchGenerationAdapter,
     IntentParserAdapter,
@@ -68,5 +70,18 @@ def get_pitch_generation_adapter(request: Request) -> PitchGenerationAdapter:
             model_id=settings.gemini.planning_model,
         )
         request.app.state.pitch_generation_adapter = adapter
+
+    return adapter
+
+
+def get_character_generation_adapter(request: Request) -> CharacterGenerationAdapter:
+    adapter = getattr(request.app.state, "character_generation_adapter", None)
+    if adapter is None:
+        settings = get_app_settings(request)
+        adapter = GeminiCharacterGenerationAdapter(
+            credential=settings.gemini_api_key,
+            model_id=settings.gemini.planning_model,
+        )
+        request.app.state.character_generation_adapter = adapter
 
     return adapter

@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
+  SessionCharacterSheetGenerationResponse,
   SessionHydration,
   SessionHistory,
   SessionPitchGenerationResponse,
@@ -1327,6 +1328,427 @@ function buildPitchRefinementResponse(
   }
 }
 
+function buildCharacterGenerationResponse(
+  body: Record<string, unknown>,
+): SessionCharacterSheetGenerationResponse {
+  const candidateCount =
+    typeof body.candidate_count === 'number' ? body.candidate_count : 3
+  const guidance =
+    typeof body.guidance === 'string' && body.guidance.trim().length > 0
+      ? body.guidance.trim()
+      : null
+  const generatedAt = '2026-04-01T05:22:00Z'
+  const generationKey = 'character-batch-1'
+  const generatedCharacterSheets = Array.from({ length: candidateCount }).map(
+    (_, index) => {
+      const sheetNumber = index + 1
+      const titles = [
+        'Juniper Keeper Cast',
+        'Harbor Listener Cast',
+        'Moonpath Guide Cast',
+        'Lantern Sibling Cast',
+        'Stillwater Singer Cast',
+      ]
+      const protagonistNames = ['Mira', 'Pip', 'Tavi', 'Junie', 'Sage']
+      const title = titles[index] ?? `Character Sheet ${sheetNumber.toString()}`
+      const protagonistName =
+        protagonistNames[index] ?? `Lead ${sheetNumber.toString()}`
+
+      return {
+        id: `character-generated-${sheetNumber}`,
+        revision_number: 20 + sheetNumber,
+        generation_key: generationKey,
+        candidate_index: sheetNumber,
+        generation_kind: 'generated',
+        source_pitch_id: sampleSnapshot.selected_pitch?.id ?? null,
+        source_pitch_title: sampleSnapshot.selected_pitch?.title ?? null,
+        source_character_sheet_id: null,
+        source_character_sheet_title: null,
+        refinement_instructions: null,
+        selection_rationale: null,
+        title,
+        protagonist_name: protagonistName,
+        summary: `${title} keeps the harbor pitch bedtime-safe with a distinct protagonist flaw and a compact support dynamic.`,
+        story_function: guidance
+          ? `This cast applies the guidance: ${guidance}.`
+          : 'This cast makes later beats easy to structure around emotional repair and clear visual motifs.',
+        protagonist: {
+          name: protagonistName,
+          role: 'sleepy lantern-keeper in training',
+          goal: 'guide the last harbor lights home before everyone settles',
+          flaw: 'tries to solve every worry alone before asking for help',
+          comfort_trait: 'counts steady reflections until their breathing slows',
+          bedtime_safety_notes:
+            'The lead stays emotionally safe because the support cast remains close and calm in every scene.',
+          relationships: [
+            `Trusts Otis ${sheetNumber} to steady the plan.`,
+          ],
+          visual_anchors: ['lantern sleeves', 'soft satchel'],
+        },
+        supporting_cast: [
+          {
+            name: `Otis ${sheetNumber}`,
+            role: 'patient otter guardian',
+            goal: 'help the lead slow the pacing when the night feels larger',
+            flaw: 'over-explains instead of letting the lead discover the answer',
+            comfort_trait: 'grounds scenes with practical rituals',
+            bedtime_safety_notes:
+              'The guardian keeps each obstacle small, readable, and quickly reassuring.',
+            relationships: [`Acts as ${protagonistName}'s calm sounding board.`],
+            visual_anchors: ['river coat', 'tidy satchel'],
+          },
+        ],
+        bedtime_notes:
+          'Every worry is buffered by visible helpers, named feelings, and a calm return home.',
+        bedtime_safety_notes:
+          'Every worry is buffered by visible helpers, named feelings, and a calm return home.',
+        visual_motifs: ['lantern glow', 'moonlit docks', `quiet route ${sheetNumber}`],
+        is_selected: false,
+        accepted_at: null,
+        created_at: generatedAt,
+        updated_at: generatedAt,
+      }
+    },
+  )
+  const baseSelection = buildPitchSelectionResponse({
+    pitch_id: sampleSnapshot.selected_pitch?.id ?? 'pitch-1',
+  })
+
+  return {
+    snapshot: {
+      ...baseSelection.snapshot,
+      current_stage: 'characters',
+      resume_stage: 'characters',
+      furthest_completed_stage: 'pitches',
+      updated_at: generatedAt,
+      character_sheet_batches: [
+        {
+          generation_key: generationKey,
+          candidate_count: candidateCount,
+          generation_kind: 'generated',
+          guidance,
+          source_pitch_id: sampleSnapshot.selected_pitch?.id ?? null,
+          source_pitch_title: sampleSnapshot.selected_pitch?.title ?? null,
+          source_character_sheet_id: null,
+          source_character_sheet_title: null,
+          refinement_instructions: null,
+          created_at: generatedAt,
+          character_sheets: generatedCharacterSheets,
+        },
+      ],
+      selected_character_sheet:
+        body.preserve_selected_character_sheet === true
+          ? sampleSnapshot.selected_character_sheet
+          : null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 4,
+        in_progress_stages: 1,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: baseSelection.snapshot.stage_states.map((stageState, index) => {
+        if (index <= 3) {
+          return {
+            ...stageState,
+            status: 'completed',
+          }
+        }
+
+        if (index === 4) {
+          return {
+            ...stageState,
+            status: 'in_progress',
+            detail: `Generated ${candidateCount} character options. Select one to continue.`,
+            last_event_summary: 'Recorded AI output for character_sheet.',
+            last_event_type: 'ai.output.recorded',
+            last_event_at: generatedAt,
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    },
+    event: {
+      id: 'character-generation-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 16,
+      actor: {
+        actor_type: 'assistant',
+        actor_id: 'story-planner',
+      },
+      event_type: 'ai.output.recorded',
+      stage: 'characters',
+      summary: 'Recorded AI output for character_sheet.',
+      payload: {
+        schema_version: 1,
+        output_kind: 'character_sheet',
+        generation_key: generationKey,
+        candidate_count: candidateCount,
+        model_id: 'gemini-3.1-pro',
+        summary: `Generated character sheets: ${generatedCharacterSheets
+          .slice(0, 3)
+          .map((characterSheet) => characterSheet.title)
+          .join(', ')}.`,
+      },
+      created_at: generatedAt,
+    },
+  }
+}
+
+function buildCharacterSelectionResponse(
+  body: Record<string, unknown>,
+): SessionCharacterSheetGenerationResponse {
+  const baseGeneration = buildCharacterGenerationResponse({
+    candidate_count: 3,
+    preserve_selected_character_sheet: false,
+  })
+  const selectedCharacterSheetId =
+    typeof body.character_sheet_id === 'string'
+      ? body.character_sheet_id
+      : 'character-generated-1'
+  const selectedCharacterSheet =
+    baseGeneration.snapshot.character_sheet_batches?.[0]?.character_sheets.find(
+      (characterSheet) => characterSheet.id === selectedCharacterSheetId,
+    ) ?? baseGeneration.snapshot.character_sheet_batches?.[0]?.character_sheets[0]
+  const selectedAt = '2026-04-01T05:23:00Z'
+
+  return {
+    snapshot: {
+      ...baseGeneration.snapshot,
+      current_stage: 'beats',
+      resume_stage: 'beats',
+      furthest_completed_stage: 'characters',
+      updated_at: selectedAt,
+      selected_character_sheet:
+        selectedCharacterSheet != null
+          ? {
+              ...selectedCharacterSheet,
+              is_selected: true,
+              accepted_at: selectedAt,
+              updated_at: selectedAt,
+            }
+          : null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 5,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: baseGeneration.snapshot.stage_states.map((stageState, index) => {
+        if (index === 4) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Selected character sheet: ${selectedCharacterSheet?.title}. Lead character: ${selectedCharacterSheet?.protagonist_name}.`,
+            last_event_summary: `Selected character sheet: ${selectedCharacterSheet?.title}.`,
+            last_event_type: 'selection.recorded',
+            last_event_at: selectedAt,
+          }
+        }
+
+        if (index === 5) {
+          return {
+            ...stageState,
+            status: 'draft',
+            detail: null,
+            last_event_summary: null,
+            last_event_type: null,
+            last_event_at: null,
+          }
+        }
+
+        return stageState
+      }),
+    },
+    event: {
+      id: 'character-selection-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 17,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'characters',
+      summary: `Selected character sheet: ${selectedCharacterSheet?.title}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'character_sheet',
+        selection_id: selectedCharacterSheet?.id,
+        label: selectedCharacterSheet?.title,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+      },
+      created_at: selectedAt,
+    },
+  }
+}
+
+function buildCharacterRefinementResponse(
+  body: Record<string, unknown>,
+): SessionCharacterSheetGenerationResponse {
+  const instructions =
+    typeof body.instructions === 'string' && body.instructions.trim().length > 0
+      ? body.instructions.trim()
+      : 'Make the cast more sibling-like while keeping the harbor bedtime feel.'
+  const baseGeneration = buildCharacterGenerationResponse({
+    candidate_count: 3,
+    preserve_selected_character_sheet: true,
+  })
+  const fallbackCharacterSheets =
+    sampleSnapshot.selected_character_sheet != null
+      ? [sampleSnapshot.selected_character_sheet]
+      : []
+  const allCharacterSheets =
+    baseGeneration.snapshot.character_sheet_batches?.flatMap(
+      (batch) => batch.character_sheets ?? [],
+    ) ?? fallbackCharacterSheets
+  const sourceCharacterSheetId =
+    typeof body.character_sheet_id === 'string'
+      ? body.character_sheet_id
+      : (sampleSnapshot.selected_character_sheet?.id ?? allCharacterSheets[0]?.id)
+  const sourceCharacterSheet =
+    allCharacterSheets.find(
+      (characterSheet) => characterSheet.id === sourceCharacterSheetId,
+    ) ??
+    sampleSnapshot.selected_character_sheet ??
+    allCharacterSheets[0]
+  const refinedAt = '2026-04-01T05:24:00Z'
+  const refinedCharacterSheet = {
+    id: 'character-refined-1',
+    revision_number: 30,
+    generation_key: 'character-batch-refined-1',
+    candidate_index: 1,
+    generation_kind: 'refinement',
+    source_pitch_id: sampleSnapshot.selected_pitch?.id ?? null,
+    source_pitch_title: sampleSnapshot.selected_pitch?.title ?? null,
+    source_character_sheet_id: sourceCharacterSheet?.id ?? null,
+    source_character_sheet_title: sourceCharacterSheet?.title ?? null,
+    refinement_instructions: instructions,
+    selection_rationale: `Refined from ${sourceCharacterSheet?.title ?? 'the selected character sheet'}. ${instructions}`,
+    title: `${sourceCharacterSheet?.title ?? 'Juniper Keeper Cast'}: Revised`,
+    protagonist_name: sourceCharacterSheet?.protagonist_name ?? 'Mira',
+    summary: `This revision keeps ${sourceCharacterSheet?.title ?? 'the current cast'} recognizable while applying: ${instructions}`,
+    story_function:
+      'The refined cast preserves the harbor bedtime lane while tightening the requested relationship change.',
+    protagonist: {
+      ...(sourceCharacterSheet?.protagonist ?? {
+        name: 'Mira',
+        role: 'sleepy lantern-keeper in training',
+        goal: 'guide the last harbor lights home before everyone settles',
+        flaw: 'tries to solve every worry alone before asking for help',
+        comfort_trait: 'counts steady reflections until their breathing slows',
+        relationships: [],
+        visual_anchors: [],
+      }),
+      bedtime_safety_notes:
+        'The revision keeps the lead emotionally safe because the support cast stays visibly close and calm.',
+    },
+    supporting_cast:
+      sourceCharacterSheet?.supporting_cast ?? [],
+    bedtime_notes:
+      'The revision keeps all emotional pressure buffered by companionship, clear naming, and a visibly safe return to calm.',
+    bedtime_safety_notes:
+      'The revision keeps all emotional pressure buffered by companionship, clear naming, and a visibly safe return to calm.',
+    visual_motifs: sourceCharacterSheet?.visual_motifs ?? [
+      'lantern glow',
+      'moonlit docks',
+      'soft satchel',
+    ],
+    is_selected: true,
+    accepted_at: refinedAt,
+    created_at: refinedAt,
+    updated_at: refinedAt,
+  }
+
+  return {
+    snapshot: {
+      ...baseGeneration.snapshot,
+      current_stage: 'beats',
+      resume_stage: 'beats',
+      furthest_completed_stage: 'characters',
+      updated_at: refinedAt,
+      selected_character_sheet: refinedCharacterSheet,
+      character_sheet_batches: [
+        {
+          generation_key: refinedCharacterSheet.generation_key,
+          candidate_count: 1,
+          generation_kind: 'refinement',
+          guidance: instructions,
+          source_pitch_id: sampleSnapshot.selected_pitch?.id ?? null,
+          source_pitch_title: sampleSnapshot.selected_pitch?.title ?? null,
+          source_character_sheet_id: sourceCharacterSheet?.id ?? null,
+          source_character_sheet_title: sourceCharacterSheet?.title ?? null,
+          refinement_instructions: instructions,
+          created_at: refinedAt,
+          character_sheets: [refinedCharacterSheet],
+        },
+        ...(baseGeneration.snapshot.character_sheet_batches ?? []),
+      ],
+      progress: {
+        total_stages: 10,
+        completed_stages: 5,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: baseGeneration.snapshot.stage_states.map((stageState, index) => {
+        if (index === 4) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Selected character sheet: ${refinedCharacterSheet.title}. Lead character: ${refinedCharacterSheet.protagonist_name}.`,
+            last_event_summary: `Selected character sheet: ${refinedCharacterSheet.title}.`,
+            last_event_type: 'selection.recorded',
+            last_event_at: refinedAt,
+          }
+        }
+
+        if (index === 5) {
+          return {
+            ...stageState,
+            status: 'draft',
+            detail: null,
+            last_event_summary: null,
+            last_event_type: null,
+            last_event_at: null,
+          }
+        }
+
+        return stageState
+      }),
+    },
+    event: {
+      id: 'character-refinement-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 18,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'characters',
+      summary: `Selected character sheet: ${refinedCharacterSheet.title}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'character_sheet',
+        selection_id: refinedCharacterSheet.id,
+        label: refinedCharacterSheet.title,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+        rationale: refinedCharacterSheet.selection_rationale,
+      },
+      created_at: refinedAt,
+    },
+  }
+}
+
 function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
   const explicitCommand =
     typeof requestBody.explicit_command === 'object' &&
@@ -1402,6 +1824,15 @@ function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
 }
 
 function mockWorkspaceApi(options?: {
+  characterGenerationResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
+  characterSelectionResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
+  characterRefinementResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   genreCatalog?: unknown
   genreSelectionResponse?:
     | unknown
@@ -1442,6 +1873,9 @@ function mockWorkspaceApi(options?: {
     } as const)
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
+  const characterGenerationRequests: Record<string, unknown>[] = []
+  const characterRefinementRequests: Record<string, unknown>[] = []
+  const characterSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionRequests: Record<string, unknown>[] = []
   const pitchGenerationRequests: Record<string, unknown>[] = []
   const pitchRefinementRequests: Record<string, unknown>[] = []
@@ -1498,6 +1932,12 @@ function mockWorkspaceApi(options?: {
       ],
     },
   }
+  const characterGenerationResponse =
+    options?.characterGenerationResponse ?? buildCharacterGenerationResponse
+  const characterSelectionResponse =
+    options?.characterSelectionResponse ?? buildCharacterSelectionResponse
+  const characterRefinementResponse =
+    options?.characterRefinementResponse ?? buildCharacterRefinementResponse
 
   vi.stubGlobal(
     'fetch',
@@ -1660,6 +2100,44 @@ function mockWorkspaceApi(options?: {
       }
 
       if (
+        pathname === '/api/v1/sessions/moonlit-harbor/characters/generate' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        characterGenerationRequests.push(requestBody)
+        const resolvedCharacterGenerationResponse =
+          typeof characterGenerationResponse === 'function'
+            ? characterGenerationResponse(requestBody)
+            : characterGenerationResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedCharacterGenerationResponse),
+        )
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/characters/refine' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        characterRefinementRequests.push(requestBody)
+        const resolvedCharacterRefinementResponse =
+          typeof characterRefinementResponse === 'function'
+            ? characterRefinementResponse(requestBody)
+            : characterRefinementResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedCharacterRefinementResponse),
+        )
+      }
+
+      if (
         pathname === '/api/v1/sessions/moonlit-harbor/selections/pitch' &&
         init?.method === 'POST'
       ) {
@@ -1675,6 +2153,25 @@ function mockWorkspaceApi(options?: {
 
         return Promise.resolve(
           buildJsonResponse(200, resolvedPitchSelectionResponse),
+        )
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/selections/character-sheet' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        characterSelectionRequests.push(requestBody)
+        const resolvedCharacterSelectionResponse =
+          typeof characterSelectionResponse === 'function'
+            ? characterSelectionResponse(requestBody)
+            : characterSelectionResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedCharacterSelectionResponse),
         )
       }
 
@@ -1703,6 +2200,9 @@ function mockWorkspaceApi(options?: {
 
   return {
     chatIntentRequests,
+    characterGenerationRequests,
+    characterRefinementRequests,
+    characterSelectionRequests,
     genreSelectionRequests,
     pitchGenerationRequests,
     pitchRefinementRequests,
@@ -1712,9 +2212,11 @@ function mockWorkspaceApi(options?: {
   }
 }
 
-function renderWorkspaceRoute() {
+function renderWorkspaceRoute(
+  initialEntry = '/sessions/moonlit-harbor',
+) {
   return renderWithAppProviders(
-    <MemoryRouter initialEntries={['/sessions/moonlit-harbor']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/sessions/:sessionId" element={<SessionWorkspacePage />} />
       </Routes>
@@ -2380,12 +2882,297 @@ describe('SessionWorkspacePage', () => {
       }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByText('The Last Lantern Question: Siblings'),
+      await screen.findByText(
+        /Selected pitch: The Last Lantern Question: Siblings\./i,
+      ),
     ).toBeInTheDocument()
     expect(
       screen.getByText(
         /Refined from The Last Lantern Question. Make it about siblings who help each other settle down./i,
       ),
+    ).toBeInTheDocument()
+  })
+
+  it('generates a durable character batch from the characters stage', async () => {
+    const characterStageSnapshot = buildPitchSelectionResponse({
+      pitch_id: 'pitch-generated-1',
+      origin: 'workspace',
+    }).snapshot
+    const characterStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 6,
+      events: sampleHistory.events,
+    } as const
+
+    const { characterGenerationRequests } = mockWorkspaceApi({
+      history: characterStageHistory,
+      hydration: {
+        snapshot: characterStageSnapshot,
+        recent_history: characterStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 6,
+          history_event_count: 6,
+          materialized_through_sequence_number: 6,
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=characters')
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Shape the character sheet',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 3,
+        name: 'Generate a character batch',
+      }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Character sheet count'), {
+      target: { value: '5' },
+    })
+    fireEvent.change(screen.getByLabelText('Optional character guidance'), {
+      target: {
+        value: 'Keep the support cast compact and clearly cozy.',
+      },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Generate character sheets' }),
+    )
+
+    expect(characterGenerationRequests).toEqual([
+      {
+        candidate_count: 5,
+        guidance: 'Keep the support cast compact and clearly cozy.',
+        origin: 'workspace',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 3,
+        name: 'Juniper Keeper Cast',
+      }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('5 cast cards ready')).toBeInTheDocument()
+  })
+
+  it('selects a generated character sheet and advances to beats', async () => {
+    const generatedCharacterSnapshot = buildCharacterGenerationResponse({
+      candidate_count: 3,
+    }).snapshot
+    const generatedCharacterHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 7,
+      events: sampleHistory.events,
+    } as const
+
+    const { characterSelectionRequests } = mockWorkspaceApi({
+      history: generatedCharacterHistory,
+      hydration: {
+        snapshot: generatedCharacterSnapshot,
+        recent_history: generatedCharacterHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 7,
+          history_event_count: 7,
+          materialized_through_sequence_number: 7,
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=characters')
+
+    const characterCard = await screen.findByRole('heading', {
+      level: 3,
+      name: 'Juniper Keeper Cast',
+    })
+    fireEvent.click(
+      within(characterCard.closest('article') as HTMLElement).getByRole('button', {
+        name: 'Choose cast',
+      }),
+    )
+
+    expect(characterSelectionRequests).toEqual([
+      {
+        character_sheet_id: 'character-generated-1',
+        revision_number: 21,
+        title: 'Juniper Keeper Cast',
+        origin: 'workspace',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Refine the Save-the-Cat beats',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Selected character sheet: Juniper Keeper Cast',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('refines a saved character sheet from the workspace without overwriting earlier batches', async () => {
+    const generatedCharacterSnapshot = buildCharacterGenerationResponse({
+      candidate_count: 3,
+    }).snapshot
+    const generatedCharacterHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 7,
+      events: sampleHistory.events,
+    } as const
+
+    const { characterRefinementRequests } = mockWorkspaceApi({
+      history: generatedCharacterHistory,
+      hydration: {
+        snapshot: generatedCharacterSnapshot,
+        recent_history: generatedCharacterHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 7,
+          history_event_count: 7,
+          materialized_through_sequence_number: 7,
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=characters')
+
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Shape the character sheet',
+    })
+
+    fireEvent.change(screen.getByLabelText('Refinement instructions'), {
+      target: {
+        value: 'Make the support cast siblings who settle together.',
+      },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refine character sheet' }),
+    )
+
+    expect(characterRefinementRequests).toEqual([
+      {
+        character_sheet_id: 'character-generated-1',
+        revision_number: 21,
+        title: 'Juniper Keeper Cast',
+        instructions: 'Make the support cast siblings who settle together.',
+        focus_character_names: [],
+        change_summary: null,
+        origin: 'workspace',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Refine the Save-the-Cat beats',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Selected character sheet: Juniper Keeper Cast: Revised',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('applies accepted character-sheet chat actions through the same durable endpoints', async () => {
+    const characterStageSnapshot = buildCharacterGenerationResponse({
+      candidate_count: 3,
+    }).snapshot
+    const characterStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 7,
+      events: sampleHistory.events,
+    } as const
+
+    const { characterSelectionRequests } = mockWorkspaceApi({
+      history: characterStageHistory,
+      hydration: {
+        snapshot: characterStageSnapshot,
+        recent_history: characterStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 7,
+          history_event_count: 7,
+          materialized_through_sequence_number: 7,
+        },
+      },
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response: 'I can select the first character sheet for you.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'select_character_sheet',
+              target_stage: 'characters',
+              confidence: 0.97,
+              rationale: 'The user asked to choose the first character sheet.',
+              requires_confirmation: false,
+              extracted_values: {
+                character_sheet_id: 'character-generated-1',
+                revision_number: 21,
+                title: 'Juniper Keeper Cast',
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'select_character_sheet',
+              target_stage: 'characters',
+              decision: 'accepted',
+              summary: 'The character sheet can be selected.',
+              reasons: [],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=characters')
+
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Shape the character sheet',
+    })
+
+    fireEvent.change(screen.getByLabelText('Message composer'), {
+      target: { value: 'Choose the first character sheet.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(await screen.findByText('I can select the first character sheet for you.')).toBeInTheDocument()
+    expect(characterSelectionRequests).toEqual([
+      {
+        character_sheet_id: 'character-generated-1',
+        revision_number: 21,
+        title: 'Juniper Keeper Cast',
+        origin: 'chat',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Refine the Save-the-Cat beats',
+      }),
     ).toBeInTheDocument()
   })
 

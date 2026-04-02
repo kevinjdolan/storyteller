@@ -935,39 +935,49 @@ h4 {
 
 .pitch-stage__controls,
 .pitch-stage__grid,
-.pitch-stage__history {
+.pitch-stage__history,
+.character-stage__controls,
+.character-stage__grid,
+.character-stage__history {
   align-items: stretch;
 }
 
-.pitch-stage__card {
+.pitch-stage__card,
+.character-stage__card {
   height: 100%;
 }
 
-.pitch-stage__card-copy {
+.pitch-stage__card-copy,
+.character-stage__card-copy {
   display: grid;
   gap: var(--space-3);
 }
 
-.pitch-stage__card-copy p {
+.pitch-stage__card-copy p,
+.character-stage__card-copy p {
   margin: 0;
 }
 
-.pitch-stage__card-copy strong {
+.pitch-stage__card-copy strong,
+.character-stage__card-copy strong {
   color: var(--color-ink-strong);
 }
 
-.pitch-stage__history {
+.pitch-stage__history,
+.character-stage__history {
   display: grid;
   gap: var(--space-3);
 }
 
-.pitch-stage__history-titles {
+.pitch-stage__history-titles,
+.character-stage__history-titles {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.pitch-stage__history-titles span {
+.pitch-stage__history-titles span,
+.character-stage__history-titles span {
   display: inline-flex;
   align-items: center;
   min-height: 2rem;

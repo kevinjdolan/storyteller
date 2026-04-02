@@ -205,6 +205,14 @@ function buildAiOutputEcho(event: SessionHistoryEvent) {
     return `Generated ${countLabel}pitch options.`
   }
 
+  if (outputKind === 'character_sheet') {
+    if (summary != null) {
+      return `Generated ${countLabel}character sheets. ${summary}`
+    }
+
+    return `Generated ${countLabel}character sheets.`
+  }
+
   return event.summary
 }
 

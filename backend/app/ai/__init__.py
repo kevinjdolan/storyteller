@@ -10,6 +10,15 @@ from app.ai.brief_normalization import (
     get_brief_normalization_response_schema,
     render_brief_normalization_prompt,
 )
+from app.ai.character_generation import (
+    CharacterGenerationAdapter,
+    CharacterGenerationError,
+    CharacterGenerationTransportError,
+    GeminiCharacterGenerationAdapter,
+    build_character_generation_invocation,
+    get_character_generation_response_schema,
+    render_character_generation_prompt,
+)
 from app.ai.intent_parser import (
     DEFAULT_GEMINI_API_BASE_URL,
     GeminiIntentParserAdapter,
@@ -36,7 +45,11 @@ __all__ = [
     "BriefNormalizationAdapter",
     "BriefNormalizationError",
     "BriefNormalizationTransportError",
+    "CharacterGenerationAdapter",
+    "CharacterGenerationError",
+    "CharacterGenerationTransportError",
     "GeminiBriefNormalizationAdapter",
+    "GeminiCharacterGenerationAdapter",
     "GeminiIntentParserAdapter",
     "GeminiPitchGenerationAdapter",
     "IntentParserAdapter",
@@ -46,12 +59,15 @@ __all__ = [
     "PitchGenerationError",
     "PitchGenerationTransportError",
     "build_brief_normalization_invocation",
+    "build_character_generation_invocation",
     "build_intent_parser_invocation",
     "build_pitch_generation_invocation",
     "get_brief_normalization_response_schema",
+    "get_character_generation_response_schema",
     "get_intent_parser_response_schema",
     "get_pitch_generation_response_schema",
     "render_brief_normalization_prompt",
+    "render_character_generation_prompt",
     "render_intent_parser_prompt",
     "render_pitch_generation_prompt",
 ]

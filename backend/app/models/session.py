@@ -88,15 +88,56 @@ class PitchBatchView(BaseModel):
     pitches: list[PitchView] = Field(default_factory=list)
 
 
+class CharacterProfileView(BaseModel):
+    name: str
+    role: str | None = None
+    goal: str | None = None
+    flaw: str | None = None
+    comfort_trait: str | None = None
+    bedtime_safety_notes: str | None = None
+    relationships: list[str] = Field(default_factory=list)
+    visual_anchors: list[str] = Field(default_factory=list)
+
+
 class CharacterSheetView(BaseModel):
     id: str
     revision_number: int
+    generation_key: str | None = None
+    candidate_index: int | None = None
     title: str | None = None
     protagonist_name: str | None = None
     summary: str | None = None
-    supporting_cast: dict[str, Any] | list[Any] | None = None
+    story_function: str | None = None
+    protagonist: CharacterProfileView | None = None
+    supporting_cast: list[CharacterProfileView] = Field(default_factory=list)
     bedtime_notes: str | None = None
+    bedtime_safety_notes: str | None = None
+    visual_motifs: list[str] = Field(default_factory=list)
+    generation_kind: str = "generated"
+    source_pitch_id: str | None = None
+    source_pitch_title: str | None = None
+    source_character_sheet_id: str | None = None
+    source_character_sheet_title: str | None = None
+    refinement_instructions: str | None = None
+    selection_rationale: str | None = None
+    is_selected: bool = False
     accepted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CharacterSheetBatchView(BaseModel):
+    generation_key: str
+    candidate_count: int
+    created_at: datetime
+    generation_kind: str = "generated"
+    guidance: str | None = None
+    source_pitch_id: str | None = None
+    source_pitch_title: str | None = None
+    source_character_sheet_id: str | None = None
+    source_character_sheet_title: str | None = None
+    refinement_instructions: str | None = None
+    character_sheets: list[CharacterSheetView] = Field(default_factory=list)
 
 
 class BeatSheetView(BaseModel):
@@ -261,6 +302,17 @@ class SessionPitchGenerationResponse(BaseModel):
     event: SessionEventView
 
 
+class GenerateSessionCharacterSheetsRequest(BaseModel):
+    candidate_count: int = Field(default=3, ge=2, le=5)
+    guidance: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class SessionCharacterSheetGenerationResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class SelectSessionPitchRequest(BaseModel):
     pitch_id: str | None = Field(default=None, min_length=1)
     generation_key: str | None = Field(default=None, min_length=1)
@@ -279,6 +331,28 @@ class SelectSessionPitchRequest(BaseModel):
         selected_count = sum(value is not None for value in selectors)
         if selected_count == 0:
             raise ValueError("one of pitch_id, generation_key, pitch_index, or title is required")
+
+        return self
+
+
+class SelectSessionCharacterSheetRequest(BaseModel):
+    character_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectSessionCharacterSheetRequest":
+        selectors = [
+            self.character_sheet_id,
+            self.revision_number,
+            self.title,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count == 0:
+            raise ValueError(
+                "one of character_sheet_id, revision_number, or title is required"
+            )
 
         return self
 
@@ -304,6 +378,16 @@ class RefineSessionPitchRequest(BaseModel):
             raise ValueError("one of pitch_id, generation_key, pitch_index, or title is required")
 
         return self
+
+
+class RefineSessionCharacterSheetRequest(BaseModel):
+    character_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
+    instructions: str = Field(min_length=1)
+    focus_character_names: list[str] = Field(default_factory=list)
+    change_summary: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
 
 
 class SaveSessionStoryBriefRequest(BaseModel):
@@ -402,6 +486,7 @@ class SessionSnapshot(BaseModel):
     story_brief: StoryBriefView | None = None
     pitch_batches: list[PitchBatchView] = Field(default_factory=list)
     selected_pitch: PitchView | None = None
+    character_sheet_batches: list[CharacterSheetBatchView] = Field(default_factory=list)
     selected_character_sheet: CharacterSheetView | None = None
     selected_beat_sheet: BeatSheetView | None = None
     selected_story_setup: StorySetupView | None = None
@@ -435,6 +520,7 @@ ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionCharacterSheetGenerationResponse.model_rebuild()
 SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()
 SessionStoryBriefResponse.model_rebuild()

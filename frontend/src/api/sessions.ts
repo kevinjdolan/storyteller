@@ -115,14 +115,56 @@ export type BeatSheetView = {
   accepted_at?: string | null
 }
 
+export type CharacterProfileView = {
+  name: string
+  role?: string | null
+  goal?: string | null
+  flaw?: string | null
+  comfort_trait?: string | null
+  bedtime_safety_notes?: string | null
+  relationships: string[]
+  visual_anchors: string[]
+}
+
 export type CharacterSheetView = {
   id: string
   revision_number: number
+  generation_key?: string | null
+  candidate_index?: number | null
   title?: string | null
   protagonist_name?: string | null
   summary?: string | null
+  story_function?: string | null
+  protagonist?: CharacterProfileView | null
+  supporting_cast: CharacterProfileView[]
   bedtime_notes?: string | null
+  bedtime_safety_notes?: string | null
+  visual_motifs: string[]
+  generation_kind?: string
+  source_pitch_id?: string | null
+  source_pitch_title?: string | null
+  source_character_sheet_id?: string | null
+  source_character_sheet_title?: string | null
+  refinement_instructions?: string | null
+  selection_rationale?: string | null
+  is_selected?: boolean
   accepted_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type CharacterSheetBatchView = {
+  generation_key: string
+  candidate_count: number
+  created_at: string
+  generation_kind?: string
+  guidance?: string | null
+  source_pitch_id?: string | null
+  source_pitch_title?: string | null
+  source_character_sheet_id?: string | null
+  source_character_sheet_title?: string | null
+  refinement_instructions?: string | null
+  character_sheets: CharacterSheetView[]
 }
 
 export type StorySetupView = {
@@ -296,6 +338,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   story_brief?: StoryBriefView | null
   pitch_batches?: PitchBatchView[] | null
   selected_pitch?: PitchView | null
+  character_sheet_batches?: CharacterSheetBatchView[] | null
   selected_character_sheet?: CharacterSheetView | null
   selected_beat_sheet?: BeatSheetView | null
   selected_story_setup?: StorySetupView | null
@@ -355,10 +398,23 @@ export type GenerateSessionPitchesRequest = {
   origin?: string
 }
 
+export type GenerateSessionCharacterSheetsRequest = {
+  candidate_count?: number
+  guidance?: string | null
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
   pitch_index?: number | null
+  title?: string | null
+  origin?: string
+}
+
+export type SelectSessionCharacterSheetRequest = {
+  character_sheet_id?: string | null
+  revision_number?: number | null
   title?: string | null
   origin?: string
 }
@@ -372,7 +428,22 @@ export type RefineSessionPitchRequest = {
   origin?: string
 }
 
+export type RefineSessionCharacterSheetRequest = {
+  character_sheet_id?: string | null
+  revision_number?: number | null
+  title?: string | null
+  instructions: string
+  focus_character_names?: string[]
+  change_summary?: string | null
+  origin?: string
+}
+
 export type SessionPitchGenerationResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
+export type SessionCharacterSheetGenerationResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
 }
@@ -435,6 +506,16 @@ export function generateSessionPitches(
   )
 }
 
+export function generateSessionCharacterSheets(
+  sessionId: string,
+  body: GenerateSessionCharacterSheetsRequest,
+) {
+  return postJson<SessionCharacterSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/characters/generate`,
+    body,
+  )
+}
+
 export function selectSessionPitch(
   sessionId: string,
   body: SelectSessionPitchRequest,
@@ -445,12 +526,32 @@ export function selectSessionPitch(
   )
 }
 
+export function selectSessionCharacterSheet(
+  sessionId: string,
+  body: SelectSessionCharacterSheetRequest,
+) {
+  return postJson<SessionCharacterSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/selections/character-sheet`,
+    body,
+  )
+}
+
 export function refineSessionPitch(
   sessionId: string,
   body: RefineSessionPitchRequest,
 ) {
   return postJson<SessionPitchGenerationResponse>(
     `/api/v1/sessions/${sessionId}/pitches/refine`,
+    body,
+  )
+}
+
+export function refineSessionCharacterSheet(
+  sessionId: string,
+  body: RefineSessionCharacterSheetRequest,
+) {
+  return postJson<SessionCharacterSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/characters/refine`,
     body,
   )
 }

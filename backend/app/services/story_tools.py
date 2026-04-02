@@ -60,6 +60,7 @@ from app.models.story_tools import (
     UpdateSetupHeuristicsToolInput,
     UpdateSetupHeuristicsToolResult,
 )
+from app.services.character_generation import CharacterGenerationService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
 from app.services.pitch_generation import PitchGenerationService
@@ -593,6 +594,7 @@ class StoryWorkflowToolService:
         session: Session,
         registry: StoryWorkflowToolRegistry | None = None,
         *,
+        character_generation_service: CharacterGenerationService | None = None,
         pitch_generation_service: PitchGenerationService | None = None,
     ):
         self._session = session
@@ -600,6 +602,9 @@ class StoryWorkflowToolService:
         self._sessions = SessionService(session)
         self._events = SessionEventLogService(session)
         self._jobs = BackgroundJobService(session)
+        self._character_generation = (
+            character_generation_service or CharacterGenerationService()
+        )
         self._pitch_generation = pitch_generation_service or PitchGenerationService()
 
     def enqueue(
@@ -701,28 +706,23 @@ class StoryWorkflowToolService:
         request: GenerateCharacterSheetsToolInput,
         actor: SessionEventActor | None = None,
     ) -> StageOperationToolResult:
-        snapshot = self._sessions.load_session_snapshot(session_id)
-        if snapshot.selected_pitch is None:
-            raise StoryWorkflowToolServiceError(
-                "generate_character_sheets requires a selected pitch",
-            )
-        detail = _join_detail_parts(
-            [
-                "Generating character-sheet candidates from the selected pitch.",
-                _optional_detail("Guidance", request.guidance),
-            ]
-        )
-        stage_snapshot = self._transition_stage_to_in_progress(
+        response = self._sessions.generate_character_sheets(
             session_id,
-            stage=WorkflowStage.CHARACTERS,
-            detail=detail,
+            candidate_count=3,
+            guidance=request.guidance,
+            origin="story_tool",
             actor=actor,
+            character_generation_service=self._character_generation,
         )
+        snapshot = response.snapshot
+        detail = snapshot.stage_states[
+            WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.CHARACTERS)
+        ].detail
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.GENERATE_CHARACTER_SHEETS,
             stage=WorkflowStage.CHARACTERS,
-            summary="Queued character-sheet generation from the selected pitch.",
-            stage_status=_stage_status(stage_snapshot, WorkflowStage.CHARACTERS),
+            summary="Generated a fresh character-sheet batch from the selected pitch.",
+            stage_status=_stage_status(snapshot, WorkflowStage.CHARACTERS),
             detail=detail,
         )
 
@@ -733,32 +733,25 @@ class StoryWorkflowToolService:
         request: RefineCharacterSheetToolInput,
         actor: SessionEventActor | None = None,
     ) -> StageOperationToolResult:
-        self._require_character_sheet(
-            session_id=session_id,
+        response = self._sessions.refine_character_sheet(
+            session_id,
             character_sheet_id=request.character_sheet_id,
             revision_number=request.revision_number,
-        )
-        detail = _join_detail_parts(
-            [
-                "Refining the selected character sheet.",
-                _optional_detail("Instructions", request.instructions),
-                (
-                    "Focus characters: " + ", ".join(request.focus_character_names)
-                    if request.focus_character_names
-                    else None
-                ),
-            ]
-        )
-        snapshot = self._transition_stage_to_in_progress(
-            session_id,
-            stage=WorkflowStage.CHARACTERS,
-            detail=detail,
+            instructions=request.instructions,
+            focus_character_names=request.focus_character_names,
+            change_summary=request.change_summary,
+            origin="story_tool",
             actor=actor,
+            character_generation_service=self._character_generation,
         )
+        snapshot = response.snapshot
+        detail = snapshot.stage_states[
+            WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.CHARACTERS)
+        ].detail
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.REFINE_CHARACTER_SHEET,
             stage=WorkflowStage.CHARACTERS,
-            summary="Prepared a character-sheet refinement pass.",
+            summary="Generated and selected a refined character sheet.",
             stage_status=_stage_status(snapshot, WorkflowStage.CHARACTERS),
             detail=detail,
         )

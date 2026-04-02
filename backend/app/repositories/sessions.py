@@ -39,6 +39,7 @@ class SessionAggregate:
     active_story_brief: StoryBrief | None
     pitches: list[Pitch]
     selected_pitch: Pitch | None
+    character_sheets: list[CharacterSheet]
     selected_character_sheet: CharacterSheet | None
     selected_beat_sheet: BeatSheet | None
     selected_story_setup: StorySetup | None
@@ -96,6 +97,7 @@ class StorySessionRepository:
             active_story_brief=self._get_active_story_brief(session_id),
             pitches=self._list_pitches(session_id),
             selected_pitch=self._get_selected_pitch(session_id),
+            character_sheets=self._list_character_sheets(session_id),
             selected_character_sheet=self._get_selected_character_sheet(session_id),
             selected_beat_sheet=self._get_selected_beat_sheet(session_id),
             selected_story_setup=self._get_selected_story_setup(session_id),
@@ -115,6 +117,12 @@ class StorySessionRepository:
 
     def list_pitches(self, session_id: str) -> list[Pitch]:
         return self._list_pitches(session_id)
+
+    def get_selected_character_sheet(self, session_id: str) -> CharacterSheet | None:
+        return self._get_selected_character_sheet(session_id)
+
+    def list_character_sheets(self, session_id: str) -> list[CharacterSheet]:
+        return self._list_character_sheets(session_id)
 
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
@@ -163,6 +171,14 @@ class StorySessionRepository:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _list_character_sheets(self, session_id: str) -> list[CharacterSheet]:
+        stmt: Select[tuple[CharacterSheet]] = (
+            select(CharacterSheet)
+            .where(CharacterSheet.session_id == session_id)
+            .order_by(CharacterSheet.created_at.asc(), CharacterSheet.revision_number.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def _get_selected_beat_sheet(self, session_id: str) -> BeatSheet | None:
         stmt: Select[tuple[BeatSheet]] = (

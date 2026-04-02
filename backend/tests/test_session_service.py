@@ -26,6 +26,11 @@ from app.db import (
 )
 from app.models import (
     BriefNormalizationResult,
+    CharacterBatchEvaluation,
+    CharacterBatchEvaluationCriterion,
+    CharacterGenerationResult,
+    GeneratedCharacterProfile,
+    GeneratedCharacterSheetCandidate,
     NormalizedBriefPreferences,
     SessionContextUpdateRequest,
     UserEditTargetKind,
@@ -94,6 +99,87 @@ class StubBriefNormalizationService:
                 or "A harbor bedtime quest with a calm lantern-by-lantern reunion."
             ),
             normalized_preferences=self._normalized_preferences,
+            raw_response={"stub": True},
+        )
+
+
+class StubCharacterGenerationService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object | None]] = []
+
+    def generate_character_sheets(self, **kwargs) -> CharacterGenerationResult:
+        self.calls.append(kwargs)
+        requested_count = int(kwargs.get("candidate_count") or 3)
+        candidates = [
+            GeneratedCharacterSheetCandidate(
+                title=f"Lantern Cast {index}",
+                summary=(
+                    f"Candidate {index} keeps the harbor story bedtime-safe with a distinct "
+                    "lead and support dynamic."
+                ),
+                story_function=(
+                    f"Candidate {index} supports the pitch by making later beats easy to "
+                    "outline around emotional repair."
+                ),
+                bedtime_safety_notes=(
+                    "Every worry is buffered by visible helpers, named feelings, and a calm "
+                    "return home."
+                ),
+                visual_motifs=[
+                    "lantern glow",
+                    "moonlit docks",
+                    f"quiet route {index}",
+                ],
+                protagonist=GeneratedCharacterProfile(
+                    name=f"Mira {index}",
+                    role="sleepy lantern-keeper in training",
+                    goal="guide the last harbor lights home before everyone settles",
+                    flaw="tries to fix every worry alone before asking for help",
+                    comfort_trait="counts steady reflections until their breathing slows",
+                    bedtime_safety_notes=(
+                        "The lead stays emotionally safe because the support cast keeps close "
+                        "and calm in every scene."
+                    ),
+                    relationships=[
+                        f"Trusts Otis {index} to steady the plan.",
+                    ],
+                    visual_anchors=["lantern sleeves", "soft satchel"],
+                ),
+                supporting_cast=[
+                    GeneratedCharacterProfile(
+                        name=f"Otis {index}",
+                        role="patient otter guardian",
+                        goal="help the lead slow the pacing when the night feels larger",
+                        flaw="over-explains instead of letting the lead discover the answer",
+                        comfort_trait="grounds scenes with practical rituals",
+                        bedtime_safety_notes=(
+                            "The guardian keeps each obstacle small, readable, and quickly "
+                            "reassuring."
+                        ),
+                        relationships=[
+                            f"Acts as Mira {index}'s calm sounding board.",
+                        ],
+                        visual_anchors=["river coat", "tiny satchel"],
+                    )
+                ],
+            )
+            for index in range(1, requested_count + 1)
+        ]
+        return CharacterGenerationResult(
+            source="stub",
+            model_id="stub-character-generator",
+            prompt_version="character_generation.test",
+            character_sheets=candidates,
+            evaluation=CharacterBatchEvaluation(
+                passed=True,
+                criteria=[
+                    CharacterBatchEvaluationCriterion(
+                        name="candidate_count_matches_request",
+                        passed=True,
+                        measured_value=requested_count,
+                    )
+                ],
+            ),
             raw_response={"stub": True},
         )
 
@@ -827,6 +913,180 @@ def test_refine_pitch_creates_a_linked_selected_revision_without_overwriting_his
     assert result.event.payload is not None
     assert result.event.payload.rationale is not None
     assert source_pitch.title in result.event.payload.rationale
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "ai.output.recorded"
+    assert history.events[-1].event_type == "selection.recorded"
+
+
+def test_generate_character_sheets_persists_durable_candidate_batches(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Character Generation")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child and an otter guardian follow floating lanterns across a harbor before bed."
+        ),
+    )
+    generated_pitches = service.generate_pitches(
+        snapshot.id,
+        candidate_count=3,
+        guidance="Keep the harbor mystery very gentle.",
+    )
+    service.select_pitch(
+        snapshot.id,
+        pitch_id=generated_pitches.snapshot.pitch_batches[0].pitches[0].id,
+    )
+
+    character_generator = StubCharacterGenerationService()
+    result = service.generate_character_sheets(
+        snapshot.id,
+        candidate_count=3,
+        guidance="Keep the support cast compact and clearly cozy.",
+        character_generation_service=character_generator,
+    )
+
+    assert result.event.event_type == "ai.output.recorded"
+    assert result.event.payload is not None
+    assert result.event.payload.output_kind == "character_sheet"
+    assert result.snapshot.current_stage == WorkflowStage.CHARACTERS
+    assert result.snapshot.resume_stage == WorkflowStage.CHARACTERS
+    assert result.snapshot.selected_character_sheet is None
+    assert result.snapshot.character_sheet_batches[0].candidate_count == 3
+    assert result.snapshot.character_sheet_batches[0].character_sheets[0].title == "Lantern Cast 1"
+    assert result.snapshot.character_sheet_batches[0].character_sheets[0].protagonist is not None
+    assert (
+        result.snapshot.character_sheet_batches[0].character_sheets[0].protagonist.goal
+        == "guide the last harbor lights home before everyone settles"
+    )
+    assert result.snapshot.stage_states[4].status == WorkflowStageState.IN_PROGRESS
+    assert result.snapshot.stage_states[4].detail == (
+        "Generated 3 character options. Select one to continue."
+    )
+    assert character_generator.calls[0]["guidance"] == (
+        "Keep the support cast compact and clearly cozy."
+    )
+
+
+def test_select_character_sheet_marks_choice_and_advances_to_beats(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Character Selection")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child and an otter guardian follow floating lanterns across a harbor before bed."
+        ),
+    )
+    generated_pitches = service.generate_pitches(snapshot.id, candidate_count=3)
+    service.select_pitch(
+        snapshot.id,
+        pitch_id=generated_pitches.snapshot.pitch_batches[0].pitches[0].id,
+    )
+    generated_characters = service.generate_character_sheets(
+        snapshot.id,
+        candidate_count=3,
+        character_generation_service=StubCharacterGenerationService(),
+    )
+    first_character_sheet = (
+        generated_characters.snapshot.character_sheet_batches[0].character_sheets[0]
+    )
+
+    result = service.select_character_sheet(
+        snapshot.id,
+        character_sheet_id=first_character_sheet.id,
+    )
+
+    assert result.event.event_type == "selection.recorded"
+    assert result.event.payload is not None
+    assert result.event.payload.selection_kind == "character_sheet"
+    assert result.snapshot.current_stage == WorkflowStage.BEATS
+    assert result.snapshot.resume_stage == WorkflowStage.BEATS
+    assert result.snapshot.selected_character_sheet is not None
+    assert result.snapshot.selected_character_sheet.id == first_character_sheet.id
+    assert result.snapshot.selected_character_sheet.is_selected is True
+    assert result.snapshot.stage_states[4].status == WorkflowStageState.COMPLETED
+
+
+def test_refine_character_sheet_creates_a_selected_revision_without_overwriting_history(
+    db_session,
+) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Character Refinement")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child and an otter guardian follow floating lanterns across a harbor before bed."
+        ),
+    )
+    generated_pitches = service.generate_pitches(snapshot.id, candidate_count=3)
+    service.select_pitch(
+        snapshot.id,
+        pitch_id=generated_pitches.snapshot.pitch_batches[0].pitches[0].id,
+    )
+    generated_characters = service.generate_character_sheets(
+        snapshot.id,
+        candidate_count=3,
+        character_generation_service=StubCharacterGenerationService(),
+    )
+    source_character_sheet = (
+        generated_characters.snapshot.character_sheet_batches[0].character_sheets[1]
+    )
+    service.select_character_sheet(
+        snapshot.id,
+        character_sheet_id=source_character_sheet.id,
+    )
+
+    result = service.refine_character_sheet(
+        snapshot.id,
+        character_sheet_id=source_character_sheet.id,
+        instructions="Make the lead and guardian feel more sibling-like.",
+        focus_character_names=["Mira 2", "Otis 2"],
+        character_generation_service=StubCharacterGenerationService(),
+    )
+
+    assert result.snapshot.current_stage == WorkflowStage.BEATS
+    assert result.snapshot.resume_stage == WorkflowStage.BEATS
+    assert result.snapshot.selected_character_sheet is not None
+    assert result.snapshot.selected_character_sheet.id != source_character_sheet.id
+    assert result.snapshot.selected_character_sheet.generation_kind == "refinement"
+    assert (
+        result.snapshot.selected_character_sheet.source_character_sheet_id
+        == source_character_sheet.id
+    )
+    assert result.snapshot.selected_character_sheet.refinement_instructions == (
+        "Make the lead and guardian feel more sibling-like."
+    )
+    assert "Refined from" in (
+        result.snapshot.selected_character_sheet.selection_rationale or ""
+    )
+    assert result.snapshot.character_sheet_batches[0].generation_kind == "refinement"
+    assert result.snapshot.character_sheet_batches[0].candidate_count == 1
+    assert (
+        result.snapshot.character_sheet_batches[0].source_character_sheet_title
+        == source_character_sheet.title
+    )
+    assert len(result.snapshot.character_sheet_batches) == 2
+    assert result.event.payload is not None
+    assert result.event.payload.rationale is not None
+    assert source_character_sheet.title in result.event.payload.rationale
 
     history = service.load_session_history(snapshot.id)
     assert history.events[-2].event_type == "ai.output.recorded"

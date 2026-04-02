@@ -12,6 +12,11 @@ from app.models import (
     BriefNormalizationInvocation,
     BriefNormalizationInvocationResult,
     BriefNormalizationStructuredOutput,
+    CharacterGenerationInvocation,
+    CharacterGenerationInvocationResult,
+    CharacterGenerationStructuredOutput,
+    GeneratedCharacterProfile,
+    GeneratedCharacterSheetCandidate,
     GeneratedPitchCandidate,
     NormalizedBriefPreferences,
     PitchGenerationInvocation,
@@ -122,6 +127,177 @@ class StubPitchGenerationAdapter:
         return None
 
 
+class StubCharacterGenerationAdapter:
+    def __init__(self) -> None:
+        self.model_id = "gemini-3.1-pro"
+
+    def generate(
+        self,
+        invocation: CharacterGenerationInvocation,
+    ) -> CharacterGenerationInvocationResult:
+        return CharacterGenerationInvocationResult(
+            invocation=invocation,
+            structured_output=CharacterGenerationStructuredOutput(
+                character_sheets=[
+                    GeneratedCharacterSheetCandidate(
+                        title="Juniper Keeper Cast",
+                        summary=(
+                            "Mira leads the harbor story with a calm helper dynamic and a "
+                            "clear bedtime-safe repair arc."
+                        ),
+                        story_function=(
+                            "The cast supports the pitch by making later beats easy to outline "
+                            "around visible care and emotional repair."
+                        ),
+                        bedtime_safety_notes=(
+                            "Every worry is buffered by visible helpers, named feelings, and a "
+                            "clearly restorative ending."
+                        ),
+                        visual_motifs=["lantern glow", "moonlit docks", "otter paws"],
+                        protagonist=GeneratedCharacterProfile(
+                            name="Mira",
+                            role="sleepy lantern-keeper in training",
+                            goal="guide the last harbor lights home before everyone settles",
+                            flaw="tries to fix every worry alone before asking for help",
+                            comfort_trait="counts steady reflections until breathing slows",
+                            bedtime_safety_notes=(
+                                "Mira stays emotionally safe because helpers remain close and "
+                                "calm in every scene."
+                            ),
+                            relationships=[
+                                "Trusts Otis to steady the plan when emotions spike.",
+                            ],
+                            visual_anchors=["lantern sleeves", "soft satchel"],
+                        ),
+                        supporting_cast=[
+                            GeneratedCharacterProfile(
+                                name="Otis",
+                                role="patient otter guardian",
+                                goal="help Mira slow the pacing whenever the night feels bigger",
+                                flaw="over-explains instead of letting Mira discover the answer",
+                                comfort_trait="grounds scenes with practical rituals",
+                                bedtime_safety_notes=(
+                                    "Otis makes each obstacle small, readable, and quickly "
+                                    "reassuring."
+                                ),
+                                relationships=[
+                                    "Acts as Mira's calm sounding board.",
+                                ],
+                                visual_anchors=["river coat", "tidy satchel"],
+                            )
+                        ],
+                    ),
+                    GeneratedCharacterSheetCandidate(
+                        title="Harbor Listener Cast",
+                        summary=(
+                            "Pip centers the same pitch around noticing, conversation, and a "
+                            "gentler mystery rhythm."
+                        ),
+                        story_function=(
+                            "The cast makes the pitch emotionally observant so later beats can "
+                            "lean on dialogue and calm discovery."
+                        ),
+                        bedtime_safety_notes=(
+                            "The mystery stays bedtime-safe because each reveal is named, "
+                            "shared, and softened right away."
+                        ),
+                        visual_motifs=["still water", "sleepy reeds", "silver light"],
+                        protagonist=GeneratedCharacterProfile(
+                            name="Pip",
+                            role="quiet listener for the sleeping shoreline",
+                            goal="understand what the night still needs so everyone can settle",
+                            flaw="hesitates to speak when a worried feeling first appears",
+                            comfort_trait="matches footsteps to the hush of water",
+                            bedtime_safety_notes=(
+                                "Pip's worries stay readable and quickly supported by the whole "
+                                "cast."
+                            ),
+                            relationships=[
+                                "Leans on Rowan when emotions need clearer words.",
+                            ],
+                            visual_anchors=["silver pockets", "reed-shadow patterns"],
+                        ),
+                        supporting_cast=[
+                            GeneratedCharacterProfile(
+                                name="Rowan",
+                                role="older sibling translator",
+                                goal="turn worry into practical kindness whenever the mood dips",
+                                flaw="tries to protect everyone before listening fully",
+                                comfort_trait="restates feelings in calmer words",
+                                bedtime_safety_notes=(
+                                    "Rowan keeps discoveries gentle by naming them before they "
+                                    "can feel overwhelming."
+                                ),
+                                relationships=[
+                                    "Helps Pip speak the hidden worry aloud.",
+                                ],
+                                visual_anchors=["striped scarf", "reed basket"],
+                            )
+                        ],
+                    ),
+                    GeneratedCharacterSheetCandidate(
+                        title="Moonpath Guide Cast",
+                        summary=(
+                            "Tavi shapes the harbor story around ritual, routes, and a compact "
+                            "support team."
+                        ),
+                        story_function=(
+                            "The cast supports the pitch with steady movement and small repairs "
+                            "that stay easy to stage later."
+                        ),
+                        bedtime_safety_notes=(
+                            "The route home stays emotionally safe because every stop has a "
+                            "helper and a clearly calming purpose."
+                        ),
+                        visual_motifs=["mapped lights", "quiet ropes", "silver water"],
+                        protagonist=GeneratedCharacterProfile(
+                            name="Tavi",
+                            role="gentle route-maker for sleepy travelers",
+                            goal="lead one lingering lantern back toward a safe ending",
+                            flaw="overplans each step and worries when the route changes",
+                            comfort_trait=(
+                                "returns to familiar rituals whenever the story needs "
+                                "grounding"
+                            ),
+                            bedtime_safety_notes=(
+                                "Tavi's planning worries stay manageable because the support cast "
+                                "keeps the route readable and warm."
+                            ),
+                            relationships=[
+                                "Relies on Ember to reframe obstacles as invitations.",
+                            ],
+                            visual_anchors=["mapped ribbon", "quiet satchel"],
+                        ),
+                        supporting_cast=[
+                            GeneratedCharacterProfile(
+                                name="Ember",
+                                role="warmhearted mentor",
+                                goal=(
+                                    "keep the quest readable and calm without flattening "
+                                    "the wonder"
+                                ),
+                                flaw="tries to solve problems too early",
+                                comfort_trait="grounds scenes with a steady ritual phrase",
+                                bedtime_safety_notes=(
+                                    "Ember gives every obstacle a gentle explanation before the "
+                                    "story moves on."
+                                ),
+                                relationships=[
+                                    "Encourages Tavi to trust the quieter route.",
+                                ],
+                                visual_anchors=["soft lantern staff", "threaded map"],
+                            )
+                        ],
+                    ),
+                ]
+            ),
+            raw_response={"stub": True},
+        )
+
+    def close(self) -> None:
+        return None
+
+
 @pytest.fixture
 def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     database_path = tmp_path / "session-api.sqlite3"
@@ -136,6 +312,7 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
     app = create_app()
     app.state.brief_normalization_adapter = StubBriefNormalizationAdapter()
+    app.state.character_generation_adapter = StubCharacterGenerationAdapter()
     app.state.pitch_generation_adapter = StubPitchGenerationAdapter()
 
     with TestClient(app) as test_client:
@@ -741,6 +918,255 @@ def test_refine_session_pitch_endpoint_creates_a_selected_refined_pitch(
     )
     assert payload["snapshot"]["pitch_batches"][0]["generation_kind"] == "refinement"
     assert payload["snapshot"]["pitch_batches"][0]["source_pitch_title"] == source_pitch["title"]
+
+
+def test_generate_session_character_sheets_endpoint_persists_a_durable_batch(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Character API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={
+            "candidate_count": 3,
+            "guidance": "Keep the support cast compact and clearly cozy.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "ai.output.recorded"
+    assert payload["event"]["payload"]["output_kind"] == "character_sheet"
+    assert payload["event"]["payload"]["candidate_count"] == 3
+    assert payload["snapshot"]["current_stage"] == "characters"
+    assert payload["snapshot"]["resume_stage"] == "characters"
+    assert payload["snapshot"]["selected_character_sheet"] is None
+    assert payload["snapshot"]["character_sheet_batches"][0]["candidate_count"] == 3
+    assert payload["snapshot"]["character_sheet_batches"][0]["character_sheets"][0]["title"] == (
+        "Juniper Keeper Cast"
+    )
+    assert payload["snapshot"]["stage_states"][4]["status"] == "in_progress"
+    assert payload["snapshot"]["stage_states"][4]["detail"] == (
+        "Generated 3 character options. Select one to continue."
+    )
+
+
+def test_select_session_character_sheet_endpoint_marks_choice_and_advances_to_beats(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Character Selection API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    first_character_sheet_id = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+        json={
+            "character_sheet_id": first_character_sheet_id,
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["payload"]["selection_kind"] == "character_sheet"
+    assert payload["snapshot"]["current_stage"] == "beats"
+    assert payload["snapshot"]["resume_stage"] == "beats"
+    assert payload["snapshot"]["selected_character_sheet"]["id"] == first_character_sheet_id
+    assert payload["snapshot"]["selected_character_sheet"]["is_selected"] is True
+    assert payload["snapshot"]["stage_states"][4]["status"] == "completed"
+
+
+def test_refine_session_character_sheet_endpoint_creates_a_selected_refined_sheet(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Character Refinement API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    source_character_sheet = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][1]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+            json={
+                "character_sheet_id": source_character_sheet["id"],
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/refine",
+        json={
+            "character_sheet_id": source_character_sheet["id"],
+            "instructions": "Make the lead and guardian feel more sibling-like.",
+            "focus_character_names": ["Pip", "Rowan"],
+            "origin": "chat",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["payload"]["selection_kind"] == "character_sheet"
+    assert "Refined from" in payload["event"]["payload"]["rationale"]
+    assert payload["snapshot"]["current_stage"] == "beats"
+    assert payload["snapshot"]["selected_character_sheet"]["generation_kind"] == "refinement"
+    assert payload["snapshot"]["selected_character_sheet"]["source_character_sheet_id"] == (
+        source_character_sheet["id"]
+    )
+    assert payload["snapshot"]["selected_character_sheet"]["refinement_instructions"] == (
+        "Make the lead and guardian feel more sibling-like."
+    )
+    assert payload["snapshot"]["character_sheet_batches"][0]["generation_kind"] == "refinement"
+    assert payload["snapshot"]["character_sheet_batches"][0][
+        "source_character_sheet_title"
+    ] == source_character_sheet["title"]
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(

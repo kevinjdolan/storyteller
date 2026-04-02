@@ -18,6 +18,11 @@ from app.services.brief_normalization import (
     build_brief_normalization_result_from_existing,
     synthesize_normalized_summary,
 )
+from app.services.character_generation import (
+    CharacterGenerationService,
+    build_character_model_output,
+    evaluate_character_sheet_batch,
+)
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 from app.services.intent_parser import SessionIntentParserService
@@ -68,6 +73,7 @@ __all__ = [
     "BackgroundJobService",
     "BackgroundJobServiceError",
     "BriefNormalizationService",
+    "CharacterGenerationService",
     "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
     "PitchGenerationService",
@@ -91,8 +97,10 @@ __all__ = [
     "UnsupportedSessionContextUpdateError",
     "apply_brief_normalization_overrides",
     "build_brief_model_output",
+    "build_character_model_output",
     "build_brief_normalization_result_from_existing",
     "build_pitch_model_output",
+    "evaluate_character_sheet_batch",
     "evaluate_pitch_batch",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",

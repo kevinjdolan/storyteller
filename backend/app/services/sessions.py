@@ -6,15 +6,17 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.db import Pitch, StoryBrief
+from app.db import CharacterSheet, Pitch, StoryBrief
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     AIOutputKind,
+    ExistingCharacterSheetContext,
     ExistingSelectedPitchContext,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
+    SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
     SessionEventActor,
@@ -40,6 +42,10 @@ from app.services.brief_normalization import (
     build_brief_normalization_result_from_existing,
 )
 from app.services.catalog import find_active_genre, find_active_tone_for_genre
+from app.services.character_generation import (
+    CharacterGenerationService,
+    build_character_model_output,
+)
 from app.services.event_log import SessionEventLogService
 from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
 from app.services.session_hydration import (
@@ -85,6 +91,14 @@ class SessionPitchGenerationError(SessionServiceError):
 
 class SessionPitchSelectionError(SessionServiceError):
     """Raised when a pitch selection request cannot be fulfilled."""
+
+
+class SessionCharacterSheetGenerationError(SessionServiceError):
+    """Raised when a character-sheet generation request cannot be fulfilled."""
+
+
+class SessionCharacterSheetSelectionError(SessionServiceError):
+    """Raised when a character-sheet selection request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -1023,6 +1037,569 @@ class SessionService:
             event=self._event_log.build_event_view(selection_event),
         )
 
+    def generate_character_sheets(
+        self,
+        session_id: str,
+        *,
+        candidate_count: int = 3,
+        guidance: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        character_generation_service: CharacterGenerationService | None = None,
+    ) -> SessionCharacterSheetGenerationResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_pitch = self._sessions.get_selected_pitch(session_id)
+        if selected_pitch is None:
+            raise SessionCharacterSheetGenerationError(
+                "select a pitch before generating character sheets",
+            )
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        current_selected_character_sheet = self._sessions.get_selected_character_sheet(
+            session_id
+        )
+        raw_brief = (
+            active_brief.raw_brief
+            if active_brief is not None
+            else selected_pitch.logline
+        )
+        normalized_summary = (
+            active_brief.normalized_summary if active_brief is not None else None
+        )
+        generator = character_generation_service or CharacterGenerationService()
+        generation_result = generator.generate_character_sheets(
+            candidate_count=candidate_count,
+            generation_goal="alternatives",
+            selected_pitch=_build_selected_pitch_context(selected_pitch),
+            raw_brief=raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=normalized_summary,
+            story_idea=active_brief.story_idea if active_brief is not None else None,
+            desired_themes=active_brief.desired_themes if active_brief is not None else None,
+            key_images=active_brief.key_images if active_brief is not None else None,
+            audience_notes=active_brief.audience_notes if active_brief is not None else None,
+            must_have_elements=(
+                active_brief.must_have_elements if active_brief is not None else None
+            ),
+            planning_notes=active_brief.planning_notes if active_brief is not None else None,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences if active_brief is not None else {}
+            ),
+            guidance=guidance,
+            existing_character_sheet=(
+                _build_existing_character_sheet_context(current_selected_character_sheet)
+                if current_selected_character_sheet is not None
+                else None
+            ),
+        )
+        if not generation_result.evaluation.passed:
+            raise SessionCharacterSheetGenerationError(
+                "character generation produced an invalid candidate batch"
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            status=WorkflowStageState.IN_PROGRESS,
+        )
+        stage_snapshot = stage_map[WorkflowStage.CHARACTERS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+        stage_snapshot.detail = _build_character_sheet_generation_stage_detail(
+            len(generation_result.character_sheets),
+        )
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = None
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            detail=stage_snapshot.detail,
+        )
+
+        generation_key = _build_character_generation_key()
+        model_output = _build_character_persistence_metadata(
+            generation_result,
+            generation_key=generation_key,
+            generation_kind="generated",
+            guidance=guidance,
+            selected_pitch=selected_pitch,
+        )
+        next_revision_number = _next_character_sheet_revision_number(
+            self._sessions.list_character_sheets(session_id)
+        )
+        for index, candidate in enumerate(generation_result.character_sheets, start=1):
+            self._session.add(
+                CharacterSheet(
+                    session_id=story_session.id,
+                    pitch_id=selected_pitch.id,
+                    revision_number=next_revision_number + index - 1,
+                    title=candidate.title,
+                    summary=candidate.summary,
+                    protagonist_name=candidate.protagonist.name,
+                    supporting_cast=[
+                        supporting_character.model_dump(mode="json")
+                        for supporting_character in candidate.supporting_cast
+                    ],
+                    character_data={
+                        **model_output,
+                        "candidate": candidate.model_dump(mode="json"),
+                        "batch_metadata": {
+                            **model_output["batch_metadata"],
+                            "candidate_index": index,
+                        },
+                    },
+                    bedtime_notes=candidate.bedtime_safety_notes,
+                    is_selected=False,
+                )
+            )
+
+        self._session.flush()
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.CHARACTERS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        ai_event = self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.CHARACTER_SHEET,
+            stage=WorkflowStage.CHARACTERS,
+            generation_key=generation_key,
+            candidate_count=len(generation_result.character_sheets),
+            model_id=generation_result.model_id,
+            summary_text=_build_character_sheet_generation_summary_text(
+                generation_result.character_sheets
+            ),
+            actor=actor,
+        )
+        stage_snapshot.last_event = ai_event
+        self._session.commit()
+        return SessionCharacterSheetGenerationResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(ai_event),
+        )
+
+    def refine_character_sheet(
+        self,
+        session_id: str,
+        *,
+        instructions: str,
+        character_sheet_id: str | None = None,
+        revision_number: int | None = None,
+        title: str | None = None,
+        focus_character_names: list[str] | None = None,
+        change_summary: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        character_generation_service: CharacterGenerationService | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_pitch = self._sessions.get_selected_pitch(session_id)
+        if selected_pitch is None:
+            raise SessionCharacterSheetGenerationError(
+                "select a pitch before refining character sheets",
+            )
+
+        normalized_instructions = _normalize_optional_text(instructions)
+        if normalized_instructions is None:
+            raise SessionCharacterSheetGenerationError(
+                "character-sheet refinement instructions are required"
+            )
+
+        source_character_sheet = _resolve_source_character_sheet(
+            self._sessions.list_character_sheets(session_id),
+            selected_character_sheet=self._sessions.get_selected_character_sheet(session_id),
+            character_sheet_id=character_sheet_id,
+            revision_number=revision_number,
+            title=title,
+        )
+        if source_character_sheet is None:
+            raise SessionCharacterSheetSelectionError(
+                "no character sheet matched the requested refinement"
+            )
+        if (
+            source_character_sheet.pitch_id is not None
+            and source_character_sheet.pitch_id != selected_pitch.id
+        ):
+            raise SessionCharacterSheetSelectionError(
+                "the requested character sheet belongs to a different pitch"
+            )
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        previous_selected_character_sheet = self._sessions.get_selected_character_sheet(
+            session_id
+        )
+        raw_brief = (
+            active_brief.raw_brief
+            if active_brief is not None
+            else selected_pitch.logline
+        )
+        normalized_summary = (
+            active_brief.normalized_summary if active_brief is not None else None
+        )
+        generator = character_generation_service or CharacterGenerationService()
+        generation_result = generator.generate_character_sheets(
+            candidate_count=1,
+            generation_goal="refinement",
+            selected_pitch=_build_selected_pitch_context(selected_pitch),
+            raw_brief=raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=normalized_summary,
+            story_idea=active_brief.story_idea if active_brief is not None else None,
+            desired_themes=active_brief.desired_themes if active_brief is not None else None,
+            key_images=active_brief.key_images if active_brief is not None else None,
+            audience_notes=active_brief.audience_notes if active_brief is not None else None,
+            must_have_elements=(
+                active_brief.must_have_elements if active_brief is not None else None
+            ),
+            planning_notes=active_brief.planning_notes if active_brief is not None else None,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences if active_brief is not None else {}
+            ),
+            guidance=normalized_instructions,
+            change_summary=change_summary,
+            focus_character_names=focus_character_names or [],
+            existing_character_sheet=_build_existing_character_sheet_context(
+                source_character_sheet
+            ),
+        )
+        if not generation_result.evaluation.passed or not generation_result.character_sheets:
+            raise SessionCharacterSheetGenerationError(
+                "character-sheet refinement produced an invalid candidate"
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.CHARACTERS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        for character_sheet in self._sessions.list_character_sheets(session_id):
+            character_sheet.is_selected = False
+
+        refinement_rationale = _build_character_sheet_refinement_rationale(
+            source_character_sheet,
+            normalized_instructions,
+            focus_character_names=focus_character_names or [],
+        )
+        generation_key = _build_character_generation_key()
+        model_output = _build_character_persistence_metadata(
+            generation_result,
+            generation_key=generation_key,
+            generation_kind="refinement",
+            guidance=normalized_instructions,
+            selected_pitch=selected_pitch,
+            source_character_sheet=source_character_sheet,
+            selection_rationale=refinement_rationale,
+            change_summary=change_summary,
+        )
+        refined_candidate = generation_result.character_sheets[0]
+        refined_character_sheet = CharacterSheet(
+            session_id=story_session.id,
+            pitch_id=selected_pitch.id,
+            revision_number=_next_character_sheet_revision_number(
+                self._sessions.list_character_sheets(session_id)
+            ),
+            title=refined_candidate.title,
+            summary=refined_candidate.summary,
+            protagonist_name=refined_candidate.protagonist.name,
+            supporting_cast=[
+                supporting_character.model_dump(mode="json")
+                for supporting_character in refined_candidate.supporting_cast
+            ],
+            character_data={
+                **model_output,
+                "candidate": refined_candidate.model_dump(mode="json"),
+                "batch_metadata": {
+                    **model_output["batch_metadata"],
+                    "candidate_index": 1,
+                },
+            },
+            bedtime_notes=refined_candidate.bedtime_safety_notes,
+            is_selected=True,
+            accepted_at=now,
+        )
+        self._session.add(refined_character_sheet)
+        self._session.flush()
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_character_sheet_selection_detail(refined_character_sheet)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            detail=_build_character_sheet_invalidation_detail(refined_character_sheet),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.CHARACTERS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.CHARACTER_SHEET,
+            stage=WorkflowStage.CHARACTERS,
+            generation_key=generation_key,
+            candidate_count=1,
+            model_id=generation_result.model_id,
+            summary_text=_build_character_sheet_refinement_summary_text(
+                refined_character_sheet,
+                source_character_sheet=source_character_sheet,
+            ),
+            actor=actor,
+        )
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.CHARACTER_SHEET,
+            stage=WorkflowStage.CHARACTERS,
+            label=_read_character_sheet_label(refined_character_sheet),
+            selection_id=refined_character_sheet.id,
+            rationale=refinement_rationale,
+            previous_selection_id=(
+                previous_selected_character_sheet.id
+                if previous_selected_character_sheet is not None
+                else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
+    def select_character_sheet(
+        self,
+        session_id: str,
+        *,
+        character_sheet_id: str | None = None,
+        revision_number: int | None = None,
+        title: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_pitch = self._sessions.get_selected_pitch(session_id)
+        if selected_pitch is None:
+            raise SessionCharacterSheetSelectionError(
+                "select a pitch before choosing a character sheet"
+            )
+
+        matches = _find_matching_character_sheets(
+            self._sessions.list_character_sheets(session_id),
+            character_sheet_id=character_sheet_id,
+            revision_number=revision_number,
+            title=title,
+        )
+        if not matches:
+            raise SessionCharacterSheetSelectionError(
+                "no generated character sheet matched the requested selection"
+            )
+        if len(matches) > 1:
+            raise SessionCharacterSheetSelectionError(
+                "the requested character-sheet selection matched more than one candidate"
+            )
+
+        selected_character_sheet = matches[0]
+        if (
+            selected_character_sheet.pitch_id is not None
+            and selected_character_sheet.pitch_id != selected_pitch.id
+        ):
+            raise SessionCharacterSheetSelectionError(
+                "the requested character sheet belongs to a different pitch"
+            )
+
+        previous_selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        for character_sheet in self._sessions.list_character_sheets(session_id):
+            character_sheet.is_selected = character_sheet.id == selected_character_sheet.id
+
+        now = utc_now()
+        selected_character_sheet.accepted_at = now
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.CHARACTERS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_character_sheet_selection_detail(selected_character_sheet)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.CHARACTERS,
+            detail=_build_character_sheet_invalidation_detail(selected_character_sheet),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.CHARACTERS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.CHARACTER_SHEET,
+            stage=WorkflowStage.CHARACTERS,
+            label=_read_character_sheet_label(selected_character_sheet),
+            selection_id=selected_character_sheet.id,
+            previous_selection_id=(
+                previous_selected_character_sheet.id
+                if previous_selected_character_sheet is not None
+                else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
     def apply_context_update(
         self,
         session_id: str,
@@ -1321,8 +1898,16 @@ def _build_pitch_generation_key() -> str:
     return f"pitch-batch-{uuid4().hex[:12]}"
 
 
+def _build_character_generation_key() -> str:
+    return f"character-batch-{uuid4().hex[:12]}"
+
+
 def _build_pitch_generation_stage_detail(candidate_count: int) -> str:
     return f"Generated {candidate_count} pitch options. Select one to continue."
+
+
+def _build_character_sheet_generation_stage_detail(candidate_count: int) -> str:
+    return f"Generated {candidate_count} character options. Select one to continue."
 
 
 def _build_pitch_generation_summary_text(pitches: list[object]) -> str:
@@ -1334,21 +1919,75 @@ def _build_pitch_generation_summary_text(pitches: list[object]) -> str:
     return "Generated pitches: " + ", ".join(summarized_titles[:3]) + "."
 
 
+def _build_character_sheet_generation_summary_text(character_sheets: list[object]) -> str:
+    titles = [getattr(character_sheet, "title", None) for character_sheet in character_sheets]
+    summarized_titles = [title for title in titles if isinstance(title, str) and title]
+    if not summarized_titles:
+        return "Generated a fresh character-sheet batch."
+
+    return "Generated character sheets: " + ", ".join(summarized_titles[:3]) + "."
+
+
 def _build_pitch_refinement_rationale(pitch: Pitch, instructions: str) -> str:
     return f'Refined from "{pitch.title}" with: {instructions}'
+
+
+def _build_character_sheet_refinement_rationale(
+    character_sheet: CharacterSheet,
+    instructions: str,
+    *,
+    focus_character_names: list[str],
+) -> str:
+    focus_tail = ""
+    if focus_character_names:
+        focus_tail = f" Focus characters: {', '.join(focus_character_names)}."
+
+    label = _read_character_sheet_label(character_sheet)
+    return f'Refined from "{label}" with: {instructions}.{focus_tail}'
 
 
 def _build_pitch_refinement_summary_text(refined_pitch: Pitch, *, source_pitch: Pitch) -> str:
     return f"Generated refined pitch {refined_pitch.title} from {source_pitch.title}."
 
 
+def _build_character_sheet_refinement_summary_text(
+    refined_character_sheet: CharacterSheet,
+    *,
+    source_character_sheet: CharacterSheet,
+) -> str:
+    return (
+        "Generated refined character sheet "
+        f"{_read_character_sheet_label(refined_character_sheet)} from "
+        f"{_read_character_sheet_label(source_character_sheet)}."
+    )
+
+
 def _build_pitch_selection_detail(pitch: Pitch) -> str:
     return f"Selected pitch: {pitch.title}. {pitch.logline}"
+
+
+def _build_character_sheet_selection_detail(character_sheet: CharacterSheet) -> str:
+    label = _read_character_sheet_label(character_sheet)
+    if character_sheet.protagonist_name:
+        return (
+            f"Selected character sheet: {label}. Lead character: "
+            f"{character_sheet.protagonist_name}."
+        )
+
+    return f"Selected character sheet: {label}."
 
 
 def _build_pitch_invalidation_detail(pitch: Pitch) -> str:
     return (
         f"Pitch selection changed to {pitch.title}. Refresh character work and any downstream "
+        "planning."
+    )
+
+
+def _build_character_sheet_invalidation_detail(character_sheet: CharacterSheet) -> str:
+    label = _read_character_sheet_label(character_sheet)
+    return (
+        f"Character sheet changed to {label}. Refresh beats and any downstream "
         "planning."
     )
 
@@ -1378,6 +2017,51 @@ def _find_matching_pitches(
     return matches
 
 
+def _find_matching_character_sheets(
+    character_sheets: list[CharacterSheet],
+    *,
+    character_sheet_id: str | None,
+    revision_number: int | None,
+    title: str | None,
+) -> list[CharacterSheet]:
+    title_match = title.lower() if title is not None else None
+    matches: list[CharacterSheet] = []
+
+    for character_sheet in character_sheets:
+        if character_sheet_id is not None and character_sheet.id != character_sheet_id:
+            continue
+        if revision_number is not None and character_sheet.revision_number != revision_number:
+            continue
+        if title_match is not None and (character_sheet.title or "").lower() != title_match:
+            continue
+        matches.append(character_sheet)
+
+    return matches
+
+
+def _resolve_source_character_sheet(
+    character_sheets: list[CharacterSheet],
+    *,
+    selected_character_sheet: CharacterSheet | None,
+    character_sheet_id: str | None,
+    revision_number: int | None,
+    title: str | None,
+) -> CharacterSheet | None:
+    if character_sheet_id is None and revision_number is None and title is None:
+        return selected_character_sheet
+
+    matches = _find_matching_character_sheets(
+        character_sheets,
+        character_sheet_id=character_sheet_id,
+        revision_number=revision_number,
+        title=title,
+    )
+    if len(matches) != 1:
+        return None
+
+    return matches[0]
+
+
 def _build_pitch_persistence_metadata(
     result,
     *,
@@ -1400,6 +2084,80 @@ def _build_pitch_persistence_metadata(
             "selection_rationale": selection_rationale,
         }
     return payload
+
+
+def _build_character_persistence_metadata(
+    result,
+    *,
+    generation_key: str,
+    generation_kind: str,
+    guidance: str | None = None,
+    selected_pitch: Pitch,
+    source_character_sheet: CharacterSheet | None = None,
+    selection_rationale: str | None = None,
+    change_summary: str | None = None,
+) -> dict[str, Any]:
+    payload = build_character_model_output(result)
+    payload["batch_metadata"] = {
+        "generation_key": generation_key,
+        "generation_kind": generation_kind,
+        "guidance": guidance,
+    }
+    payload["pitch_context"] = {
+        "source_pitch_id": selected_pitch.id,
+        "source_pitch_title": selected_pitch.title,
+    }
+    if source_character_sheet is not None:
+        payload["refinement"] = {
+            "source_pitch_id": selected_pitch.id,
+            "source_pitch_title": selected_pitch.title,
+            "source_character_sheet_id": source_character_sheet.id,
+            "source_character_sheet_title": _read_character_sheet_label(source_character_sheet),
+            "refinement_instructions": guidance,
+            "selection_rationale": selection_rationale,
+            "change_summary": change_summary,
+        }
+    return payload
+
+
+def _build_existing_character_sheet_context(
+    character_sheet: CharacterSheet,
+) -> ExistingCharacterSheetContext:
+    protagonist_payload = None
+    supporting_cast_payload = []
+    if isinstance(character_sheet.character_data, Mapping):
+        candidate_payload = character_sheet.character_data.get("candidate")
+        if isinstance(candidate_payload, Mapping):
+            protagonist_payload = candidate_payload.get("protagonist")
+            supporting_cast_payload = candidate_payload.get("supporting_cast", [])
+
+    return ExistingCharacterSheetContext(
+        title=character_sheet.title,
+        summary=character_sheet.summary,
+        protagonist_name=character_sheet.protagonist_name,
+        bedtime_safety_notes=character_sheet.bedtime_notes,
+        protagonist=protagonist_payload,
+        supporting_cast=(
+            supporting_cast_payload
+            if isinstance(supporting_cast_payload, list)
+            else []
+        ),
+    )
+
+
+def _next_character_sheet_revision_number(character_sheets: list[CharacterSheet]) -> int:
+    if not character_sheets:
+        return 1
+
+    return max(character_sheet.revision_number for character_sheet in character_sheets) + 1
+
+
+def _read_character_sheet_label(character_sheet: CharacterSheet) -> str:
+    return (
+        character_sheet.title
+        or character_sheet.protagonist_name
+        or f"Character sheet revision {character_sheet.revision_number}"
+    )
 
 
 _STORY_BRIEF_TEXT_FIELDS = (
