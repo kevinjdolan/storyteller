@@ -45,9 +45,10 @@
     "42-story-setup-brief-form.md",
     "43-brief-normalization-service.md",
     "44-pitch-generation-pipeline.md",
-    "45-pitch-refinement-via-chat.md"
+    "45-pitch-refinement-via-chat.md",
+    "46-character-sheet-generation.md"
   ],
-  "current_success_ref": "385e66428d77c6d8e7cb38cbe0b2f329272f2eeb",
+  "current_success_ref": "54c02fe8c010f359f8f0644254bcd925ea891978",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
