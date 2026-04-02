@@ -65,9 +65,10 @@
     "62-composition-streaming-events.md",
     "63-composition-main-pane-ui.md",
     "64-agent-summary-messages-during-composition.md",
-    "65-interrupt-and-redirect-composition.md"
+    "65-interrupt-and-redirect-composition.md",
+    "66-rewrite-prior-segments.md"
   ],
-  "current_success_ref": "bf2510eede41fdbd6fdeeff77306245cdec688e3",
+  "current_success_ref": "f6ead56ac202044ee1f22fd618089d7a8200a0e9",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
