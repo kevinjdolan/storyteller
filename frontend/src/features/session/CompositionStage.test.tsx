@@ -219,9 +219,12 @@ describe('CompositionStage', () => {
   it('renders the current segment focus, archive, and routes control requests through the callbacks', async () => {
     const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
     const onCancelComposition = vi.fn().mockResolvedValue(undefined)
+    const onKeepExploringRewrite = vi.fn()
     const onPauseComposition = vi.fn().mockResolvedValue(undefined)
+    const onRejectRewrite = vi.fn().mockResolvedValue(undefined)
     const onRedirectComposition = vi.fn().mockResolvedValue(undefined)
     const onResumeComposition = vi.fn().mockResolvedValue(undefined)
+    const onRestoreSegmentVersion = vi.fn().mockResolvedValue(undefined)
     const onReturnToPlan = vi.fn().mockResolvedValue(undefined)
     const onStartComposition = vi.fn().mockResolvedValue(undefined)
 
@@ -231,9 +234,12 @@ describe('CompositionStage', () => {
         connectionState="open"
         onAcceptRewrite={onAcceptRewrite}
         onCancelComposition={onCancelComposition}
+        onKeepExploringRewrite={onKeepExploringRewrite}
         onPauseComposition={onPauseComposition}
+        onRejectRewrite={onRejectRewrite}
         onRedirectComposition={onRedirectComposition}
         onResumeComposition={onResumeComposition}
+        onRestoreSegmentVersion={onRestoreSegmentVersion}
         onReturnToPlan={onReturnToPlan}
         onStartComposition={onStartComposition}
         snapshot={sampleSnapshot}
@@ -286,7 +292,10 @@ describe('CompositionStage', () => {
 
     expect(onCancelComposition).not.toHaveBeenCalled()
     expect(onAcceptRewrite).not.toHaveBeenCalled()
+    expect(onKeepExploringRewrite).not.toHaveBeenCalled()
     expect(onResumeComposition).not.toHaveBeenCalled()
+    expect(onRejectRewrite).not.toHaveBeenCalled()
+    expect(onRestoreSegmentVersion).not.toHaveBeenCalled()
     expect(onStartComposition).not.toHaveBeenCalled()
   })
 
@@ -316,9 +325,12 @@ describe('CompositionStage', () => {
         connectionState="idle"
         onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
         onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={vi.fn()}
         onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
         onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
         onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
         onStartComposition={vi.fn().mockResolvedValue(undefined)}
         snapshot={idleSnapshot}
@@ -341,9 +353,12 @@ describe('CompositionStage', () => {
         connectionState="open"
         onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
         onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={vi.fn()}
         onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
         onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
         onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
         onStartComposition={vi.fn().mockResolvedValue(undefined)}
         snapshot={{
@@ -402,6 +417,8 @@ describe('CompositionStage', () => {
 
   it('shows pending rewrite comparisons and lets the user accept them', async () => {
     const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
+    const onKeepExploringRewrite = vi.fn()
+    const onRejectRewrite = vi.fn().mockResolvedValue(undefined)
 
     renderWithAppProviders(
       <CompositionStage
@@ -409,9 +426,12 @@ describe('CompositionStage', () => {
         connectionState="open"
         onAcceptRewrite={onAcceptRewrite}
         onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={onKeepExploringRewrite}
         onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={onRejectRewrite}
         onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
         onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
         onStartComposition={vi.fn().mockResolvedValue(undefined)}
         snapshot={{
@@ -460,15 +480,84 @@ describe('CompositionStage', () => {
     )
 
     expect(screen.getAllByText('Pending rewrite').length).toBeGreaterThan(0)
-    expect(screen.getByText('Current accepted')).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Rewrite segment 1 opens the harbor more gently.').length,
-    ).toBeGreaterThan(0)
+    expect(screen.getAllByText('Current manuscript').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Changed').length).toBeGreaterThan(0)
+    expect(screen.getByText('Candidate rewrite')).toBeInTheDocument()
+    expect(screen.getAllByText('Rev 02 · Pending').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Accept rewrite' }))
 
     await waitFor(() => {
       expect(onAcceptRewrite).toHaveBeenCalledWith('rewrite-job-7')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep current draft' }))
+    await waitFor(() => {
+      expect(onRejectRewrite).toHaveBeenCalledWith('rewrite-job-7')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try another rewrite' }))
+    expect(onKeepExploringRewrite).toHaveBeenCalledWith(1)
+  })
+
+  it('lets the user compare and restore an older accepted revision', async () => {
+    const onRestoreSegmentVersion = vi.fn().mockResolvedValue(undefined)
+
+    renderWithAppProviders(
+      <CompositionStage
+        composition={liveComposition}
+        connectionState="open"
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={vi.fn()}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={onRestoreSegmentVersion}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={{
+          ...sampleSnapshot,
+          composition_segments: [
+            {
+              ...sampleSnapshot.composition_segments![1],
+              versions: [
+                sampleSnapshot.composition_segments![1].versions[0],
+                {
+                  id: 'segment-2-rev-0',
+                  composition_job_id: 'composition-job-0',
+                  job_kind: 'draft',
+                  segment_index: 2,
+                  revision_number: 0,
+                  status: 'completed',
+                  acceptance_state: 'accepted',
+                  is_current: false,
+                  is_stale: false,
+                  accepted_summary: 'The earlier cove draft kept the bell closer.',
+                  text_content:
+                    'Mira followed the bell into the lantern cove while Pip hummed beside her.',
+                  word_count: 13,
+                  created_at: '2026-04-02T05:10:00Z',
+                  updated_at: '2026-04-02T05:11:00Z',
+                  completed_at: '2026-04-02T05:11:00Z',
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Selected revision')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore this revision' }))
+
+    await waitFor(() => {
+      expect(onRestoreSegmentVersion).toHaveBeenCalledWith(
+        2,
+        'segment-2-rev-0',
+      )
     })
   })
 })

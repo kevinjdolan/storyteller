@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter, sleep
 from typing import Any, Protocol
+from uuid import uuid4
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -42,6 +43,7 @@ from app.models import (
     ModelCallOutcome,
     ModelUsageBucket,
     SessionEventActor,
+    UserEditTargetKind,
     WorkflowStage,
     WorkflowStageState,
 )
@@ -2142,6 +2144,7 @@ class CompositionJobService:
         composition_job_id: str,
         *,
         actor: SessionEventActor | None = None,
+        origin: str = "workspace",
     ) -> CompositionJob:
         job = self._require_job(session_id, composition_job_id)
         if job.job_kind != CompositionJobKind.REWRITE:
@@ -2189,39 +2192,16 @@ class CompositionJobService:
             self._mark_downstream_segments_stale(job)
 
         story_text = self._compile_story_text(session_id)
-        story_location = _story_text_location(
-            self._storage(),
-            session_id=session_id,
-            job_id=job.id,
-        )
-        story_metadata = self._storage().upload_text(
-            story_location,
-            story_text,
-            content_type="text/markdown; charset=utf-8",
-        )
-        self._supersede_story_assets(session_id)
-        self._assets.save_asset_record(
-            session_id=session_id,
-            asset_kind=AssetKind.STORY_TEXT,
-            storage_bucket=story_location.bucket,
-            object_path=story_location.key,
-            mime_type="text/markdown",
-            status=AssetStatus.READY,
-            composition_job_id=job.id,
+        self._persist_story_text_snapshot(
+            job=job,
+            story_text=story_text,
             segment_index=ordered_candidate_segments[-1].segment_index,
-            byte_size=story_metadata.size_bytes,
             metadata_json={
                 "orchestration_version": "composition_job.v1",
                 "rewrite_accepted": True,
                 "downstream_regeneration_mode": job.downstream_regeneration_mode.value,
             },
         )
-        job.metadata_json = {
-            **_read_metadata(job),
-            "accepted_story_so_far": story_text,
-            "latest_partial_output": story_text,
-            "rewrite_accepted": True,
-        }
         self._session.flush()
 
         stage_status = (
@@ -2242,7 +2222,254 @@ class CompositionJobService:
             detail=stage_detail,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
+        self._events.record_user_edit(
+            session_id,
+            target_kind=UserEditTargetKind.COMPOSITION_SEGMENT,
+            stage=WorkflowStage.COMPOSITION,
+            target_id=ordered_candidate_segments[-1].id,
+            revision_number=ordered_candidate_segments[-1].revision_number,
+            changed_fields=["active_version", "acceptance_state"],
+            changed_item_keys=[
+                str(segment.segment_index) for segment in ordered_candidate_segments
+            ],
+            refreshes_downstream=stage_status == WorkflowStageState.NEEDS_REGENERATION,
+            invalidated_stages=(
+                [WorkflowStage.AUDIO, WorkflowStage.FINALIZE]
+                if stage_status == WorkflowStageState.COMPLETED
+                else [
+                    WorkflowStage.COMPOSITION,
+                    WorkflowStage.AUDIO,
+                    WorkflowStage.FINALIZE,
+                ]
+            ),
+            source=origin,
+            summary_text=(
+                "Accepted the rewrite and marked downstream segments for regeneration."
+                if stage_status == WorkflowStageState.NEEDS_REGENERATION
+                else "Accepted the rewrite and refreshed the manuscript."
+            ),
+            actor=actor,
+        )
         refreshed_job = self._session.get(CompositionJob, job.id)
+        assert refreshed_job is not None
+        return refreshed_job
+
+    def reject_rewrite_job(
+        self,
+        session_id: str,
+        composition_job_id: str,
+        *,
+        actor: SessionEventActor | None = None,
+        origin: str = "workspace",
+    ) -> CompositionJob:
+        job = self._require_job(session_id, composition_job_id)
+        if job.job_kind != CompositionJobKind.REWRITE:
+            raise CompositionJobStateError("only rewrite jobs can be rejected")
+        if job.status != JobStatus.COMPLETED:
+            raise CompositionJobStateError("rewrite jobs can only be rejected after completion")
+
+        candidate_segments = [
+            segment
+            for segment in job.segments
+            if segment.acceptance_state == CompositionSegmentAcceptanceState.PENDING
+            and segment.status == JobStatus.COMPLETED
+        ]
+        if not candidate_segments:
+            raise CompositionJobStateError("the rewrite job does not have any pending segments")
+
+        ordered_candidate_segments = sorted(
+            candidate_segments,
+            key=lambda item: item.segment_index,
+        )
+        for segment in ordered_candidate_segments:
+            segment.acceptance_state = CompositionSegmentAcceptanceState.REJECTED
+            segment.is_stale = False
+            segment.stale_reason = None
+            segment.stale_at = None
+            segment.stale_by_job_id = None
+
+        stage_status, stage_detail = self._resolve_current_story_stage_state(
+            session_id,
+            completed_detail="Kept the current manuscript and dismissed the rewrite candidate.",
+            regeneration_detail=(
+                "Kept the current manuscript. Downstream segments still need regeneration."
+            ),
+        )
+        current_story_text = (
+            self._compile_story_text(session_id)
+            if self._latest_current_story_segment(session_id) is not None
+            else None
+        )
+        job.metadata_json = {
+            **_read_metadata(job),
+            "accepted_story_so_far": current_story_text,
+            "latest_partial_output": current_story_text,
+            "rewrite_rejected": True,
+        }
+        self._sessions.update_stage_state(
+            session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=stage_status,
+            detail=stage_detail,
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        self._events.record_user_edit(
+            session_id,
+            target_kind=UserEditTargetKind.COMPOSITION_SEGMENT,
+            stage=WorkflowStage.COMPOSITION,
+            target_id=ordered_candidate_segments[-1].id,
+            revision_number=ordered_candidate_segments[-1].revision_number,
+            changed_fields=["acceptance_state"],
+            changed_item_keys=[
+                str(segment.segment_index) for segment in ordered_candidate_segments
+            ],
+            refreshes_downstream=stage_status == WorkflowStageState.NEEDS_REGENERATION,
+            invalidated_stages=(
+                [WorkflowStage.AUDIO, WorkflowStage.FINALIZE]
+                if stage_status == WorkflowStageState.COMPLETED
+                else [
+                    WorkflowStage.COMPOSITION,
+                    WorkflowStage.AUDIO,
+                    WorkflowStage.FINALIZE,
+                ]
+            ),
+            source=origin,
+            summary_text=stage_detail,
+            actor=actor,
+        )
+        refreshed_job = self._session.get(CompositionJob, job.id)
+        assert refreshed_job is not None
+        return refreshed_job
+
+    def select_active_segment_version(
+        self,
+        session_id: str,
+        *,
+        segment_index: int,
+        version_id: str,
+        actor: SessionEventActor | None = None,
+        origin: str = "workspace",
+    ) -> CompositionJob:
+        selected_version = self._session.get(CompositionSegment, version_id)
+        if selected_version is None or selected_version.session_id != session_id:
+            raise CompositionJobNotFoundError(
+                f"segment version {version_id!r} does not belong to session {session_id!r}",
+            )
+        if selected_version.segment_index != segment_index:
+            raise CompositionJobStateError(
+                f"segment version {version_id!r} does not belong to segment {segment_index}",
+            )
+        if selected_version.status != JobStatus.COMPLETED:
+            raise CompositionJobStateError("only completed segment versions can become active")
+        if selected_version.acceptance_state == CompositionSegmentAcceptanceState.REJECTED:
+            raise CompositionJobStateError("rejected segment versions cannot become active")
+        if selected_version.acceptance_state == CompositionSegmentAcceptanceState.PENDING:
+            raise CompositionJobStateError(
+                "pending rewrite versions must be accepted from the rewrite review controls",
+            )
+        if not (selected_version.accepted_text or selected_version.text_content):
+            raise CompositionJobStateError("the selected segment version does not have any text")
+
+        current_version = self._current_story_segment_for_index(session_id, segment_index)
+        if (
+            current_version is not None
+            and current_version.id == selected_version.id
+            and selected_version.superseded_by_segment_id is None
+        ):
+            raise CompositionJobStateError("the selected segment version is already active")
+
+        self._reject_pending_segment_candidates(
+            session_id,
+            reason="Dismissed pending rewrite candidates before switching versions.",
+        )
+        if current_version is not None and current_version.id != selected_version.id:
+            current_version.superseded_by_segment_id = selected_version.id
+        selected_version.superseded_by_segment_id = None
+        selected_version.acceptance_state = CompositionSegmentAcceptanceState.ACCEPTED
+        selected_version.is_stale = False
+        selected_version.stale_reason = None
+        selected_version.stale_at = None
+        selected_version.stale_by_job_id = None
+        self._supersede_segment_assets(
+            session_id,
+            selected_version.segment_index,
+            keep_segment_id=selected_version.id,
+        )
+
+        self._clear_stale_segment_flags(session_id)
+        stale_from_segment_index, stale_to_segment_index = (
+            self._mark_current_story_segments_stale_after(
+                session_id,
+                segment_index=segment_index,
+                stale_by_job_id=selected_version.composition_job_id,
+                reason=(
+                    f"Segment {segment_index} switched to revision "
+                    f"{selected_version.revision_number}. Downstream text needs "
+                    "regeneration to match the active manuscript."
+                ),
+            )
+        )
+
+        story_text = self._compile_story_text(session_id)
+        selected_job = selected_version.composition_job
+        if selected_job is None:
+            raise CompositionJobNotFoundError(
+                f"segment version {version_id!r} is missing its composition job",
+            )
+        self._persist_story_text_snapshot(
+            job=selected_job,
+            story_text=story_text,
+            segment_index=segment_index,
+            artifact_name_suffix=f"selected-version-{selected_version.id}-{uuid4().hex[:8]}",
+            metadata_json={
+                "orchestration_version": "composition_job.v1",
+                "selected_active_segment_version_id": selected_version.id,
+                "selected_active_segment_revision_number": selected_version.revision_number,
+            },
+        )
+
+        if stale_from_segment_index is not None and stale_to_segment_index is not None:
+            stage_status = WorkflowStageState.NEEDS_REGENERATION
+            stage_detail = (
+                f"Restored segment {segment_index} to revision {selected_version.revision_number}. "
+                "Segments "
+                f"{stale_from_segment_index} through {stale_to_segment_index} "
+                "now need regeneration."
+            )
+            invalidated_stages = [
+                WorkflowStage.COMPOSITION,
+                WorkflowStage.AUDIO,
+                WorkflowStage.FINALIZE,
+            ]
+        else:
+            stage_status = WorkflowStageState.COMPLETED
+            stage_detail = (
+                f"Restored segment {segment_index} to revision {selected_version.revision_number}."
+            )
+            invalidated_stages = [WorkflowStage.AUDIO, WorkflowStage.FINALIZE]
+
+        self._sessions.update_stage_state(
+            session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=stage_status,
+            detail=stage_detail,
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        self._events.record_user_edit(
+            session_id,
+            target_kind=UserEditTargetKind.COMPOSITION_SEGMENT,
+            stage=WorkflowStage.COMPOSITION,
+            target_id=selected_version.id,
+            revision_number=selected_version.revision_number,
+            changed_fields=["active_version"],
+            changed_item_keys=[str(segment_index)],
+            refreshes_downstream=stage_status == WorkflowStageState.NEEDS_REGENERATION,
+            invalidated_stages=invalidated_stages,
+            source=origin,
+            summary_text=stage_detail,
+            actor=actor,
+        )
+        refreshed_job = self._session.get(CompositionJob, selected_job.id)
         assert refreshed_job is not None
         return refreshed_job
 
@@ -2264,6 +2491,104 @@ class CompositionJobService:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _resolve_current_story_stage_state(
+        self,
+        session_id: str,
+        *,
+        completed_detail: str,
+        regeneration_detail: str,
+    ) -> tuple[WorkflowStageState, str]:
+        if self._has_stale_current_story_segments(session_id):
+            return WorkflowStageState.NEEDS_REGENERATION, regeneration_detail
+
+        return WorkflowStageState.COMPLETED, completed_detail
+
+    def _has_stale_current_story_segments(self, session_id: str) -> bool:
+        stmt = (
+            select(CompositionSegment.id)
+            .where(
+                CompositionSegment.session_id == session_id,
+                CompositionSegment.acceptance_state
+                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.superseded_by_segment_id.is_(None),
+                CompositionSegment.is_stale.is_(True),
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none() is not None
+
+    def _mark_current_story_segments_stale_after(
+        self,
+        session_id: str,
+        *,
+        segment_index: int,
+        stale_by_job_id: str | None,
+        reason: str,
+    ) -> tuple[int | None, int | None]:
+        stmt = (
+            select(CompositionSegment)
+            .where(
+                CompositionSegment.session_id == session_id,
+                CompositionSegment.segment_index > segment_index,
+                CompositionSegment.acceptance_state
+                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.superseded_by_segment_id.is_(None),
+            )
+            .order_by(CompositionSegment.segment_index.asc())
+        )
+        rows = list(self._session.execute(stmt).scalars().all())
+        if not rows:
+            return None, None
+
+        marked_at = utc_now()
+        for row in rows:
+            row.is_stale = True
+            row.stale_reason = reason
+            row.stale_at = marked_at
+            row.stale_by_job_id = stale_by_job_id
+
+        return rows[0].segment_index, rows[-1].segment_index
+
+    def _persist_story_text_snapshot(
+        self,
+        *,
+        job: CompositionJob,
+        story_text: str,
+        segment_index: int,
+        artifact_name_suffix: str | None = None,
+        metadata_json: Mapping[str, Any] | None = None,
+    ) -> None:
+        story_location = _story_text_location(
+            self._storage(),
+            session_id=job.session_id,
+            job_id=job.id,
+            artifact_name_suffix=artifact_name_suffix,
+        )
+        story_metadata = self._storage().upload_text(
+            story_location,
+            story_text,
+            content_type="text/markdown; charset=utf-8",
+        )
+        self._supersede_story_assets(job.session_id)
+        self._assets.save_asset_record(
+            session_id=job.session_id,
+            asset_kind=AssetKind.STORY_TEXT,
+            storage_bucket=story_location.bucket,
+            object_path=story_location.key,
+            mime_type="text/markdown",
+            status=AssetStatus.READY,
+            composition_job_id=job.id,
+            segment_index=segment_index,
+            byte_size=story_metadata.size_bytes,
+            metadata_json=dict(metadata_json or {}),
+        )
+        job.metadata_json = {
+            **_read_metadata(job),
+            "accepted_story_so_far": story_text,
+            "latest_partial_output": story_text,
+            **dict(metadata_json or {}),
+        }
 
     def _clear_stale_segment_flags(self, session_id: str) -> None:
         stmt = select(CompositionSegment).where(
@@ -2513,11 +2838,16 @@ def _story_text_location(
     *,
     session_id: str,
     job_id: str,
+    artifact_name_suffix: str | None = None,
 ):
+    artifact_name = f"{job_id}-story"
+    if artifact_name_suffix:
+        artifact_name = f"{artifact_name}-{artifact_name_suffix}"
+
     return storage.paths.debug_artifact(
         session_id=session_id,
         artifact_group="composition/final",
-        artifact_name=f"{job_id}-story",
+        artifact_name=artifact_name,
         extension="md",
     )
 

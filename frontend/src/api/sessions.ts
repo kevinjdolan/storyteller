@@ -698,6 +698,14 @@ export type AcceptRewriteSessionCompositionRequest = {
   origin?: string
 }
 
+export type RejectRewriteSessionCompositionRequest = {
+  origin?: string
+}
+
+export type SelectCompositionSegmentVersionRequest = {
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
@@ -906,6 +914,29 @@ export function acceptSessionCompositionRewrite(
 ) {
   return postJson<SessionCompositionResponse>(
     `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/accept`,
+    body,
+  )
+}
+
+export function rejectSessionCompositionRewrite(
+  sessionId: string,
+  compositionJobId: string,
+  body: RejectRewriteSessionCompositionRequest = {},
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/reject`,
+    body,
+  )
+}
+
+export function selectSessionCompositionSegmentVersion(
+  sessionId: string,
+  segmentIndex: number,
+  versionId: string,
+  body: SelectCompositionSegmentVersionRequest = {},
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/segments/${segmentIndex}/versions/${versionId}/select`,
     body,
   )
 }

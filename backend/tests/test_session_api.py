@@ -5,7 +5,15 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from app.db import Base, CompositionJob, CompositionSegment, JobStatus, StorySession
+from app.db import (
+    Base,
+    CompositionJob,
+    CompositionJobKind,
+    CompositionSegment,
+    CompositionSegmentAcceptanceState,
+    JobStatus,
+    StorySession,
+)
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.models import (
@@ -1938,6 +1946,133 @@ def test_redirect_composition_endpoint_queues_rewrite_job(
     assert payload["job"]["job_kind"] == "rewrite"
     assert payload["job"]["current_segment_index"] == 2
     assert payload["event"]["payload"]["job_id"] == payload["job"]["id"]
+
+
+def test_reject_rewrite_endpoint_keeps_the_current_segment_version(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+
+    with get_session_factory()() as db_session:
+        draft_job = CompositionJob(
+            session_id=session_id,
+            job_kind=CompositionJobKind.DRAFT,
+            status=JobStatus.COMPLETED,
+            progress_percent=100,
+            current_segment_index=2,
+            metadata_json={
+                "accepted_story_so_far": (
+                    "Draft segment 1 settles the harbor.\n\n"
+                    "Draft segment 2 keeps the bell close."
+                ),
+                "latest_partial_output": (
+                    "Draft segment 1 settles the harbor.\n\n"
+                    "Draft segment 2 keeps the bell close."
+                ),
+                "total_segments": 2,
+                "start_segment_index": 1,
+            },
+        )
+        db_session.add(draft_job)
+        db_session.flush()
+
+        draft_segment_one = CompositionSegment(
+            session_id=session_id,
+            composition_job_id=draft_job.id,
+            segment_index=1,
+            revision_number=1,
+            status=JobStatus.COMPLETED,
+            acceptance_state=CompositionSegmentAcceptanceState.ACCEPTED,
+            accepted_text="Draft segment 1 settles the harbor.",
+            text_content="Draft segment 1 settles the harbor.",
+            word_count=6,
+            payload={"outline_card_title": "Opening harbor"},
+        )
+        draft_segment_two = CompositionSegment(
+            session_id=session_id,
+            composition_job_id=draft_job.id,
+            segment_index=2,
+            revision_number=1,
+            status=JobStatus.COMPLETED,
+            acceptance_state=CompositionSegmentAcceptanceState.ACCEPTED,
+            accepted_text="Draft segment 2 keeps the bell close.",
+            text_content="Draft segment 2 keeps the bell close.",
+            word_count=7,
+            payload={"outline_card_title": "Lantern cove"},
+        )
+        db_session.add_all([draft_segment_one, draft_segment_two])
+        db_session.flush()
+
+        rewrite_job = CompositionJob(
+            session_id=session_id,
+            job_kind=CompositionJobKind.REWRITE,
+            status=JobStatus.COMPLETED,
+            progress_percent=100,
+            current_segment_index=2,
+            rewrite_to_segment_index=2,
+            metadata_json={
+                "accepted_story_so_far": (
+                    "Draft segment 1 settles the harbor.\n\n"
+                    "Draft segment 2 keeps the bell close."
+                ),
+                "latest_partial_output": (
+                    "Draft segment 1 settles the harbor.\n\n"
+                    "Draft segment 2 keeps the bell close."
+                ),
+                "total_segments": 1,
+                "start_segment_index": 2,
+            },
+        )
+        db_session.add(rewrite_job)
+        db_session.flush()
+
+        rewrite_segment = CompositionSegment(
+            session_id=session_id,
+            composition_job_id=rewrite_job.id,
+            segment_index=2,
+            revision_number=2,
+            status=JobStatus.COMPLETED,
+            acceptance_state=CompositionSegmentAcceptanceState.PENDING,
+            accepted_text="Rewrite segment 2 opens the cove more gently.",
+            text_content="Rewrite segment 2 opens the cove more gently.",
+            word_count=8,
+            payload={"outline_card_title": "Lantern cove"},
+        )
+        db_session.add(rewrite_segment)
+        db_session.commit()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/{rewrite_job.id}/reject",
+        json={"origin": "workspace"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    composition_stage = next(
+        stage
+        for stage in payload["snapshot"]["stage_states"]
+        if stage["stage"] == "composition"
+    )
+    segment_two = next(
+        segment
+        for segment in payload["snapshot"]["composition_segments"]
+        if segment["segment_index"] == 2
+    )
+
+    assert payload["job"]["id"] == rewrite_job.id
+    assert payload["job"]["pending_review"] is False
+    assert payload["event"]["event_type"] == "content.user_edit.recorded"
+    assert (
+        payload["event"]["payload"]["summary_text"]
+        == "Kept the current manuscript and dismissed the rewrite candidate."
+    )
+    assert composition_stage["status"] == "completed"
+    assert segment_two["current_revision_number"] == 1
+    assert segment_two["pending_version_id"] is None
+    assert [
+        version["acceptance_state"] for version in segment_two["versions"]
+    ] == ["rejected", "accepted"]
 
 
 def test_session_events_websocket_replays_composition_job_status(

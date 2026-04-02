@@ -36,10 +36,12 @@ from app.models import (
     RefineSessionBeatSheetRequest,
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
+    RejectRewriteSessionCompositionRequest,
     RestoreSessionPlanRevisionRequest,
     SaveSessionStoryBriefRequest,
     SaveSessionStoryOutlineRequest,
     SaveSessionStorySetupRequest,
+    SelectCompositionSegmentVersionRequest,
     SelectSessionBeatSheetRequest,
     SelectSessionCharacterSheetRequest,
     SelectSessionGenreRequest,
@@ -694,12 +696,110 @@ def accept_session_composition_rewrite(
     db_session: Annotated[Session, Depends(get_db_session)],
 ) -> SessionCompositionResponse:
     session_service = SessionService(db_session)
-    del payload
 
     try:
         job = CompositionJobService(db_session).accept_rewrite_job(
             session_id,
             composition_job_id,
+            origin=payload.origin,
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=job.id,
+        )
+        event = _resolve_latest_composition_stage_event(
+            session_service=session_service,
+            session_id=session_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/reject",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reject a completed rewrite candidate and keep the current manuscript",
+)
+def reject_session_composition_rewrite(
+    session_id: str,
+    composition_job_id: str,
+    payload: RejectRewriteSessionCompositionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        job = CompositionJobService(db_session).reject_rewrite_job(
+            session_id,
+            composition_job_id,
+            origin=payload.origin,
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=job.id,
+        )
+        event = _resolve_latest_composition_stage_event(
+            session_service=session_service,
+            session_id=session_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/segments/{segment_index}/versions/{version_id}/select",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Select a saved segment revision as the active manuscript text",
+)
+def select_session_composition_segment_version(
+    session_id: str,
+    segment_index: int,
+    version_id: str,
+    payload: SelectCompositionSegmentVersionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        job = CompositionJobService(db_session).select_active_segment_version(
+            session_id,
+            segment_index=segment_index,
+            version_id=version_id,
+            origin=payload.origin,
         )
         snapshot = session_service.load_session_snapshot(session_id)
         job_view = _resolve_composition_job_view(

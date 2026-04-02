@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  CompositionSegmentView,
-  CompositionSegmentVersionView,
   SessionSnapshot,
   StartSessionCompositionRequest,
   StoryOutlineCard,
@@ -15,6 +13,7 @@ import {
   TextArea,
 } from '../../shared/ui/primitives.tsx'
 import { CardGrid, SelectField, SummaryPanel } from '../../shared/ui/workflow.tsx'
+import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
 
 type RewriteDownstreamMode = 'auto_regenerate' | 'require_confirmation'
 
@@ -23,7 +22,9 @@ type CompositionStageProps = {
   connectionState: SessionFeedConnectionState
   onAcceptRewrite: (jobId: string) => Promise<unknown>
   onCancelComposition: (jobId: string) => Promise<unknown>
+  onKeepExploringRewrite: (segmentIndex: number) => void
   onPauseComposition: (jobId: string) => Promise<unknown>
+  onRejectRewrite: (jobId: string) => Promise<unknown>
   onRedirectComposition: (options: {
     instructions: string
     rewriteFromSegmentIndex?: number | null
@@ -31,6 +32,10 @@ type CompositionStageProps = {
     downstreamRegenerationMode?: RewriteDownstreamMode | null
   }) => Promise<unknown>
   onResumeComposition: (jobId: string) => Promise<unknown>
+  onRestoreSegmentVersion: (
+    segmentIndex: number,
+    versionId: string,
+  ) => Promise<unknown>
   onReturnToPlan: () => Promise<unknown>
   onStartComposition: (body: StartSessionCompositionRequest) => Promise<unknown>
   snapshot: SessionSnapshot
@@ -240,63 +245,17 @@ function buildSegmentChoices(snapshot: SessionSnapshot): SegmentChoice[] {
   }))
 }
 
-function getSelectedSegmentVersion(
-  segment: CompositionSegmentView | null,
-  versionId: string | null | undefined,
-) {
-  if (segment == null || versionId == null) {
-    return null
-  }
-
-  return segment.versions.find((version) => version.id === versionId) ?? null
-}
-
-function findLatestCurrentVersion(segment: CompositionSegmentView | null) {
-  if (segment == null) {
-    return null
-  }
-
-  return (
-    segment.versions.find((version) => version.is_current) ??
-    segment.versions[0] ??
-    null
-  )
-}
-
-function buildSegmentStatusLabel(segment: CompositionSegmentView) {
-  if (segment.pending_version_id != null) {
-    return 'Pending rewrite'
-  }
-
-  if (segment.is_stale) {
-    return 'Stale downstream'
-  }
-
-  return 'Current manuscript'
-}
-
-function buildVersionLabel(version: CompositionSegmentVersionView) {
-  const parts = [`Rev ${String(version.revision_number).padStart(2, '0')}`]
-
-  if (version.acceptance_state === 'pending') {
-    parts.push('Pending')
-  } else if (version.is_current) {
-    parts.push('Current')
-  } else {
-    parts.push('Archived')
-  }
-
-  return parts.join(' · ')
-}
-
 export function CompositionStage({
   composition,
   connectionState,
   onAcceptRewrite,
   onCancelComposition,
+  onKeepExploringRewrite,
   onPauseComposition,
+  onRejectRewrite,
   onRedirectComposition,
   onResumeComposition,
+  onRestoreSegmentVersion,
   onReturnToPlan,
   onStartComposition,
   snapshot,
@@ -310,20 +269,20 @@ export function CompositionStage({
   >(null)
   const [rewriteDownstreamMode, setRewriteDownstreamMode] =
     useState<RewriteDownstreamMode>('auto_regenerate')
-  const [comparisonSegmentIndex, setComparisonSegmentIndex] = useState<
-    number | null
-  >(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [activeAction, setActiveAction] = useState<
     | 'acceptRewrite'
     | 'cancel'
+    | 'rejectRewrite'
     | 'pause'
     | 'redirect'
     | 'resume'
+    | 'restoreVersion'
     | 'returnToPlan'
     | 'start'
     | null
   >(null)
+  const rewriteControlsRef = useRef<HTMLDivElement | null>(null)
 
   const activeJob = snapshot.active_composition_job
   const latestJob = snapshot.latest_composition_job ?? null
@@ -332,11 +291,6 @@ export function CompositionStage({
   const compositionSegments = useMemo(
     () => snapshot.composition_segments ?? [],
     [snapshot.composition_segments],
-  )
-  const pendingReviewSegments = useMemo(
-    () =>
-      compositionSegments.filter((segment) => segment.pending_version_id != null),
-    [compositionSegments],
   )
   const staleSegments = useMemo(
     () => compositionSegments.filter((segment) => segment.is_stale),
@@ -438,24 +392,6 @@ export function CompositionStage({
       segment.segment_index > effectiveRewriteEnd &&
       segment.current_version_id != null,
   ).length
-  const selectedComparisonSegment =
-    compositionSegments.find(
-      (segment) => segment.segment_index === comparisonSegmentIndex,
-    ) ??
-    pendingReviewSegments[0] ??
-    staleSegments[0] ??
-    compositionSegments[0] ??
-    null
-  const comparisonCurrentVersion =
-    getSelectedSegmentVersion(
-      selectedComparisonSegment,
-      selectedComparisonSegment?.current_version_id,
-    ) ?? findLatestCurrentVersion(selectedComparisonSegment)
-  const comparisonPendingVersion = getSelectedSegmentVersion(
-    selectedComparisonSegment,
-    selectedComparisonSegment?.pending_version_id,
-  )
-
   useEffect(() => {
     if (
       rewriteFromSegmentIndex == null ||
@@ -474,35 +410,15 @@ export function CompositionStage({
     }
   }, [effectiveRewriteStart, rewriteToSegmentIndex])
 
-  useEffect(() => {
-    const nextComparisonSegmentIndex =
-      pendingReviewSegments[0]?.segment_index ??
-      staleSegments[0]?.segment_index ??
-      compositionSegments[0]?.segment_index ??
-      null
-
-    if (
-      comparisonSegmentIndex == null ||
-      !compositionSegments.some(
-        (segment) => segment.segment_index === comparisonSegmentIndex,
-      )
-    ) {
-      setComparisonSegmentIndex(nextComparisonSegmentIndex)
-    }
-  }, [
-    comparisonSegmentIndex,
-    compositionSegments,
-    pendingReviewSegments,
-    staleSegments,
-  ])
-
   async function runAction(
     action:
       | 'acceptRewrite'
       | 'cancel'
+      | 'rejectRewrite'
       | 'pause'
       | 'redirect'
       | 'resume'
+      | 'restoreVersion'
       | 'returnToPlan'
       | 'start',
     operation: () => Promise<unknown>,
@@ -628,13 +544,10 @@ export function CompositionStage({
                   {reviewJob != null ? 'Rewrite review' : 'Current segment'}
                 </p>
                 <h3>
-                  {reviewJob != null && selectedComparisonSegment != null
-                    ? selectedComparisonSegment.outline_card_title ??
-                      `Segment ${selectedComparisonSegment.segment_index}`
-                    : currentSegmentTitle}
+                  {currentSegmentTitle}
                 </h3>
                 <p>
-                  {reviewJob != null && comparisonPendingVersion != null
+                  {reviewJob != null
                     ? 'Compare the proposed rewrite against the current manuscript before accepting it.'
                     : latestSegmentSummary ??
                       'The newest words stay in the foreground so you can follow the draft as it lands.'}
@@ -663,18 +576,16 @@ export function CompositionStage({
 
             <div className="composition-stage__segment-meta">
               <span className="composition-stage__segment-pill">
-                {reviewJob != null && selectedComparisonSegment != null
-                  ? `Segment ${selectedComparisonSegment.segment_index}`
-                  : currentSegmentLabel}
+                {currentSegmentLabel}
               </span>
               {beatLabelCopy?.map((label) => (
                 <span className="composition-stage__beat-pill" key={label}>
                   {label}
                 </span>
               ))}
-              {selectedComparisonSegment?.is_stale ? (
+              {staleSegments.length > 0 ? (
                 <span className="composition-stage__beat-pill">
-                  Stale downstream
+                  {staleSegments.length} stale downstream
                 </span>
               ) : null}
             </div>
@@ -686,20 +597,12 @@ export function CompositionStage({
                   'Composition status updated.'}
               </div>
 
-              {(
-                reviewJob != null && comparisonPendingVersion?.text_content
-                  ? comparisonPendingVersion.text_content
-                  : recentSegmentText
-              ).length > 0 ? (
+              {recentSegmentText.length > 0 ? (
                 <div
                   className="composition-stage__manuscript"
                   data-testid="composition-manuscript"
                 >
-                  <pre>
-                    {reviewJob != null && comparisonPendingVersion?.text_content
-                      ? comparisonPendingVersion.text_content
-                      : recentSegmentText}
-                  </pre>
+                  <pre>{recentSegmentText}</pre>
                   {activeJob != null &&
                   (activeJob.status === 'queued' ||
                     activeJob.status === 'in_progress') ? (
@@ -832,24 +735,12 @@ export function CompositionStage({
                 </Button>
               ) : null}
 
-              {reviewJob != null ? (
-                <Button
-                  disabled={activeAction != null}
-                  onClick={() => {
-                    void runAction('acceptRewrite', () =>
-                      onAcceptRewrite(reviewJob.id),
-                    )
-                  }}
-                  tone="primary"
-                >
-                  {activeAction === 'acceptRewrite'
-                    ? 'Accepting...'
-                    : 'Accept rewrite'}
-                </Button>
-              ) : null}
             </div>
 
-            <div className="composition-stage__rewrite-fields">
+            <div
+              className="composition-stage__rewrite-fields"
+              ref={rewriteControlsRef}
+            >
               <SelectField
                 description="Pick the first written segment that should change."
                 disabled={!canRewrite || activeAction != null}
@@ -1004,150 +895,58 @@ export function CompositionStage({
             <div>
               <h3>Segment revisions</h3>
               <p>
-                Inspect the current manuscript, pending rewrite candidates, and
-                older segment versions side by side.
+                Inspect the live manuscript, highlighted rewrite changes, and
+                older segment versions without comparing two unrelated walls of text.
               </p>
             </div>
           </div>
 
-          <div className="composition-stage__segments-grid">
-            <aside className="composition-stage__segment-list">
-              {compositionSegments.map((segment) => {
-                const isSelected =
-                  selectedComparisonSegment?.segment_index ===
-                  segment.segment_index
-
-                return (
-                  <button
-                    className="composition-stage__segment-entry"
-                    data-selected={isSelected || undefined}
-                    key={segment.segment_index}
-                    onClick={() => {
-                      setComparisonSegmentIndex(segment.segment_index)
-                    }}
-                    type="button"
-                  >
-                    <div>
-                      <strong>
-                        {segment.outline_card_title ??
-                          `Segment ${segment.segment_index}`}
-                      </strong>
-                      <span>{buildSegmentStatusLabel(segment)}</span>
-                    </div>
-
-                    <div className="composition-stage__segment-entry-badges">
-                      {segment.pending_version_id != null ? (
-                        <Badge tone="accent">Pending</Badge>
-                      ) : null}
-                      {segment.is_stale ? (
-                        <Badge tone="warning">Stale</Badge>
-                      ) : null}
-                      {segment.current_version_id != null ? (
-                        <Badge tone="neutral">
-                          Rev {segment.current_revision_number ?? '?'}
-                        </Badge>
-                      ) : null}
-                    </div>
-                  </button>
-                )
-              })}
-            </aside>
-
-            <section className="composition-stage__compare-panel">
-              {selectedComparisonSegment != null ? (
-                <>
-                  <div className="composition-stage__compare-header">
-                    <div>
-                      <p className="eyebrow">
-                        Segment {selectedComparisonSegment.segment_index}
-                      </p>
-                      <h4>
-                        {selectedComparisonSegment.outline_card_title ??
-                          `Segment ${selectedComparisonSegment.segment_index}`}
-                      </h4>
-                      <p>
-                        {selectedComparisonSegment.stale_reason ??
-                          selectedComparisonSegment.outline_card_summary ??
-                          'No stored segment summary is available yet.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {comparisonPendingVersion != null ? (
-                    <div className="composition-stage__compare-columns">
-                      <article className="composition-stage__compare-card">
-                        <div className="composition-stage__compare-card-header">
-                          <span>Current accepted</span>
-                          {comparisonCurrentVersion != null ? (
-                            <Badge tone="neutral">
-                              {buildVersionLabel(comparisonCurrentVersion)}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <pre>
-                          {comparisonCurrentVersion?.text_content ??
-                            'No current accepted text exists for this segment yet.'}
-                        </pre>
-                      </article>
-
-                      <article className="composition-stage__compare-card composition-stage__compare-card--pending">
-                        <div className="composition-stage__compare-card-header">
-                          <span>Pending rewrite</span>
-                          <Badge tone="accent">
-                            {buildVersionLabel(comparisonPendingVersion)}
-                          </Badge>
-                        </div>
-                        <pre>{comparisonPendingVersion.text_content}</pre>
-                      </article>
-                    </div>
-                  ) : (
-                    <article className="composition-stage__compare-card">
-                      <div className="composition-stage__compare-card-header">
-                        <span>Current accepted</span>
-                        {comparisonCurrentVersion != null ? (
-                          <Badge tone="neutral">
-                            {buildVersionLabel(comparisonCurrentVersion)}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <pre>
-                        {comparisonCurrentVersion?.text_content ??
-                          'This segment does not have accepted manuscript text yet.'}
-                      </pre>
-                    </article>
-                  )}
-
-                  {selectedComparisonSegment.versions.length > 1 ? (
-                    <div className="composition-stage__history-list">
-                      {selectedComparisonSegment.versions.map((version) => (
-                        <article
-                          className="composition-stage__history-card"
-                          key={version.id}
-                        >
-                          <div className="composition-stage__history-card-header">
-                            <strong>{buildVersionLabel(version)}</strong>
-                            <span>{version.job_kind}</span>
-                          </div>
-                          <p>
-                            {version.accepted_summary ??
-                              version.planned_summary ??
-                              'No revision summary was captured for this version.'}
-                          </p>
-                        </article>
-                      ))}
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="composition-stage__empty">
-                  <p>
-                    Once the first segment lands, its revision history will
-                    appear here.
-                  </p>
-                </div>
-              )}
-            </section>
-          </div>
+          <SegmentVersionComparePanel
+            actionError={actionError}
+            actionState={
+              activeAction === 'acceptRewrite' ||
+              activeAction === 'rejectRewrite' ||
+              activeAction === 'restoreVersion'
+                ? activeAction
+                : null
+            }
+            compareContext="composition"
+            disabled={activeAction != null}
+            onAcceptRewrite={
+              reviewJob != null
+                ? (jobId) => {
+                    void runAction('acceptRewrite', () =>
+                      onAcceptRewrite(jobId),
+                    )
+                  }
+                : undefined
+            }
+            onKeepExploring={(segmentIndex) => {
+              onKeepExploringRewrite(segmentIndex)
+              if (typeof rewriteControlsRef.current?.scrollIntoView === 'function') {
+                rewriteControlsRef.current.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'center',
+                })
+              }
+            }}
+            onRejectRewrite={
+              reviewJob != null
+                ? (jobId) => {
+                    void runAction('rejectRewrite', () =>
+                      onRejectRewrite(jobId),
+                    )
+                  }
+                : undefined
+            }
+            onRestoreVersion={(segmentIndex, versionId) => {
+              void runAction('restoreVersion', () =>
+                onRestoreSegmentVersion(segmentIndex, versionId),
+              )
+            }}
+            reviewJob={reviewJob}
+            segments={compositionSegments}
+          />
         </section>
       ) : null}
 

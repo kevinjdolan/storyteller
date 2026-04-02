@@ -11,6 +11,7 @@ import {
   generateSessionPitches,
   parseSessionChatIntent,
   pauseSessionComposition,
+  rejectSessionCompositionRewrite,
   redirectSessionComposition,
   refineSessionBeatSheet,
   refineSessionCharacterSheet,
@@ -21,6 +22,7 @@ import {
   saveSessionStoryBrief,
   saveSessionStoryOutline,
   saveSessionStorySetup,
+  selectSessionCompositionSegmentVersion,
   selectSessionBeatSheet,
   selectSessionCharacterSheet,
   selectSessionPitch,
@@ -35,6 +37,7 @@ import { SessionStageEditorPreview } from '../../features/session/SessionStageEd
 import { BeatSheetStage } from '../../features/session/BeatSheetStage.tsx'
 import { CharacterSelectionStage } from '../../features/session/CharacterSelectionStage.tsx'
 import { CompositionStage } from '../../features/session/CompositionStage.tsx'
+import { FinalizeStage } from '../../features/session/FinalizeStage.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
 import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
@@ -259,6 +262,10 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
       snapshot.latest_composition_job.stop_reason ??
       'The most recent writing pass failed and needs another attempt.'
     )
+  }
+
+  if (snapshot.latest_composition_job?.pending_review) {
+    return 'A rewrite candidate is ready to compare before it replaces the live manuscript.'
   }
 
   if (snapshot.latest_story_asset && snapshot.latest_audio_asset) {
@@ -1393,7 +1400,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
-  async function applyCompositionRewriteAcceptance(options: { jobId: string }) {
+  async function applyCompositionRewriteAcceptance(options: {
+    jobId: string
+    previewStage?: 'composition' | 'finalize'
+  }) {
     const result = await acceptSessionCompositionRewrite(
       sessionId,
       options.jobId,
@@ -1402,7 +1412,47 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
     runtimeStore.hydrateSessionSnapshot(result.snapshot)
     appendHistoryEventToChat(result.event)
-    setPreviewStage('composition')
+    setPreviewStage(options.previewStage ?? 'composition')
+
+    return result
+  }
+
+  async function applyCompositionRewriteRejection(options: {
+    jobId: string
+    previewStage?: 'composition' | 'finalize'
+  }) {
+    const result = await rejectSessionCompositionRewrite(
+      sessionId,
+      options.jobId,
+      { origin: 'workspace' },
+    )
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    if (options.previewStage != null) {
+      setPreviewStage(options.previewStage)
+    }
+
+    return result
+  }
+
+  async function applyCompositionSegmentVersionSelection(options: {
+    segmentIndex: number
+    previewStage?: 'composition' | 'finalize'
+    versionId: string
+  }) {
+    const result = await selectSessionCompositionSegmentVersion(
+      sessionId,
+      options.segmentIndex,
+      options.versionId,
+      { origin: 'workspace' },
+    )
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    if (options.previewStage != null) {
+      setPreviewStage(options.previewStage)
+    }
 
     return result
   }
@@ -2068,6 +2118,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onAcceptRewrite={async (jobId) =>
                     applyCompositionRewriteAcceptance({
                       jobId,
+                      previewStage: 'composition',
                     })
                   }
                   onCancelComposition={async (jobId) =>
@@ -2075,9 +2126,25 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       jobId,
                     })
                   }
+                  onKeepExploringRewrite={(segmentIndex) => {
+                    setPreviewStage('composition')
+                    void persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'composition',
+                      controlId: 'composition-compare-explore-rewrite',
+                      origin: 'workspace',
+                      valueSummary: `Segment ${segmentIndex} rewrite controls`,
+                    }).catch(() => {})
+                  }}
                   onPauseComposition={async (jobId) =>
                     applyCompositionPause({
                       jobId,
+                    })
+                  }
+                  onRejectRewrite={async (jobId) =>
+                    applyCompositionRewriteRejection({
+                      jobId,
+                      previewStage: 'composition',
                     })
                   }
                   onRedirectComposition={async (options) => {
@@ -2106,6 +2173,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       jobId,
                     })
                   }
+                  onRestoreSegmentVersion={async (segmentIndex, versionId) =>
+                    applyCompositionSegmentVersionSelection({
+                      segmentIndex,
+                      versionId,
+                      previewStage: 'composition',
+                    })
+                  }
                   onReturnToPlan={async () => {
                     setPreviewStage('story_setup')
                     await persistUiAction({
@@ -2129,6 +2203,49 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       origin: body.origin ?? 'workspace',
                     })
                   }
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'finalize' ? (
+                <FinalizeStage
+                  onAcceptRewrite={async (jobId) =>
+                    applyCompositionRewriteAcceptance({
+                      jobId,
+                      previewStage: 'finalize',
+                    })
+                  }
+                  onKeepExploringRewrite={(segmentIndex) => {
+                    setPreviewStage('composition')
+                    void persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'composition',
+                      controlId: 'finalize-compare-explore-rewrite',
+                      origin: 'workspace',
+                      valueSummary: `Revisit composition for segment ${segmentIndex}`,
+                    }).catch(() => {})
+                  }}
+                  onRejectRewrite={async (jobId) =>
+                    applyCompositionRewriteRejection({
+                      jobId,
+                      previewStage: 'finalize',
+                    })
+                  }
+                  onRestoreSegmentVersion={async (segmentIndex, versionId) =>
+                    applyCompositionSegmentVersionSelection({
+                      segmentIndex,
+                      versionId,
+                      previewStage: 'finalize',
+                    })
+                  }
+                  onReturnToComposition={() => {
+                    setPreviewStage('composition')
+                    void persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'composition',
+                      controlId: 'finalize-return-to-composition',
+                      origin: 'workspace',
+                      valueSummary: 'Composition',
+                    }).catch(() => {})
+                  }}
                   snapshot={snapshot}
                 />
               ) : (

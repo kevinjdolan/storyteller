@@ -612,6 +612,14 @@ class AcceptRewriteSessionCompositionRequest(BaseModel):
     origin: str = Field(default="workspace", min_length=1)
 
 
+class RejectRewriteSessionCompositionRequest(BaseModel):
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class SelectCompositionSegmentVersionRequest(BaseModel):
+    origin: str = Field(default="workspace", min_length=1)
+
+
 class SessionCompositionResponse(BaseModel):
     snapshot: "SessionSnapshot"
     event: SessionEventView

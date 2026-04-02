@@ -1761,6 +1761,196 @@ def test_accepting_manual_rewrite_marks_downstream_segments_stale(
         client.close()
 
 
+def test_rejecting_rewrite_keeps_current_manuscript_clean(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    initial_writer = RecordingCompositionWriter(label="Draft")
+    rewrite_writer = RecordingCompositionWriter(label="Rewrite")
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            draft_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            draft_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=initial_writer,
+            )
+            for _ in range(3):
+                draft_service.run_job(draft_result.composition_job_id)
+
+            rewrite_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+                session_id=seeded["session_id"],
+                arguments={
+                    "instructions": "Soften the middle chapters and add Pip sooner.",
+                    "rewrite_from_segment_index": 2,
+                },
+            )
+
+        with session_factory() as session:
+            rewrite_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=rewrite_writer,
+            )
+            for _ in range(2):
+                rewrite_service.run_job(rewrite_result.composition_job_id)
+            rewrite_service.reject_rewrite_job(
+                seeded["session_id"],
+                rewrite_result.composition_job_id,
+            )
+
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+            current_segments = {
+                row.segment_index: row
+                for row in session.execute(
+                    select(CompositionSegment).where(
+                        CompositionSegment.session_id == seeded["session_id"],
+                        CompositionSegment.acceptance_state
+                        == CompositionSegmentAcceptanceState.ACCEPTED,
+                        CompositionSegment.superseded_by_segment_id.is_(None),
+                    )
+                ).scalars()
+            }
+            rejected_segments = list(
+                session.execute(
+                    select(CompositionSegment).where(
+                        CompositionSegment.composition_job_id == rewrite_result.composition_job_id,
+                        CompositionSegment.acceptance_state
+                        == CompositionSegmentAcceptanceState.REJECTED,
+                    )
+                ).scalars()
+            )
+            rewrite_story_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.composition_job_id == rewrite_result.composition_job_id,
+                    SessionAsset.asset_kind == AssetKind.STORY_TEXT,
+                )
+            ).scalar_one_or_none()
+
+        assert snapshot.latest_composition_job is not None
+        assert snapshot.latest_composition_job.pending_review is False
+        assert _stage_status(snapshot, WorkflowStage.COMPOSITION) == (
+            WorkflowStageState.COMPLETED
+        )
+        assert rewrite_story_asset is None
+        assert len(rejected_segments) == 2
+        assert current_segments[2].text_content is not None
+        assert "Draft segment 2" in current_segments[2].text_content
+        assert "Rewrite segment 2" not in current_segments[2].text_content
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_restoring_prior_segment_revision_marks_downstream_segments_stale(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    initial_writer = RecordingCompositionWriter(label="Draft")
+    rewrite_writer = RecordingCompositionWriter(label="Rewrite")
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            draft_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            draft_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=initial_writer,
+            )
+            for _ in range(3):
+                draft_service.run_job(draft_result.composition_job_id)
+
+            original_segment = session.execute(
+                select(CompositionSegment).where(
+                    CompositionSegment.session_id == seeded["session_id"],
+                    CompositionSegment.segment_index == 1,
+                    CompositionSegment.acceptance_state
+                    == CompositionSegmentAcceptanceState.ACCEPTED,
+                    CompositionSegment.superseded_by_segment_id.is_(None),
+                )
+            ).scalar_one()
+
+            rewrite_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+                session_id=seeded["session_id"],
+                arguments={
+                    "instructions": "Rewrite the harbor opening with an even quieter promise.",
+                    "rewrite_from_segment_index": 1,
+                    "rewrite_to_segment_index": 1,
+                    "downstream_regeneration_mode": "require_confirmation",
+                },
+            )
+
+        with session_factory() as session:
+            rewrite_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=rewrite_writer,
+            )
+            rewrite_service.run_job(rewrite_result.composition_job_id)
+            rewrite_service.accept_rewrite_job(
+                seeded["session_id"],
+                rewrite_result.composition_job_id,
+            )
+            rewrite_service.select_active_segment_version(
+                seeded["session_id"],
+                segment_index=1,
+                version_id=original_segment.id,
+            )
+
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+            current_segments = {
+                row.segment_index: row
+                for row in session.execute(
+                    select(CompositionSegment).where(
+                        CompositionSegment.session_id == seeded["session_id"],
+                        CompositionSegment.acceptance_state
+                        == CompositionSegmentAcceptanceState.ACCEPTED,
+                        CompositionSegment.superseded_by_segment_id.is_(None),
+                    )
+                ).scalars()
+            }
+            latest_story_asset = snapshot.latest_story_asset
+
+        assert snapshot.latest_composition_job is not None
+        assert _stage_status(snapshot, WorkflowStage.COMPOSITION) == (
+            WorkflowStageState.NEEDS_REGENERATION
+        )
+        assert current_segments[1].id == original_segment.id
+        assert current_segments[2].is_stale is True
+        assert current_segments[3].is_stale is True
+        assert latest_story_asset is not None
+        restored_story_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=latest_story_asset.storage_bucket,
+                key=latest_story_asset.object_path,
+            )
+        )
+        assert "Draft segment 1" in restored_story_text
+        assert "Rewrite segment 1" not in restored_story_text
+    finally:
+        object_storage.close()
+        client.close()
+
+
 def test_worker_completes_durable_composition_job_and_persists_story_text_asset(
     tmp_path: Path,
 ) -> None:
