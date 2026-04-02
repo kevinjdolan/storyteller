@@ -48,6 +48,7 @@ class UserEditTargetKind(str, Enum):
     CHARACTER_SHEET = "character_sheet"
     BEAT_SHEET = "beat_sheet"
     STORY_SETUP = "story_setup"
+    STORY_OUTLINE = "story_outline"
     COMPOSITION_SEGMENT = "composition_segment"
     AUDIO_SETTINGS = "audio_settings"
 

@@ -1527,7 +1527,126 @@ def test_save_session_story_setup_endpoint_persists_soft_targets_and_returns_sel
     assert payload["snapshot"]["selected_story_setup"]["guidance_notes"] == (
         "Treat these as calm planning targets, not promises."
     )
+    assert payload["snapshot"]["selected_story_outline"]["outline_kind"] == "chapter"
+    assert len(payload["snapshot"]["selected_story_outline"]["cards"]) == 3
     assert payload["snapshot"]["stage_states"][6]["status"] == "completed"
+
+
+def test_save_session_story_outline_endpoint_persists_outline_revision(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Outline Edit"},
+    ).json()
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "raw_brief": (
+                    "A harbor child and an otter guide the last lantern home before bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_character_sheet_id = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+            json={
+                "character_sheet_id": selected_character_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_beats = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/beats/generate",
+        json={"origin": "workspace"},
+    ).json()
+    selected_beat_sheet_id = generated_beats["snapshot"]["beat_sheet_revisions"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/beat-sheet",
+            json={
+                "beat_sheet_id": selected_beat_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    story_setup_payload = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-setup",
+        json={
+            "target_word_count": 1800,
+            "target_runtime_minutes": 12,
+            "chapter_count": 3,
+            "approximate_scene_count": 8,
+            "guidance_notes": "Keep every chapter ending visibly softer than it began.",
+            "origin": "workspace",
+        },
+    ).json()
+    selected_outline = story_setup_payload["snapshot"]["selected_story_outline"]
+    cards = selected_outline["cards"]
+    cards[0]["summary"] = (
+        "Open with a calmer harbor image, then move Mira toward the first drifting lantern."
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-outline",
+        json={
+            "outline_id": selected_outline["id"],
+            "summary": selected_outline["summary"],
+            "cards": cards,
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "content.user_edit.recorded"
+    assert payload["event"]["stage"] == "story_setup"
+    assert payload["event"]["payload"]["target_kind"] == "story_outline"
+    assert payload["snapshot"]["selected_story_outline"]["revision_number"] == 2
+    assert payload["snapshot"]["selected_story_outline"]["cards"][0]["summary"].startswith(
+        "Open with a calmer harbor image"
+    )
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(

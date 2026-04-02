@@ -186,6 +186,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    story_outlines: Mapped[list["StoryOutline"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
     composition_jobs: Mapped[list["CompositionJob"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
@@ -505,6 +509,7 @@ class BeatSheet(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     session: Mapped["StorySession"] = relationship(back_populates="beat_sheets")
     character_sheet: Mapped["CharacterSheet | None"] = relationship(back_populates="beat_sheets")
     story_setups: Mapped[list["StorySetup"]] = relationship(back_populates="beat_sheet")
+    story_outlines: Mapped[list["StoryOutline"]] = relationship(back_populates="beat_sheet")
     composition_jobs: Mapped[list["CompositionJob"]] = relationship(back_populates="beat_sheet")
 
     __table_args__ = (
@@ -540,6 +545,7 @@ class StorySetup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     session: Mapped["StorySession"] = relationship(back_populates="story_setups")
     beat_sheet: Mapped["BeatSheet | None"] = relationship(back_populates="story_setups")
+    story_outlines: Mapped[list["StoryOutline"]] = relationship(back_populates="story_setup")
     composition_jobs: Mapped[list["CompositionJob"]] = relationship(back_populates="story_setup")
 
     __table_args__ = (
@@ -547,6 +553,45 @@ class StorySetup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "session_id", "revision_number", name="uq_story_setups_session_id_revision_number"
         ),
         Index("ix_story_setups_session_id_is_selected", "session_id", "is_selected"),
+    )
+
+
+class StoryOutline(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "story_outlines"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    beat_sheet_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("beat_sheets.id", ondelete="SET NULL"),
+    )
+    story_setup_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("story_setups.id", ondelete="SET NULL"),
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    outline_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="chapter")
+    summary: Mapped[str | None] = mapped_column(Text)
+    cards: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    is_selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped["StorySession"] = relationship(back_populates="story_outlines")
+    beat_sheet: Mapped["BeatSheet | None"] = relationship(back_populates="story_outlines")
+    story_setup: Mapped["StorySetup | None"] = relationship(back_populates="story_outlines")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_story_outlines_session_id_revision_number",
+        ),
+        Index("ix_story_outlines_session_id_is_selected", "session_id", "is_selected"),
+        Index("ix_story_outlines_story_setup_id", "story_setup_id"),
     )
 
 

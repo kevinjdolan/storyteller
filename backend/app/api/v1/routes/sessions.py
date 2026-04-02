@@ -34,6 +34,7 @@ from app.models import (
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
     SaveSessionStoryBriefRequest,
+    SaveSessionStoryOutlineRequest,
     SaveSessionStorySetupRequest,
     SelectSessionCharacterSheetRequest,
     SelectSessionBeatSheetRequest,
@@ -54,6 +55,7 @@ from app.models import (
     SessionSelectionResponse,
     SessionSnapshot,
     SessionStoryBriefResponse,
+    SessionStoryOutlineResponse,
     SessionStorySetupResponse,
     StoryWorkflowToolName,
     WorkflowStage,
@@ -320,6 +322,49 @@ def save_session_story_setup(
             story_setup_id=getattr(result, "story_setup_id", None),
         )
         return SessionStorySetupResponse(snapshot=snapshot, event=event)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except StoryWorkflowToolServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/story-outline",
+    response_model=SessionStoryOutlineResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist an edited chapter or scene outline for a story session",
+)
+def save_session_story_outline(
+    session_id: str,
+    payload: SaveSessionStoryOutlineRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionStoryOutlineResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        result = StoryWorkflowToolService(db_session).execute(
+            tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+            session_id=session_id,
+            arguments=payload.model_dump(mode="json", exclude_unset=True),
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        event = _resolve_story_outline_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            story_outline_id=getattr(result, "story_outline_id", None),
+        )
+        return SessionStoryOutlineResponse(snapshot=snapshot, event=event)
     except SessionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -883,3 +928,27 @@ def _resolve_story_setup_response_event(
             return event
 
     raise RuntimeError("story setup save did not produce a replayable event")
+
+
+def _resolve_story_outline_response_event(
+    *,
+    session_service: SessionService,
+    session_id: str,
+    story_outline_id: str | None,
+) -> SessionEventView:
+    history = session_service.load_session_history(session_id, limit=12)
+
+    if story_outline_id is not None:
+        for event in reversed(history.events):
+            if event.stage != WorkflowStage.STORY_SETUP:
+                continue
+            if event.event_type != "content.user_edit.recorded":
+                continue
+            if getattr(event.payload, "target_id", None) == story_outline_id:
+                return event
+
+    for event in reversed(history.events):
+        if event.stage == WorkflowStage.STORY_SETUP:
+            return event
+
+    raise RuntimeError("story outline save did not produce a replayable event")

@@ -20,6 +20,7 @@ from app.db import (
     Pitch,
     SessionAsset,
     StoryBrief,
+    StoryOutline,
     StorySession,
     StorySetup,
     ToneProfile,
@@ -187,6 +188,35 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             is_selected=True,
             accepted_at=now,
         )
+        story_outline = StoryOutline(
+            session=draft_session,
+            beat_sheet=beat_sheet,
+            story_setup=story_setup,
+            revision_number=1,
+            outline_kind="chapter",
+            summary="Three draftable chapters mapped to the bedtime arc.",
+            cards=[
+                {
+                    "card_key": "chapter-1",
+                    "card_type": "chapter",
+                    "position": 1,
+                    "title": "Chapter 1: Opening Image to Debate",
+                    "summary": "Set up the moonlit lake and the first reason to cross it.",
+                    "beat_keys": ["opening_image", "theme_stated", "set_up", "catalyst", "debate"],
+                    "beat_labels": [
+                        "Opening Image",
+                        "Theme Stated",
+                        "Set-Up",
+                        "Catalyst",
+                        "Debate",
+                    ],
+                    "emotional_shift": "Move from stillness toward cautious resolve.",
+                }
+            ],
+            metadata_json={"genre_label": "Quest Fantasy", "tone_label": "Hushed Wonder"},
+            is_selected=True,
+            accepted_at=now,
+        )
         composition_job = CompositionJob(
             session=draft_session,
             beat_sheet=beat_sheet,
@@ -248,6 +278,7 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
                 character_sheet,
                 beat_sheet,
                 story_setup,
+                story_outline,
                 composition_job,
                 composition_segment,
                 completed_session,
@@ -281,6 +312,7 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             .segments[0]
             .planned_summary.startswith("Pip reaches")
         )
+        assert session_rows[0].story_outlines[0].outline_kind == "chapter"
         assert session_rows[1].overall_status == WorkflowStageState.COMPLETED
         assert session_rows[1].audio_jobs[0].status == JobStatus.COMPLETED
         assert session_rows[1].assets[0].asset_kind == AssetKind.FINAL_AUDIO
@@ -309,6 +341,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "pitches",
             "session_assets",
             "story_briefs",
+            "story_outlines",
             "story_sessions",
             "story_setups",
             "tone_profiles",
@@ -352,6 +385,10 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             tuple(fk["constrained_columns"]): fk["referred_table"]
             for fk in inspector.get_foreign_keys("pitches")
         }
+        outline_foreign_keys = {
+            tuple(fk["constrained_columns"]): fk["referred_table"]
+            for fk in inspector.get_foreign_keys("story_outlines")
+        }
         asset_foreign_keys = {
             tuple(fk["constrained_columns"]): fk["referred_table"]
             for fk in inspector.get_foreign_keys("session_assets")
@@ -360,6 +397,9 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         assert tone_profile_foreign_keys["genre_id"] == "genres"
         assert pitch_foreign_keys[("session_id",)] == "story_sessions"
         assert pitch_foreign_keys[("story_brief_id",)] == "story_briefs"
+        assert outline_foreign_keys[("session_id",)] == "story_sessions"
+        assert outline_foreign_keys[("beat_sheet_id",)] == "beat_sheets"
+        assert outline_foreign_keys[("story_setup_id",)] == "story_setups"
         assert asset_foreign_keys[("session_id",)] == "story_sessions"
         assert asset_foreign_keys[("audio_job_id",)] == "audio_jobs"
         assert asset_foreign_keys[("composition_job_id",)] == "composition_jobs"

@@ -14,6 +14,7 @@ from app.db import (
     CompositionSegment,
     JobStatus,
     Pitch,
+    StoryOutline,
     StorySetup,
 )
 from app.db.base import utc_now
@@ -24,6 +25,8 @@ from app.models import (
     CompositionStartMode,
     SelectionKind,
     SessionEventActor,
+    StoryOutlineBeatInput,
+    StoryOutlinePlanningContext,
     UserEditTargetKind,
     WorkflowStage,
     WorkflowStageState,
@@ -57,11 +60,14 @@ from app.models.story_tools import (
     StoryWorkflowToolSideEffectKind,
     UpdateSetupHeuristicsToolInput,
     UpdateSetupHeuristicsToolResult,
+    UpdateStoryOutlineToolInput,
+    UpdateStoryOutlineToolResult,
 )
 from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
+from app.services.outline_generation import StoryOutlineGenerationService
 from app.services.planning_heuristics import estimate_narration_duration_seconds
 from app.services.pitch_generation import PitchGenerationService
 from app.services.sessions import SessionNotFoundError, SessionService
@@ -305,6 +311,41 @@ def get_story_workflow_tool_registry() -> StoryWorkflowToolRegistry:
                 ),
                 related_chat_actions=(ChatToUIActionType.UPDATE_STORY_SETUP,),
                 executor_name="_update_setup_heuristics",
+            ),
+            StoryWorkflowToolDefinition(
+                name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+                stage=WorkflowStage.STORY_SETUP,
+                description=(
+                    "Save a revised chapter or scene outline that composition can draft "
+                    "against in segments."
+                ),
+                execution_mode=StoryWorkflowToolExecutionMode.DIRECT,
+                job_type="story.update_story_outline",
+                request_model=UpdateStoryOutlineToolInput,
+                response_model=UpdateStoryOutlineToolResult,
+                side_effects=(
+                    _side_effect(
+                        StoryWorkflowToolSideEffectKind.CREATE_REVISION,
+                        "Creates a new selected story-outline revision.",
+                        stages=[WorkflowStage.STORY_SETUP],
+                        writes_to=["story_outlines"],
+                    ),
+                    _side_effect(
+                        StoryWorkflowToolSideEffectKind.UPDATE_WORKFLOW_STAGE,
+                        (
+                            "Keeps story setup complete while invalidating composition, audio, "
+                            "and finalize."
+                        ),
+                        stages=[
+                            WorkflowStage.STORY_SETUP,
+                            WorkflowStage.COMPOSITION,
+                            WorkflowStage.AUDIO,
+                            WorkflowStage.FINALIZE,
+                        ],
+                        writes_to=["workflow_stage_states"],
+                    ),
+                ),
+                executor_name="_update_story_outline",
             ),
             StoryWorkflowToolDefinition(
                 name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
@@ -594,6 +635,7 @@ class StoryWorkflowToolService:
         *,
         beat_sheet_generation_service: BeatSheetGenerationService | None = None,
         character_generation_service: CharacterGenerationService | None = None,
+        outline_generation_service: StoryOutlineGenerationService | None = None,
         pitch_generation_service: PitchGenerationService | None = None,
     ):
         self._session = session
@@ -606,6 +648,9 @@ class StoryWorkflowToolService:
         )
         self._character_generation = (
             character_generation_service or CharacterGenerationService()
+        )
+        self._outline_generation = (
+            outline_generation_service or StoryOutlineGenerationService()
         )
         self._pitch_generation = pitch_generation_service or PitchGenerationService()
 
@@ -824,6 +869,7 @@ class StoryWorkflowToolService:
             )
 
         current_setup = self._get_selected_story_setup_row(session_id)
+        current_outline = self._get_selected_story_outline_row(session_id)
         provided_fields = request.model_fields_set
         merged_values = {
             "target_word_count": request.target_word_count
@@ -846,7 +892,19 @@ class StoryWorkflowToolService:
             else getattr(current_setup, "guidance_notes", None),
         }
 
-        if current_setup is not None and _story_setup_matches(current_setup, merged_values):
+        if (
+            current_setup is not None
+            and current_setup.beat_sheet_id == snapshot.selected_beat_sheet.id
+            and _story_setup_matches(current_setup, merged_values)
+        ):
+            outline = current_outline
+            if outline is None or outline.story_setup_id != current_setup.id:
+                outline = self._create_story_outline_revision(
+                    session_id=session_id,
+                    beat_sheet_id=snapshot.selected_beat_sheet.id,
+                    setup=current_setup,
+                )
+                self._session.commit()
             return UpdateSetupHeuristicsToolResult(
                 tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,
                 stage=WorkflowStage.STORY_SETUP,
@@ -886,6 +944,11 @@ class StoryWorkflowToolService:
         )
         self._session.add(setup)
         self._session.flush()
+        outline = self._create_story_outline_revision(
+            session_id=session_id,
+            beat_sheet_id=snapshot.selected_beat_sheet.id,
+            setup=setup,
+        )
 
         changed_fields = sorted(
             field
@@ -918,7 +981,7 @@ class StoryWorkflowToolService:
             session_id,
             stage=WorkflowStage.STORY_SETUP,
             status=WorkflowStageState.COMPLETED,
-            detail=_story_setup_label(setup),
+            detail=_story_setup_stage_detail(setup, outline),
             actor=actor,
         )
         return UpdateSetupHeuristicsToolResult(
@@ -928,6 +991,96 @@ class StoryWorkflowToolService:
             stage_status=_stage_status(stage_snapshot, WorkflowStage.STORY_SETUP),
             story_setup_id=setup.id,
             revision_number=setup.revision_number,
+        )
+
+    def _update_story_outline(
+        self,
+        *,
+        session_id: str,
+        request: UpdateStoryOutlineToolInput,
+        actor: SessionEventActor | None = None,
+    ) -> UpdateStoryOutlineToolResult:
+        snapshot = self._sessions.load_session_snapshot(session_id)
+        if snapshot.selected_story_setup is None:
+            raise StoryWorkflowToolServiceError(
+                "update_story_outline requires a selected story setup",
+            )
+        if snapshot.selected_beat_sheet is None:
+            raise StoryWorkflowToolServiceError(
+                "update_story_outline requires a selected beat sheet",
+            )
+
+        current_outline = self._require_story_outline(
+            session_id=session_id,
+            outline_id=request.outline_id,
+        )
+        if _story_outline_matches(current_outline, request):
+            return UpdateStoryOutlineToolResult(
+                tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+                stage=WorkflowStage.STORY_SETUP,
+                summary="Story outline already matches the requested values.",
+                stage_status=_stage_status(snapshot, WorkflowStage.STORY_SETUP),
+                story_outline_id=current_outline.id,
+                revision_number=current_outline.revision_number,
+            )
+
+        self._cancel_active_composition_jobs(
+            session_id,
+            reason="Cancelled because the story outline changed.",
+        )
+        self._cancel_active_audio_jobs(
+            session_id,
+            reason="Cancelled because the story outline changed.",
+        )
+        current_outline.is_selected = False
+
+        setup = self._get_selected_story_setup_row(session_id)
+        if setup is None:
+            raise StoryWorkflowToolServiceError(
+                "update_story_outline requires a selected story setup row",
+            )
+
+        outline = StoryOutline(
+            session_id=session_id,
+            beat_sheet_id=snapshot.selected_beat_sheet.id,
+            story_setup_id=setup.id,
+            revision_number=self._next_revision_number(StoryOutline, session_id),
+            outline_kind=current_outline.outline_kind,
+            summary=request.summary or current_outline.summary,
+            cards=[card.model_dump(mode="json") for card in request.cards],
+            metadata_json=_merge_story_outline_metadata(current_outline.metadata_json, setup),
+            is_selected=True,
+            accepted_at=utc_now(),
+        )
+        self._session.add(outline)
+        self._session.flush()
+
+        self._events.record_user_edit(
+            session_id,
+            target_kind=UserEditTargetKind.STORY_OUTLINE,
+            stage=WorkflowStage.STORY_SETUP,
+            target_id=outline.id,
+            revision_number=outline.revision_number,
+            changed_fields=["cards", "summary"],
+            source=request.origin,
+            field_values=request.model_dump(mode="json", exclude_none=True),
+            summary_text="Updated story outline cards.",
+            actor=actor,
+        )
+        stage_snapshot = self._sessions.update_stage_state(
+            session_id,
+            stage=WorkflowStage.STORY_SETUP,
+            status=WorkflowStageState.COMPLETED,
+            detail=_story_setup_stage_detail(setup, outline),
+            actor=actor,
+        )
+        return UpdateStoryOutlineToolResult(
+            tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+            stage=WorkflowStage.STORY_SETUP,
+            summary="Saved a new story-outline revision.",
+            stage_status=_stage_status(stage_snapshot, WorkflowStage.STORY_SETUP),
+            story_outline_id=outline.id,
+            revision_number=outline.revision_number,
         )
 
     def _compose_next_segment(
@@ -954,6 +1107,8 @@ class StoryWorkflowToolService:
         next_segment_index = request.restart_from_segment_index or self._next_segment_index(
             session_id
         )
+        selected_outline = self._get_selected_story_outline_row(session_id)
+        outline_card_metadata = _resolve_outline_card_metadata(selected_outline, next_segment_index)
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
@@ -962,7 +1117,10 @@ class StoryWorkflowToolService:
             status=JobStatus.IN_PROGRESS,
             progress_percent=0,
             current_segment_index=next_segment_index,
-            metadata_json=request.model_dump(mode="json", exclude_none=True),
+            metadata_json={
+                **request.model_dump(mode="json", exclude_none=True),
+                **outline_card_metadata,
+            },
             started_at=utc_now(),
         )
         self._session.add(job)
@@ -974,8 +1132,15 @@ class StoryWorkflowToolService:
             segment_index=next_segment_index,
             revision_number=self._next_segment_revision(session_id, next_segment_index),
             status=JobStatus.IN_PROGRESS,
-            planned_summary=request.instructions,
-            payload=request.model_dump(mode="json", exclude_none=True),
+            planned_summary=(
+                request.instructions
+                or outline_card_metadata.get("outline_card_drafting_brief")
+                or outline_card_metadata.get("outline_card_summary")
+            ),
+            payload={
+                **request.model_dump(mode="json", exclude_none=True),
+                **outline_card_metadata,
+            },
         )
         self._session.add(segment)
         self._session.flush()
@@ -996,6 +1161,7 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     f"Composing segment {next_segment_index}.",
+                    outline_card_metadata.get("outline_card_title"),
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),
@@ -1032,6 +1198,11 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a rewrite pass started.",
         )
+        selected_outline = self._get_selected_story_outline_row(session_id)
+        outline_card_metadata = _resolve_outline_card_metadata(
+            selected_outline,
+            request.rewrite_from_segment_index,
+        )
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
@@ -1040,7 +1211,10 @@ class StoryWorkflowToolService:
             status=JobStatus.IN_PROGRESS,
             progress_percent=0,
             current_segment_index=request.rewrite_from_segment_index,
-            metadata_json=request.model_dump(mode="json", exclude_none=True),
+            metadata_json={
+                **request.model_dump(mode="json", exclude_none=True),
+                **outline_card_metadata,
+            },
             started_at=utc_now(),
         )
         self._session.add(job)
@@ -1055,8 +1229,13 @@ class StoryWorkflowToolService:
                 request.rewrite_from_segment_index,
             ),
             status=JobStatus.IN_PROGRESS,
-            planned_summary=request.instructions,
-            payload=request.model_dump(mode="json", exclude_none=True),
+            planned_summary=request.instructions
+            or outline_card_metadata.get("outline_card_drafting_brief")
+            or outline_card_metadata.get("outline_card_summary"),
+            payload={
+                **request.model_dump(mode="json", exclude_none=True),
+                **outline_card_metadata,
+            },
         )
         self._session.add(segment)
         self._session.flush()
@@ -1077,6 +1256,7 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     f"Rewriting from segment {request.rewrite_from_segment_index}.",
+                    outline_card_metadata.get("outline_card_title"),
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),
@@ -1217,6 +1397,50 @@ class StoryWorkflowToolService:
             actor=actor,
         )
 
+    def _create_story_outline_revision(
+        self,
+        *,
+        session_id: str,
+        beat_sheet_id: str,
+        setup: StorySetup,
+    ) -> StoryOutline:
+        current_outline = self._get_selected_story_outline_row(session_id)
+        if current_outline is not None:
+            current_outline.is_selected = False
+
+        plan = self._outline_generation.generate_outline(
+            StoryOutlinePlanningContext(
+                genre_label=getattr(setup.session.selected_genre, "label", None),
+                tone_label=getattr(setup.session.selected_tone_profile, "label", None),
+                tone_description=getattr(setup.session.selected_tone_profile, "description", None),
+                beat_sheet_summary=getattr(setup.beat_sheet, "summary", None),
+                beats=_build_outline_beat_inputs(setup.beat_sheet),
+                target_word_count=setup.target_word_count,
+                target_runtime_minutes=setup.target_runtime_minutes,
+                chapter_count=setup.chapter_count,
+                approximate_scene_count=setup.approximate_scene_count,
+                chapter_style=setup.chapter_style,
+                guidance_notes=setup.guidance_notes,
+                bedtime_goal=_read_bedtime_goal(setup.beat_sheet),
+                preferences=setup.preferences,
+            )
+        )
+        outline = StoryOutline(
+            session_id=session_id,
+            beat_sheet_id=beat_sheet_id,
+            story_setup_id=setup.id,
+            revision_number=self._next_revision_number(StoryOutline, session_id),
+            outline_kind=plan.outline_kind,
+            summary=plan.summary,
+            cards=[card.model_dump(mode="json") for card in plan.cards],
+            metadata_json=plan.metadata,
+            is_selected=True,
+            accepted_at=utc_now(),
+        )
+        self._session.add(outline)
+        self._session.flush()
+        return outline
+
     def _get_selected_story_setup_row(self, session_id: str) -> StorySetup | None:
         stmt: Select[tuple[StorySetup]] = (
             select(StorySetup)
@@ -1225,6 +1449,35 @@ class StoryWorkflowToolService:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_selected_story_outline_row(self, session_id: str) -> StoryOutline | None:
+        stmt: Select[tuple[StoryOutline]] = (
+            select(StoryOutline)
+            .where(StoryOutline.session_id == session_id, StoryOutline.is_selected.is_(True))
+            .order_by(StoryOutline.revision_number.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _require_story_outline(
+        self,
+        *,
+        session_id: str,
+        outline_id: str | None,
+    ) -> StoryOutline:
+        stmt = select(StoryOutline).where(StoryOutline.session_id == session_id)
+        if outline_id is not None:
+            stmt = stmt.where(StoryOutline.id == outline_id)
+        else:
+            stmt = stmt.where(StoryOutline.is_selected.is_(True))
+        outline = self._session.execute(
+            stmt.order_by(StoryOutline.revision_number.desc()).limit(1)
+        ).scalar_one_or_none()
+        if outline is None:
+            raise StoryWorkflowToolServiceError(
+                "update_story_outline requires a matching outline in session",
+            )
+        return outline
 
     def _latest_composition_job_id(self, session_id: str) -> str | None:
         stmt: Select[tuple[CompositionJob]] = (
@@ -1429,3 +1682,125 @@ def _story_setup_matches(current: StorySetup, merged_values: dict[str, Any]) -> 
         and current.chapter_style == merged_values["chapter_style"]
         and current.guidance_notes == merged_values["guidance_notes"]
     )
+
+
+def _story_setup_stage_detail(setup: StorySetup, outline: StoryOutline | None) -> str:
+    return _join_detail_parts(
+        [
+            _story_setup_label(setup),
+            (
+                f"Outline ready: {outline.outline_kind} plan with "
+                f"{len(outline.cards) if isinstance(outline.cards, list) else 0} cards."
+                if outline is not None
+                else None
+            ),
+        ]
+    ) or _story_setup_label(setup)
+
+
+def _build_outline_beat_inputs(beat_sheet) -> list[StoryOutlineBeatInput]:
+    raw_payload = getattr(beat_sheet, "beats", None)
+    if isinstance(raw_payload, dict):
+        raw_beats = raw_payload.get("beats")
+    elif isinstance(raw_payload, list):
+        raw_beats = raw_payload
+    else:
+        raw_beats = []
+
+    if not isinstance(raw_beats, list):
+        raw_beats = []
+
+    beats: list[StoryOutlineBeatInput] = []
+    for index, raw_beat in enumerate(raw_beats, start=1):
+        if not isinstance(raw_beat, dict):
+            continue
+        beats.append(
+            StoryOutlineBeatInput(
+                key=str(raw_beat.get("key") or f"beat-{index}"),
+                label=str(raw_beat.get("label") or f"Beat {index}"),
+                order=int(raw_beat.get("order") or index),
+                summary=str(raw_beat.get("summary") or "").strip() or f"Beat {index}",
+                emotional_intent=_read_optional_text(raw_beat.get("emotional_intent")),
+                bedtime_softening_note=_read_optional_text(
+                    raw_beat.get("bedtime_softening_note")
+                ),
+            )
+        )
+    return beats
+
+
+def _read_bedtime_goal(beat_sheet) -> str | None:
+    if not isinstance(getattr(beat_sheet, "model_output", None), dict):
+        return None
+    return _read_optional_text(beat_sheet.model_output.get("bedtime_goal"))
+
+
+def _story_outline_matches(
+    current: StoryOutline,
+    request: UpdateStoryOutlineToolInput,
+) -> bool:
+    current_cards = current.cards if isinstance(current.cards, list) else []
+    requested_cards = [card.model_dump(mode="json") for card in request.cards]
+    current_summary = _read_optional_text(current.summary)
+    requested_summary = _read_optional_text(request.summary) or current_summary
+    return current_summary == requested_summary and current_cards == requested_cards
+
+
+def _merge_story_outline_metadata(
+    current_metadata: dict[str, Any] | list[Any] | None,
+    setup: StorySetup,
+) -> dict[str, Any]:
+    metadata = dict(current_metadata) if isinstance(current_metadata, dict) else {}
+    metadata.update(
+        {
+            "genre_label": getattr(setup.session.selected_genre, "label", None),
+            "tone_label": getattr(setup.session.selected_tone_profile, "label", None),
+            "tone_description": getattr(setup.session.selected_tone_profile, "description", None),
+            "target_word_count": setup.target_word_count,
+            "target_runtime_minutes": setup.target_runtime_minutes,
+            "chapter_count": setup.chapter_count,
+            "approximate_scene_count": setup.approximate_scene_count,
+            "chapter_style": setup.chapter_style,
+            "guidance_notes": setup.guidance_notes,
+            "preferences": setup.preferences,
+            "bedtime_goal": _read_bedtime_goal(setup.beat_sheet),
+        }
+    )
+    return metadata
+
+
+def _resolve_outline_card_metadata(
+    story_outline: StoryOutline | None,
+    segment_index: int,
+) -> dict[str, Any]:
+    if story_outline is None or not isinstance(story_outline.cards, list):
+        return {}
+
+    if not story_outline.cards:
+        return {}
+
+    card_index = min(max(segment_index - 1, 0), len(story_outline.cards) - 1)
+    raw_card = story_outline.cards[card_index]
+    if not isinstance(raw_card, dict):
+        return {}
+
+    card = dict(raw_card)
+    return {
+        "story_outline_id": story_outline.id,
+        "story_outline_revision_number": story_outline.revision_number,
+        "outline_kind": story_outline.outline_kind,
+        "outline_card_key": card.get("card_key"),
+        "outline_card_position": card.get("position"),
+        "outline_card_title": card.get("title"),
+        "outline_card_summary": card.get("summary"),
+        "outline_card_drafting_brief": card.get("drafting_brief"),
+        "outline_card_beat_keys": card.get("beat_keys"),
+        "outline_card_emotional_shift": card.get("emotional_shift"),
+    }
+
+
+def _read_optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None

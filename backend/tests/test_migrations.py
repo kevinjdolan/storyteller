@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "session_memory_snapshots",
     "session_assets",
     "story_briefs",
+    "story_outlines",
     "story_sessions",
     "story_setups",
     "tone_profiles",
@@ -105,6 +106,21 @@ EXPECTED_STORY_SETUP_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_STORY_OUTLINE_COLUMNS = {
+    "id",
+    "session_id",
+    "beat_sheet_id",
+    "story_setup_id",
+    "revision_number",
+    "outline_kind",
+    "summary",
+    "cards",
+    "metadata_json",
+    "is_selected",
+    "accepted_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -142,6 +158,7 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _get_column_names(database_url, "story_briefs")
+    assert EXPECTED_STORY_OUTLINE_COLUMNS <= _get_column_names(database_url, "story_outlines")
     assert EXPECTED_STORY_SETUP_COLUMNS <= _get_column_names(database_url, "story_setups")
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
         database_url,
@@ -156,6 +173,7 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _get_column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _get_column_names(database_url, "story_briefs")
+    assert EXPECTED_STORY_OUTLINE_COLUMNS <= _get_column_names(database_url, "story_outlines")
     assert EXPECTED_STORY_SETUP_COLUMNS <= _get_column_names(database_url, "story_setups")
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
         database_url,

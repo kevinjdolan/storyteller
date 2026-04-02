@@ -16,6 +16,7 @@ from app.db import (
     Pitch,
     SessionAsset,
     StoryBrief,
+    StoryOutline,
     StorySession,
     StorySetup,
     WorkflowStageSnapshot,
@@ -44,6 +45,8 @@ class SessionAggregate:
     beat_sheets: list[BeatSheet]
     selected_beat_sheet: BeatSheet | None
     selected_story_setup: StorySetup | None
+    story_outlines: list[StoryOutline]
+    selected_story_outline: StoryOutline | None
     latest_composition_job: CompositionJob | None
     latest_audio_job: AudioJob | None
     active_composition_job: CompositionJob | None
@@ -103,6 +106,8 @@ class StorySessionRepository:
             beat_sheets=self._list_beat_sheets(session_id),
             selected_beat_sheet=self._get_selected_beat_sheet(session_id),
             selected_story_setup=self._get_selected_story_setup(session_id),
+            story_outlines=self._list_story_outlines(session_id),
+            selected_story_outline=self._get_selected_story_outline(session_id),
             latest_composition_job=self._get_latest_composition_job(session_id),
             latest_audio_job=self._get_latest_audio_job(session_id),
             active_composition_job=self._get_active_composition_job(session_id),
@@ -131,6 +136,12 @@ class StorySessionRepository:
 
     def list_beat_sheets(self, session_id: str) -> list[BeatSheet]:
         return self._list_beat_sheets(session_id)
+
+    def get_selected_story_outline(self, session_id: str) -> StoryOutline | None:
+        return self._get_selected_story_outline(session_id)
+
+    def list_story_outlines(self, session_id: str) -> list[StoryOutline]:
+        return self._list_story_outlines(session_id)
 
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
@@ -213,6 +224,23 @@ class StorySessionRepository:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_selected_story_outline(self, session_id: str) -> StoryOutline | None:
+        stmt: Select[tuple[StoryOutline]] = (
+            select(StoryOutline)
+            .where(StoryOutline.session_id == session_id, StoryOutline.is_selected.is_(True))
+            .order_by(StoryOutline.revision_number.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _list_story_outlines(self, session_id: str) -> list[StoryOutline]:
+        stmt: Select[tuple[StoryOutline]] = (
+            select(StoryOutline)
+            .where(StoryOutline.session_id == session_id)
+            .order_by(StoryOutline.created_at.asc(), StoryOutline.revision_number.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def _get_active_composition_job(self, session_id: str) -> CompositionJob | None:
         stmt: Select[tuple[CompositionJob]] = (

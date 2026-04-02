@@ -59,6 +59,14 @@ def build_session_agent_context_summary(
         story_setup_summary = _build_story_setup_summary(snapshot)
         if story_setup_summary is not None:
             lines.append(story_setup_summary)
+        if snapshot.selected_story_outline is not None:
+            outline_line = (
+                f"Story outline: {snapshot.selected_story_outline.outline_kind}, "
+                f"{len(snapshot.selected_story_outline.cards)} cards"
+            )
+            if snapshot.selected_story_outline.summary:
+                outline_line += f" - {_truncate(snapshot.selected_story_outline.summary)}"
+            lines.append(outline_line)
 
     lines.extend(_build_character_context_lines(snapshot))
 

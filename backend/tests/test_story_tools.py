@@ -17,6 +17,7 @@ from app.db import (
     JobStatus,
     Pitch,
     StoryBrief,
+    StoryOutline,
     StorySession,
     StorySetup,
     ToneProfile,
@@ -86,9 +87,10 @@ def test_story_workflow_tool_schema_bundle_lists_expected_operations() -> None:
         "rewrite_segments",
         "start_audio_generation",
         "update_setup_heuristics",
+        "update_story_outline",
     ]
     assert bundle["tools"][0]["side_effects"]
-    assert bundle["tools"][-1]["output_schema"]["title"] == "UpdateSetupHeuristicsToolResult"
+    assert bundle["tools"][-1]["output_schema"]["title"] == "UpdateStoryOutlineToolResult"
 
 
 def test_story_workflow_action_router_maps_chat_actions_to_shared_tool_calls() -> None:
@@ -194,6 +196,9 @@ def test_story_workflow_tool_service_updates_setup_and_cancels_invalidated_jobs(
     assert snapshot.selected_story_setup.chapter_count == 2
     assert snapshot.selected_story_setup.approximate_scene_count == 7
     assert snapshot.selected_story_setup.guidance_notes == "Keep the ending even softer."
+    assert snapshot.selected_story_outline is not None
+    assert snapshot.selected_story_outline.outline_kind == "chapter"
+    assert len(snapshot.selected_story_outline.cards) == 2
     assert composition_job is not None and composition_job.status == JobStatus.CANCELLED
     assert audio_job is not None and audio_job.status == JobStatus.CANCELLED
     assert _stage_status(snapshot, WorkflowStage.STORY_SETUP) == WorkflowStageState.COMPLETED
@@ -222,6 +227,75 @@ def test_story_workflow_tool_service_estimates_audio_length_from_segments(db_ses
     assert result.estimated_word_count == 400
     assert result.estimated_duration_seconds == 215
     assert result.basis_source == "composition_segments"
+
+
+def test_story_workflow_tool_service_updates_story_outline_and_tracks_revision(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(
+        db_session,
+        composition_status=JobStatus.IN_PROGRESS,
+        audio_status=JobStatus.IN_PROGRESS,
+    )
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    assert snapshot.selected_story_outline is not None
+
+    cards = []
+    for card in snapshot.selected_story_outline.cards:
+        cards.append(
+            {
+                **card.model_dump(mode="json"),
+                "summary": (
+                    "Open with a calmer harbor image and let the card land on visible relief."
+                    if card.position == 1
+                    else card.summary
+                ),
+            }
+        )
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+        session_id=seeded["session_id"],
+        arguments={
+            "outline_id": snapshot.selected_story_outline.id,
+            "summary": snapshot.selected_story_outline.summary,
+            "cards": cards,
+            "origin": "workspace",
+        },
+    )
+
+    refreshed = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    composition_job = db_session.get(CompositionJob, seeded["composition_job_id"])
+    audio_job = db_session.get(AudioJob, seeded["audio_job_id"])
+
+    assert refreshed.selected_story_outline is not None
+    assert result.story_outline_id == refreshed.selected_story_outline.id
+    assert refreshed.selected_story_outline.revision_number == 2
+    assert refreshed.selected_story_outline.cards[0].summary.startswith("Open with a calmer")
+    assert composition_job is not None and composition_job.status == JobStatus.CANCELLED
+    assert audio_job is not None and audio_job.status == JobStatus.CANCELLED
+
+
+def test_story_workflow_tool_service_seeds_composition_segments_from_outline_cards(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(db_session)
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+
+    job = db_session.get(CompositionJob, result.composition_job_id)
+    segment = db_session.get(CompositionSegment, result.segment_id)
+
+    assert job is not None
+    assert segment is not None
+    assert job.metadata_json["story_outline_id"]
+    assert job.metadata_json["outline_card_title"].startswith("Chapter 1:")
+    assert segment.planned_summary is not None
+    assert "Chapter 1" in job.metadata_json["outline_card_title"]
 
 
 def test_worker_processes_story_tool_job_via_default_registry(tmp_path: Path) -> None:
@@ -399,6 +473,45 @@ def _seed_story_setup_session(
         character_sheet_id=character_sheet.id,
         revision_number=1,
         summary="A soft Save-the-Cat arc.",
+        beats=[
+            {
+                "key": "opening_image",
+                "label": "Opening Image",
+                "order": 1,
+                "summary": "Mira watches the harbor settle under soft moonlight.",
+                "emotional_intent": "Begin in stillness and wonder.",
+            },
+            {
+                "key": "catalyst",
+                "label": "Catalyst",
+                "order": 2,
+                "summary": "A bell buoy drifts away from the dock and asks for help.",
+                "emotional_intent": "Introduce a gentle problem.",
+            },
+            {
+                "key": "midpoint",
+                "label": "Midpoint",
+                "order": 3,
+                "summary": "Mira finds the hidden cove where the bell belongs.",
+                "emotional_intent": "Lift wonder while keeping the surprise soft.",
+                "bedtime_softening_note": "Keep the reveal luminous and quickly reassuring.",
+            },
+            {
+                "key": "all_is_lost",
+                "label": "All Is Lost",
+                "order": 4,
+                "summary": "The bell goes quiet and Mira thinks she has failed.",
+                "emotional_intent": "Let the low point feel temporary and held.",
+                "bedtime_softening_note": "Buffer the low point with visible companionship.",
+            },
+            {
+                "key": "finale",
+                "label": "Finale",
+                "order": 5,
+                "summary": "The bell returns home and the harbor settles together.",
+                "emotional_intent": "Deliver repair and visible calm.",
+            },
+        ],
         is_selected=True,
         accepted_at=now,
     )
@@ -419,6 +532,79 @@ def _seed_story_setup_session(
         accepted_at=now,
     )
     db_session.add(story_setup)
+    db_session.flush()
+
+    story_outline = StoryOutline(
+        session_id=snapshot.id,
+        beat_sheet_id=beat_sheet.id,
+        story_setup_id=story_setup.id,
+        revision_number=1,
+        outline_kind="chapter",
+        summary="Three draftable chapters mapped from the beat sheet.",
+        cards=[
+            {
+                "card_key": "chapter-1",
+                "card_type": "chapter",
+                "position": 1,
+                "title": "Chapter 1: Opening Image to Catalyst",
+                "summary": "Set the moonlit harbor mood and launch Mira after the drifting bell.",
+                "beat_keys": ["opening_image", "catalyst"],
+                "beat_labels": ["Opening Image", "Catalyst"],
+                "emotional_shift": "Move from stillness toward gentle motion.",
+                "target_word_count": 533,
+                "target_runtime_minutes": 4,
+                "target_scene_count": 3,
+                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "bedtime_guardrail": "Keep the problem small, visible, and quickly reassuring.",
+                "drafting_brief": "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.",
+            },
+            {
+                "card_key": "chapter-2",
+                "card_type": "chapter",
+                "position": 2,
+                "title": "Chapter 2: Midpoint",
+                "summary": "Let Mira discover the hidden cove and feel the bell's meaning open up.",
+                "beat_keys": ["midpoint"],
+                "beat_labels": ["Midpoint"],
+                "emotional_shift": "Lift wonder without breaking the bedtime tone.",
+                "target_word_count": 533,
+                "target_runtime_minutes": 4,
+                "target_scene_count": 3,
+                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "bedtime_guardrail": "Keep the reveal luminous and quickly reassuring.",
+                "drafting_brief": "Chapter 2 should center the midpoint reveal and make it feel awe-filled rather than sharp.",
+            },
+            {
+                "card_key": "chapter-3",
+                "card_type": "chapter",
+                "position": 3,
+                "title": "Chapter 3: All Is Lost to Finale",
+                "summary": "Move through the brief low point and guide the harbor back into rest.",
+                "beat_keys": ["all_is_lost", "finale"],
+                "beat_labels": ["All Is Lost", "Finale"],
+                "emotional_shift": "Turn temporary doubt into visible relief and belonging.",
+                "target_word_count": 534,
+                "target_runtime_minutes": 3,
+                "target_scene_count": 3,
+                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "bedtime_guardrail": "Buffer the low point with visible companionship.",
+                "drafting_brief": "Chapter 3 should keep the low point brief, then land in repair and sleepy calm.",
+            },
+        ],
+        metadata_json={
+            "genre_label": "Quest Fantasy",
+            "tone_label": "Hushed Wonder",
+            "target_word_count": 1600,
+            "target_runtime_minutes": 11,
+            "chapter_count": 3,
+            "approximate_scene_count": 9,
+            "chapter_style": "three gentle chapters",
+            "guidance_notes": "End each chapter with a calmer image than it began.",
+        },
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(story_outline)
     db_session.flush()
 
     composition_job_id: str | None = None

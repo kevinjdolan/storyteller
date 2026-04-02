@@ -217,6 +217,15 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
             + _truncate(aggregate.selected_story_setup.guidance_notes)
         )
 
+    if aggregate.selected_story_outline is not None:
+        outline_bits = [
+            f"{aggregate.selected_story_outline.outline_kind} outline",
+            f"{len(aggregate.selected_story_outline.cards or [])} cards",
+        ]
+        if aggregate.selected_story_outline.summary:
+            outline_bits.append(_truncate(aggregate.selected_story_outline.summary))
+        preferences.append("Story outline: " + ", ".join(outline_bits))
+
     if audio_job is not None:
         audio_preferences = [
             f"voice={audio_job.voice_key or 'unset'}",

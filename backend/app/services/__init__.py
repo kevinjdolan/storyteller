@@ -39,6 +39,10 @@ from app.services.jobs import (
     BackgroundJobServiceError,
     ClaimedBackgroundJob,
 )
+from app.services.outline_generation import (
+    StoryOutlineGenerationService,
+    StoryOutlineGenerationServiceError,
+)
 from app.services.pitch_generation import (
     PitchGenerationService,
     build_pitch_model_output,
@@ -83,6 +87,8 @@ __all__ = [
     "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
     "PitchGenerationService",
+    "StoryOutlineGenerationService",
+    "StoryOutlineGenerationServiceError",
     "SessionActionPolicyService",
     "SessionActionPolicyServiceError",
     "SessionIntentParserService",

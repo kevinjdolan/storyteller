@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.chat_actions import CharacterChangeImpact, ChatToUIActionType
+from app.models.story_outline import StoryOutlineCard
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 STORY_WORKFLOW_TOOL_SCHEMA_VERSION = 1
@@ -18,6 +19,7 @@ class StoryWorkflowToolName(str, Enum):
     REFINE_CHARACTER_SHEET = "refine_character_sheet"
     GENERATE_BEAT_SHEET = "generate_beat_sheet"
     UPDATE_SETUP_HEURISTICS = "update_setup_heuristics"
+    UPDATE_STORY_OUTLINE = "update_story_outline"
     COMPOSE_NEXT_SEGMENT = "compose_next_segment"
     REWRITE_SEGMENTS = "rewrite_segments"
     ESTIMATE_AUDIO_LENGTH = "estimate_audio_length"
@@ -198,6 +200,25 @@ class StageOperationToolResult(StoryWorkflowToolResultBase):
 class UpdateSetupHeuristicsToolResult(StoryWorkflowToolResultBase):
     stage_status: WorkflowStageState
     story_setup_id: str
+    revision_number: int = Field(ge=1)
+
+
+class UpdateStoryOutlineToolInput(StoryWorkflowToolModel):
+    outline_id: str | None = Field(default=None, min_length=1)
+    summary: str | None = Field(default=None, min_length=1)
+    cards: list[StoryOutlineCard] = Field(default_factory=list)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "UpdateStoryOutlineToolInput":
+        if not self.cards:
+            raise ValueError("update_story_outline requires at least one card")
+        return self
+
+
+class UpdateStoryOutlineToolResult(StoryWorkflowToolResultBase):
+    stage_status: WorkflowStageState
+    story_outline_id: str
     revision_number: int = Field(ge=1)
 
 

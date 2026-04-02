@@ -33,6 +33,8 @@ from app.models import (
     SessionSnapshot,
     SessionStageStateView,
     StoryBriefView,
+    StoryOutlineCard,
+    StoryOutlineView,
     StorySetupView,
     SAVE_THE_CAT_BEAT_LABELS,
     SAVE_THE_CAT_BEAT_SEQUENCE,
@@ -208,6 +210,8 @@ def build_session_snapshot(
         beat_sheet_revisions=build_beat_sheet_views(aggregate.beat_sheets),
         selected_beat_sheet=build_beat_sheet_view(aggregate.selected_beat_sheet),
         selected_story_setup=build_story_setup_view(aggregate.selected_story_setup),
+        story_outline_revisions=build_story_outline_views(aggregate.story_outlines),
+        selected_story_outline=build_story_outline_view(aggregate.selected_story_outline),
         latest_composition_job=build_composition_job_view(aggregate.latest_composition_job),
         latest_audio_job=build_audio_job_view(aggregate.latest_audio_job),
         active_composition_job=build_composition_job_view(aggregate.active_composition_job),
@@ -1297,6 +1301,60 @@ def build_story_setup_view(row) -> StorySetupView | None:
         preferences=row.preferences,
         accepted_at=row.accepted_at,
     )
+
+
+def build_story_outline_view(row) -> StoryOutlineView | None:
+    if row is None:
+        return None
+
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    raw_cards = row.cards if isinstance(row.cards, list) else []
+    cards = [
+        StoryOutlineCard.model_validate(card)
+        for card in raw_cards
+        if isinstance(card, dict)
+    ]
+
+    return StoryOutlineView(
+        id=row.id,
+        revision_number=row.revision_number,
+        outline_kind=row.outline_kind,
+        summary=row.summary,
+        cards=cards,
+        genre_label=_read_optional_mapping_text(metadata, "genre_label"),
+        tone_label=_read_optional_mapping_text(metadata, "tone_label"),
+        target_word_count=_read_optional_mapping_int(metadata, "target_word_count"),
+        target_runtime_minutes=_read_optional_mapping_int(metadata, "target_runtime_minutes"),
+        chapter_count=_read_optional_mapping_int(metadata, "chapter_count"),
+        approximate_scene_count=_read_optional_mapping_int(metadata, "approximate_scene_count"),
+        chapter_style=_read_optional_mapping_text(metadata, "chapter_style"),
+        guidance_notes=_read_optional_mapping_text(metadata, "guidance_notes"),
+        bedtime_goal=_read_optional_mapping_text(metadata, "bedtime_goal"),
+        is_selected=row.is_selected,
+        accepted_at=row.accepted_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def build_story_outline_views(rows) -> list[StoryOutlineView]:
+    if rows is None:
+        return []
+
+    return [
+        view
+        for view in (
+            build_story_outline_view(row)
+            for row in sorted(
+                rows,
+                key=lambda story_outline: (
+                    getattr(story_outline, "revision_number", 0),
+                ),
+                reverse=True,
+            )
+        )
+        if view is not None
+    ]
 
 
 def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView | None:

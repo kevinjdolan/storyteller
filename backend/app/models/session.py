@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.chat_actions import CharacterChangeImpact, StoryBriefEditMode
 from app.models.events import SessionEventView, SessionHistoryView
+from app.models.story_outline import StoryOutlineCard
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -200,6 +201,27 @@ class StorySetupView(BaseModel):
     accepted_at: datetime | None = None
 
 
+class StoryOutlineView(BaseModel):
+    id: str
+    revision_number: int
+    outline_kind: str
+    summary: str | None = None
+    cards: list[StoryOutlineCard] = Field(default_factory=list)
+    genre_label: str | None = None
+    tone_label: str | None = None
+    target_word_count: int | None = None
+    target_runtime_minutes: int | None = None
+    chapter_count: int | None = None
+    approximate_scene_count: int | None = None
+    chapter_style: str | None = None
+    guidance_notes: str | None = None
+    bedtime_goal: str | None = None
+    is_selected: bool = False
+    accepted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class CompositionJobView(BaseModel):
     id: str
     job_kind: str
@@ -388,6 +410,47 @@ class SaveSessionStorySetupRequest(BaseModel):
 
 
 class SessionStorySetupResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
+class EditSessionStoryOutlineCardRequest(BaseModel):
+    card_key: str = Field(min_length=1)
+    card_type: str = Field(min_length=1)
+    position: int = Field(ge=1)
+    title: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    beat_keys: list[str] = Field(default_factory=list)
+    beat_labels: list[str] = Field(default_factory=list)
+    emotional_shift: str = Field(min_length=1)
+    target_word_count: int | None = Field(default=None, ge=1)
+    target_runtime_minutes: int | None = Field(default=None, ge=1)
+    target_scene_count: int | None = Field(default=None, ge=1)
+    tone_direction: str | None = Field(default=None, min_length=1)
+    bedtime_guardrail: str | None = Field(default=None, min_length=1)
+    drafting_brief: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_beats(self) -> "EditSessionStoryOutlineCardRequest":
+        if not self.beat_keys:
+            raise ValueError("story outline cards require at least one supporting beat")
+        return self
+
+
+class SaveSessionStoryOutlineRequest(BaseModel):
+    outline_id: str | None = Field(default=None, min_length=1)
+    summary: str | None = Field(default=None, min_length=1)
+    cards: list[EditSessionStoryOutlineCardRequest] = Field(default_factory=list)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_cards(self) -> "SaveSessionStoryOutlineRequest":
+        if not self.cards:
+            raise ValueError("story outline saves require at least one card")
+        return self
+
+
+class SessionStoryOutlineResponse(BaseModel):
     snapshot: "SessionSnapshot"
     event: SessionEventView
 
@@ -646,6 +709,8 @@ class SessionSnapshot(BaseModel):
     beat_sheet_revisions: list[BeatSheetView] = Field(default_factory=list)
     selected_beat_sheet: BeatSheetView | None = None
     selected_story_setup: StorySetupView | None = None
+    story_outline_revisions: list[StoryOutlineView] = Field(default_factory=list)
+    selected_story_outline: StoryOutlineView | None = None
     latest_composition_job: CompositionJobView | None = None
     latest_audio_job: AudioJobView | None = None
     active_composition_job: CompositionJobView | None = None
@@ -682,5 +747,6 @@ SessionCharacterSheetGenerationResponse.model_rebuild()
 SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()
 SessionStoryBriefResponse.model_rebuild()
+SessionStoryOutlineResponse.model_rebuild()
 SessionStorySetupResponse.model_rebuild()
 SessionHydrationView.model_rebuild()
