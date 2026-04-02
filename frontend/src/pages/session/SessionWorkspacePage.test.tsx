@@ -9,6 +9,7 @@ import type {
   SessionHistory,
   SessionPitchGenerationResponse,
   SessionSnapshot,
+  SessionStorySetupResponse,
 } from '../../api/sessions.ts'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { SessionWorkspacePage } from './SessionWorkspacePage.tsx'
@@ -371,7 +372,9 @@ const sampleSnapshot: SessionSnapshot = {
     target_word_count: 1500,
     target_runtime_minutes: 12,
     chapter_count: 4,
+    approximate_scene_count: 8,
     chapter_style: 'short',
+    guidance_notes: 'Let each chapter settle before the next one brightens.',
   },
   active_composition_job: null,
   active_audio_job: null,
@@ -635,6 +638,19 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
     typeof body.values.detail === 'string'
       ? body.values.detail
       : ''
+  const stage =
+    typeof body.stage === 'string' && body.stage.length > 0
+      ? body.stage
+      : 'beats'
+  const stageLabel =
+    stage === 'audio'
+      ? 'audio'
+      : stage === 'composition'
+        ? 'composition'
+        : stage === 'story_setup'
+          ? 'story setup'
+          : 'beat sheet'
+  const summaryText = `Updated ${stageLabel} notes from the workspace.`
 
   return {
     snapshot: {
@@ -645,8 +661,7 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
           ? {
               ...stageState,
               detail,
-              last_event_summary:
-                'Updated beat sheet notes from the workspace.',
+              last_event_summary: summaryText,
               last_event_type: 'content.user_edit.recorded',
               last_event_at: '2026-04-01T03:05:00Z',
             }
@@ -664,19 +679,131 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
       },
       event_type: 'content.user_edit.recorded',
       stage: body.stage ?? null,
-      summary: 'Saved user edit for beat sheet.',
+      summary: `Saved user edit for ${stageLabel}.`,
       payload: {
         schema_version: 1,
-        target_kind: 'beat_sheet',
+        target_kind: stage === 'audio' ? 'audio_settings' : 'beat_sheet',
         changed_fields: ['detail'],
         source: body.origin ?? 'workspace',
         field_values: {
           detail,
           control_id: body.control_id ?? null,
         },
-        summary_text: 'Updated beat sheet notes from the workspace.',
+        summary_text: summaryText,
       },
       created_at: '2026-04-01T03:05:00Z',
+    },
+  }
+}
+
+function buildStorySetupSaveResponse(
+  body: Record<string, unknown>,
+): SessionStorySetupResponse {
+  const baseSelection = buildBeatSelectionResponse({
+    beat_sheet_id: 'beat-generated-1',
+    origin: body.origin ?? 'workspace',
+  })
+  const savedAt = '2026-04-01T05:31:00Z'
+  const readNumber = (key: string) =>
+    typeof body[key] === 'number' ? body[key] : null
+  const readOptionalString = (key: string) =>
+    typeof body[key] === 'string' && body[key].trim().length > 0
+      ? body[key].trim()
+      : null
+  const savedSetup = {
+    id: 'story-setup-2',
+    revision_number: 2,
+    target_word_count: readNumber('target_word_count'),
+    target_runtime_minutes: readNumber('target_runtime_minutes'),
+    chapter_count: readNumber('chapter_count'),
+    approximate_scene_count: readNumber('approximate_scene_count'),
+    chapter_style: null,
+    guidance_notes: readOptionalString('guidance_notes'),
+    accepted_at: savedAt,
+  }
+
+  const detailBits = [
+    savedSetup.target_runtime_minutes != null
+      ? `~${savedSetup.target_runtime_minutes} minutes`
+      : null,
+    savedSetup.target_word_count != null
+      ? `${savedSetup.target_word_count} words`
+      : null,
+    savedSetup.chapter_count != null
+      ? `${savedSetup.chapter_count} chapters`
+      : null,
+    savedSetup.approximate_scene_count != null
+      ? `about ${savedSetup.approximate_scene_count} scenes`
+      : null,
+    savedSetup.guidance_notes,
+  ].filter((value): value is string => value != null)
+  const selectionLabel =
+    detailBits.length > 0 ? detailBits.join(', ') : 'Story setup preferences'
+
+  return {
+    snapshot: {
+      ...baseSelection.snapshot,
+      current_stage: 'composition',
+      resume_stage: 'composition',
+      furthest_completed_stage: 'story_setup',
+      updated_at: savedAt,
+      selected_story_setup: savedSetup,
+      progress: {
+        total_stages: 10,
+        completed_stages: 7,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 1,
+      },
+      stage_states: baseSelection.snapshot.stage_states.map((stageState, index) => {
+        if (index === 6) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: selectionLabel,
+            last_event_summary: `Accepted story setup: ${selectionLabel}`,
+            last_event_type: 'selection.recorded',
+            last_event_at: savedAt,
+          }
+        }
+
+        if (index === 7 || index === 8 || index === 9) {
+          return {
+            ...stageState,
+            status: index === 7 ? 'draft' : 'draft',
+            detail:
+              index === 7
+                ? null
+                : `Story setup changed to ${selectionLabel}. Revisit this stage before continuing.`,
+            last_event_summary:
+              index === 7 ? null : `Story setup changed to ${selectionLabel}.`,
+            last_event_type: index === 7 ? null : 'workflow.stage_changed',
+            last_event_at: index === 7 ? null : savedAt,
+          }
+        }
+
+        return stageState
+      }),
+    },
+    event: {
+      id: 'story-setup-selection-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 23,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'story_setup',
+      summary: `Accepted story setup: ${selectionLabel}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'story_setup',
+        selection_id: savedSetup.id,
+        label: selectionLabel,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+      },
+      created_at: savedAt,
     },
   }
 }
@@ -2694,6 +2821,9 @@ function mockWorkspaceApi(options?: {
   storyBriefSaveResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
+  storySetupSaveResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   toneCatalogByGenre?: Record<string, unknown>
   toneSelectionResponse?:
     | unknown
@@ -2702,6 +2832,9 @@ function mockWorkspaceApi(options?: {
   hydration?: unknown
   hydrationStatus?: number
   chatIntentResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
+  contextUpdateResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
 }) {
@@ -2730,6 +2863,7 @@ function mockWorkspaceApi(options?: {
   const pitchRefinementRequests: Record<string, unknown>[] = []
   const pitchSelectionRequests: Record<string, unknown>[] = []
   const storyBriefSaveRequests: Record<string, unknown>[] = []
+  const storySetupSaveRequests: Record<string, unknown>[] = []
   const toneSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionResponse =
     options?.genreSelectionResponse ?? buildGenreSelectionResponse
@@ -2741,6 +2875,8 @@ function mockWorkspaceApi(options?: {
     options?.pitchRefinementResponse ?? buildPitchRefinementResponse
   const storyBriefSaveResponse =
     options?.storyBriefSaveResponse ?? buildStoryBriefSaveResponse
+  const storySetupSaveResponse =
+    options?.storySetupSaveResponse ?? buildStorySetupSaveResponse
   const toneSelectionResponse =
     options?.toneSelectionResponse ?? buildToneSelectionResponse
   const chatIntentResponse = options?.chatIntentResponse ?? {
@@ -2794,6 +2930,8 @@ function mockWorkspaceApi(options?: {
     options?.characterSelectionResponse ?? buildCharacterSelectionResponse
   const characterRefinementResponse =
     options?.characterRefinementResponse ?? buildCharacterRefinementResponse
+  const contextUpdateResponse =
+    options?.contextUpdateResponse ?? buildContextUpdateResponse
 
   vi.stubGlobal(
     'fetch',
@@ -2874,8 +3012,13 @@ function mockWorkspaceApi(options?: {
             ? (JSON.parse(init.body) as Record<string, unknown>)
             : {}
 
+        const resolvedContextUpdateResponse =
+          typeof contextUpdateResponse === 'function'
+            ? contextUpdateResponse(requestBody)
+            : contextUpdateResponse
+
         return Promise.resolve(
-          buildJsonResponse(200, buildContextUpdateResponse(requestBody)),
+          buildJsonResponse(200, resolvedContextUpdateResponse),
         )
       }
 
@@ -3125,6 +3268,25 @@ function mockWorkspaceApi(options?: {
         )
       }
 
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/story-setup' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        storySetupSaveRequests.push(requestBody)
+        const resolvedStorySetupSaveResponse =
+          typeof storySetupSaveResponse === 'function'
+            ? storySetupSaveResponse(requestBody)
+            : storySetupSaveResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedStorySetupSaveResponse),
+        )
+      }
+
       throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
     }),
   )
@@ -3143,6 +3305,7 @@ function mockWorkspaceApi(options?: {
     pitchRefinementRequests,
     pitchSelectionRequests,
     storyBriefSaveRequests,
+    storySetupSaveRequests,
     toneSelectionRequests,
   }
 }
@@ -5169,27 +5332,244 @@ describe('SessionWorkspacePage', () => {
     })
   })
 
-  it('saves a stage note through the durable context update pipeline', async () => {
-    mockWorkspaceApi()
+  it('saves the story setup form through the durable story-setup endpoint', async () => {
+    const { storySetupSaveRequests } = mockWorkspaceApi({
+      hydration: {
+        ...sampleHydration,
+        snapshot: {
+          ...buildBeatSelectionResponse({
+            beat_sheet_id: 'beat-generated-1',
+          }).snapshot,
+          selected_story_setup: null,
+        },
+      },
+    })
 
     renderWorkspaceRoute('/sessions/moonlit-harbor?stage=story_setup')
 
-    const noteField = await screen.findByLabelText('Story setup note')
+    fireEvent.change(await screen.findByLabelText('Target word count'), {
+      target: { value: '1800' },
+    })
+    fireEvent.change(
+      screen.getByLabelText('Target read-aloud duration (minutes)'),
+      {
+        target: { value: '12' },
+      },
+    )
+    fireEvent.change(screen.getByLabelText('Chapter count'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText('Approximate scene count'), {
+      target: { value: '8' },
+    })
+    fireEvent.change(screen.getByLabelText('Pacing notes'), {
+      target: {
+        value: 'Keep each chapter ending softer than it began.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save story setup' }))
+
+    expect(
+      await screen.findByText(
+        'Accepted story setup: ~12 minutes, 1800 words, 3 chapters, about 8 scenes, Keep each chapter ending softer than it began.',
+      ),
+    ).toBeInTheDocument()
+    expect(storySetupSaveRequests).toEqual([
+      {
+        target_word_count: 1800,
+        target_runtime_minutes: 12,
+        chapter_count: 3,
+        approximate_scene_count: 8,
+        guidance_notes: 'Keep each chapter ending softer than it began.',
+        origin: 'workspace',
+      },
+    ])
+    expect(screen.getByText('Composition can use this plan')).toBeInTheDocument()
+  })
+
+  it('applies accepted chat-driven story setup updates through the new save path', async () => {
+    const { storySetupSaveRequests } = mockWorkspaceApi({
+      hydration: {
+        ...sampleHydration,
+        snapshot: {
+          ...buildBeatSelectionResponse({
+            beat_sheet_id: 'beat-generated-1',
+          }).snapshot,
+          selected_story_setup: null,
+        },
+      },
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response:
+          'I can save a shorter, calmer story setup and keep the workspace ready for composition.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              confidence: 0.88,
+              rationale: 'The user asked for a shorter read-aloud target.',
+              requires_confirmation: false,
+              extracted_values: {
+                target_runtime_minutes: 10,
+                chapter_count: 3,
+                guidance_notes: 'Keep the transitions especially calm.',
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              decision: 'accepted',
+              summary: 'Story setup can be updated now.',
+              reasons: [],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=story_setup')
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: 'Make it about ten minutes and keep the transitions especially calm.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      await screen.findByText(
+        'I can save a shorter, calmer story setup and keep the workspace ready for composition.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Accepted story setup: ~10 minutes, 3 chapters, Keep the transitions especially calm.',
+      ),
+    ).toBeInTheDocument()
+    expect(storySetupSaveRequests).toEqual([
+      {
+        target_runtime_minutes: 10,
+        chapter_count: 3,
+        guidance_notes: 'Keep the transitions especially calm.',
+        origin: 'chat',
+      },
+    ])
+  })
+
+  it('saves a stage note through the durable context update pipeline', async () => {
+    const audioHydration = {
+      ...sampleHydration,
+      snapshot: {
+        ...sampleSnapshot,
+        current_stage: 'audio',
+        resume_stage: 'audio',
+        furthest_completed_stage: 'composition',
+        stage_states: sampleSnapshot.stage_states.map((stageState) => {
+          if (stageState.stage === 'beats') {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: 'Accepted beat sheet revision 1.',
+            }
+          }
+
+          if (stageState.stage === 'story_setup') {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: 'Accepted story setup preferences.',
+            }
+          }
+
+          if (stageState.stage === 'composition') {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: 'Draft story completed.',
+            }
+          }
+
+          if (stageState.stage === 'audio') {
+            return {
+              ...stageState,
+              status: 'in_progress',
+              detail: 'Tune narration settings.',
+            }
+          }
+
+          return stageState
+        }),
+      },
+    } as const
+
+    mockWorkspaceApi({
+      hydration: audioHydration,
+      contextUpdateResponse: (requestBody: Record<string, unknown>) => ({
+        ...buildContextUpdateResponse(requestBody),
+        snapshot: {
+          ...audioHydration.snapshot,
+          updated_at: '2026-04-01T03:05:00Z',
+          stage_states: audioHydration.snapshot.stage_states.map((stageState) =>
+            stageState.stage === 'audio'
+              ? {
+                  ...stageState,
+                  detail: 'Keep the narration especially slow and warm.',
+                  last_event_summary:
+                    'Updated audio notes from the workspace.',
+                  last_event_type: 'content.user_edit.recorded',
+                  last_event_at: '2026-04-01T03:05:00Z',
+                }
+              : stageState,
+          ),
+        },
+        event: {
+          ...buildContextUpdateResponse(requestBody).event,
+          stage: 'audio',
+          summary: 'Saved user edit for audio.',
+          payload: {
+            ...buildContextUpdateResponse(requestBody).event.payload,
+            target_kind: 'audio_settings',
+            summary_text: 'Updated audio notes from the workspace.',
+          },
+        },
+      }),
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=audio')
+
+    const noteField = await screen.findByLabelText('Audio note')
 
     fireEvent.change(noteField, {
       target: {
-        value: 'Add one calmer beat before the return home.',
+        value: 'Keep the narration especially slow and warm.',
       },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save note' }))
 
     expect(
       await screen.findByDisplayValue(
-        'Add one calmer beat before the return home.',
+        'Keep the narration especially slow and warm.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Story setup note')).toHaveValue(
-      'Add one calmer beat before the return home.',
+    expect(screen.getByLabelText('Audio note')).toHaveValue(
+      'Keep the narration especially slow and warm.',
     )
   })
 
@@ -5228,18 +5608,18 @@ describe('SessionWorkspacePage', () => {
             actor_id: 'local-user',
           },
           event_type: 'content.user_edit.recorded',
-          stage: 'story_setup',
-          summary: 'Saved user edit for beat sheet.',
+          stage: 'audio',
+          summary: 'Saved user edit for audio.',
           payload: {
             schema_version: 1,
-            target_kind: 'beat_sheet',
+            target_kind: 'audio_settings',
             changed_fields: ['detail'],
             source: 'workspace',
             field_values: {
-              detail: 'Add one calmer beat before the return home.',
+              detail: 'Keep the narration especially slow and warm.',
               control_id: 'stage-note-editor',
             },
-            summary_text: 'Updated beat sheet notes from the workspace.',
+            summary_text: 'Updated audio notes from the workspace.',
           },
           created_at: '2026-04-01T03:05:00Z',
         },
@@ -5249,17 +5629,28 @@ describe('SessionWorkspacePage', () => {
       ...sampleHydration,
       snapshot: {
         ...sampleSnapshot,
+        current_stage: 'audio',
+        resume_stage: 'audio',
+        furthest_completed_stage: 'composition',
         updated_at: '2026-04-01T03:05:00Z',
         stage_states: sampleSnapshot.stage_states.map((stageState) =>
-          stageState.stage === 'story_setup'
+          stageState.stage === 'audio'
             ? {
                 ...stageState,
-                detail: 'Add one calmer beat before the return home.',
-                last_event_summary:
-                  'Updated beat sheet notes from the workspace.',
+                status: 'in_progress',
+                detail: 'Keep the narration especially slow and warm.',
+                last_event_summary: 'Updated audio notes from the workspace.',
                 last_event_type: 'content.user_edit.recorded',
                 last_event_at: '2026-04-01T03:05:00Z',
               }
+            : stageState.stage === 'beats' ||
+                stageState.stage === 'story_setup' ||
+                stageState.stage === 'composition'
+              ? {
+                  ...stageState,
+                  status: 'completed',
+                  detail: stageState.detail ?? `Accepted ${stageState.stage}.`,
+                }
             : stageState,
         ),
       },
@@ -5277,16 +5668,14 @@ describe('SessionWorkspacePage', () => {
       hydration: resumedHydration,
     })
 
-    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=story_setup')
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=audio')
 
     expect(
       await screen.findByText('Opened Audio in the main pane.'),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('Updated beat sheet notes from the workspace.'),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Story setup note')).toHaveValue(
-      'Add one calmer beat before the return home.',
+    expect(screen.getByText('Updated audio notes from the workspace.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Audio note')).toHaveValue(
+      'Keep the narration especially slow and warm.',
     )
   })
 

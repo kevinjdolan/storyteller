@@ -212,6 +212,7 @@ export type StorySetupView = {
   target_word_count?: number | null
   target_runtime_minutes?: number | null
   chapter_count?: number | null
+  approximate_scene_count?: number | null
   chapter_style?: string | null
   guidance_notes?: string | null
   accepted_at?: string | null
@@ -474,6 +475,15 @@ export type GenerateSessionBeatSheetRequest = {
   origin?: string
 }
 
+export type SaveSessionStorySetupRequest = {
+  target_word_count?: number | null
+  target_runtime_minutes?: number | null
+  chapter_count?: number | null
+  approximate_scene_count?: number | null
+  guidance_notes?: string | null
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
@@ -539,6 +549,11 @@ export type SessionBeatSheetGenerationResponse = {
   event: SessionHistoryEvent
 }
 
+export type SessionStorySetupResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
 export function fetchRecentSessions(limit = 20) {
@@ -583,6 +598,16 @@ export function saveSessionStoryBrief(
 ) {
   return postJson<SessionStoryBriefResponse>(
     `/api/v1/sessions/${sessionId}/story-brief`,
+    body,
+  )
+}
+
+export function saveSessionStorySetup(
+  sessionId: string,
+  body: SaveSessionStorySetupRequest,
+) {
+  return postJson<SessionStorySetupResponse>(
+    `/api/v1/sessions/${sessionId}/story-setup`,
     body,
   )
 }

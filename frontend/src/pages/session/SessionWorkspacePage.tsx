@@ -13,6 +13,7 @@ import {
   refineSessionPitch,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  saveSessionStorySetup,
   selectSessionBeatSheet,
   selectSessionCharacterSheet,
   selectSessionPitch,
@@ -28,6 +29,7 @@ import { CharacterSelectionStage } from '../../features/session/CharacterSelecti
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
 import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
+import { StorySetupStage } from '../../features/session/StorySetupStage.tsx'
 import { ToneSelectionStage } from '../../features/session/ToneSelectionStage.tsx'
 import {
   useSessionChatMessages,
@@ -260,6 +262,9 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
       snapshot.selected_story_setup.chapter_count != null
         ? `${snapshot.selected_story_setup.chapter_count} chapters`
         : null,
+      snapshot.selected_story_setup.approximate_scene_count != null
+        ? `about ${snapshot.selected_story_setup.approximate_scene_count} scenes`
+        : null,
     ].filter(Boolean)
 
     if (details.length > 0) {
@@ -418,6 +423,8 @@ function buildPendingChatConfirmationTitle(action: ChatToUiAction) {
       return 'Refine this beat sheet'
     case 'accept_beat_sheet':
       return 'Accept this beat sheet'
+    case 'update_story_setup':
+      return 'Save this story setup'
     default:
       return 'Apply chat change'
   }
@@ -438,6 +445,7 @@ function canApplyChatAction(action: ChatToUiAction) {
     action.action_type === 'regenerate_beat_sheet' ||
     action.action_type === 'refine_beat_sheet' ||
     action.action_type === 'accept_beat_sheet' ||
+    action.action_type === 'update_story_setup' ||
     action.action_type === 'open_finalize_view'
   )
 }
@@ -1129,6 +1137,34 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyStorySetupSave(options: {
+    targetWordCount?: number | null
+    targetRuntimeMinutes?: number | null
+    chapterCount?: number | null
+    approximateSceneCount?: number | null
+    guidanceNotes?: string | null
+    origin: string
+    previewCurrentStage?: boolean
+  }) {
+    const result = await saveSessionStorySetup(sessionId, {
+      target_word_count: options.targetWordCount,
+      target_runtime_minutes: options.targetRuntimeMinutes,
+      chapter_count: options.chapterCount,
+      approximate_scene_count: options.approximateSceneCount,
+      guidance_notes: options.guidanceNotes ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage === true) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1274,6 +1310,19 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         beatSheetId: action.extracted_values.beat_sheet_id ?? null,
         revisionNumber: action.extracted_values.revision_number ?? null,
         origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'update_story_setup') {
+      await applyStorySetupSave({
+        targetWordCount: action.extracted_values.target_word_count,
+        targetRuntimeMinutes:
+          action.extracted_values.target_runtime_minutes,
+        chapterCount: action.extracted_values.chapter_count,
+        guidanceNotes: action.extracted_values.guidance_notes,
+        origin: 'chat',
+        previewCurrentStage: false,
       })
       return
     }
@@ -1694,6 +1743,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onPreviewStage={setPreviewStage}
                   onRefineBeatSheet={applyBeatSheetRefinement}
                   onSelectBeatSheet={applyBeatSheetSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'story_setup' ? (
+                <StorySetupStage
+                  onPreviewStage={setPreviewStage}
+                  onSaveStorySetup={applyStorySetupSave}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />
