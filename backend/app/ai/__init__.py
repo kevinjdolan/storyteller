@@ -1,6 +1,3 @@
-from app.ai.brief_normalization import (
-    DEFAULT_GEMINI_API_BASE_URL as DEFAULT_GEMINI_BRIEF_NORMALIZATION_API_BASE_URL,
-)
 from app.ai.beat_sheet_generation import (
     BeatSheetGenerationAdapter,
     BeatSheetGenerationError,
@@ -9,6 +6,10 @@ from app.ai.beat_sheet_generation import (
     build_beat_sheet_generation_invocation,
     get_beat_sheet_generation_response_schema,
     render_beat_sheet_generation_prompt,
+)
+from app.ai.bedtime_guidelines import build_bedtime_guidelines_fragment
+from app.ai.brief_normalization import (
+    DEFAULT_GEMINI_API_BASE_URL as DEFAULT_GEMINI_BRIEF_NORMALIZATION_API_BASE_URL,
 )
 from app.ai.brief_normalization import (
     BriefNormalizationAdapter,
@@ -57,6 +58,7 @@ __all__ = [
     "BriefNormalizationAdapter",
     "BriefNormalizationError",
     "BriefNormalizationTransportError",
+    "build_bedtime_guidelines_fragment",
     "GeminiBeatSheetGenerationAdapter",
     "CharacterGenerationAdapter",
     "CharacterGenerationError",

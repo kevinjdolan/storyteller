@@ -16,6 +16,7 @@ from app.models import (
     NormalizedBriefPreferences,
     normalize_optional_character_text,
 )
+from app.models.bedtime_guidelines import DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
 
 _TITLE_STOPWORDS = {
     "a",
@@ -120,6 +121,7 @@ class CharacterGenerationService:
         *,
         candidate_count: int,
         generation_goal: str = "alternatives",
+        bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
         selected_pitch: ExistingSelectedPitchContext,
         raw_brief: str,
         genre_label: str | None = None,
@@ -144,6 +146,7 @@ class CharacterGenerationService:
         context = CharacterGenerationPromptContext(
             candidate_count=candidate_count,
             generation_goal=generation_goal,
+            bedtime_guideline_preset_key=bedtime_guideline_preset_key,
             guidance=guidance,
             change_summary=change_summary,
             focus_character_names=focus_character_names or [],

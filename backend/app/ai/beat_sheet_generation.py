@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.ai.bedtime_guidelines import build_bedtime_guidelines_fragment
 from app.models import (
     BEAT_SHEET_GENERATION_PROMPT_VERSION,
     BeatSheetGenerationInvocation,
@@ -135,6 +136,10 @@ class GeminiBeatSheetGenerationAdapter:
 def render_beat_sheet_generation_prompt(context: BeatSheetGenerationPromptContext) -> str:
     template = Template(_read_prompt_template())
     return template.substitute(
+        bedtime_guidelines_fragment=build_bedtime_guidelines_fragment(
+            stage="beat",
+            preset_key=context.bedtime_guideline_preset_key,
+        ),
         beat_sheet_context_json=json.dumps(
             context.model_dump(mode="json"),
             indent=2,

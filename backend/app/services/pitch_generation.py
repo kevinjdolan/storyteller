@@ -14,6 +14,7 @@ from app.models import (
     PitchGenerationResult,
     normalize_optional_pitch_text,
 )
+from app.models.bedtime_guidelines import DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
 
 _TITLE_STOPWORDS = {
     "a",
@@ -139,6 +140,7 @@ class PitchGenerationService:
         *,
         candidate_count: int,
         generation_goal: str = "alternatives",
+        bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
         raw_brief: str,
         genre_label: str | None = None,
         genre_description: str | None = None,
@@ -160,6 +162,7 @@ class PitchGenerationService:
         context = PitchGenerationPromptContext(
             candidate_count=candidate_count,
             generation_goal=generation_goal,
+            bedtime_guideline_preset_key=bedtime_guideline_preset_key,
             guidance=guidance,
             genre_label=genre_label,
             genre_description=genre_description,

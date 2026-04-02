@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.ai.bedtime_guidelines import build_bedtime_guidelines_fragment
 from app.models import (
     CHARACTER_GENERATION_PROMPT_VERSION,
     CharacterGenerationInvocation,
@@ -135,6 +136,10 @@ class GeminiCharacterGenerationAdapter:
 def render_character_generation_prompt(context: CharacterGenerationPromptContext) -> str:
     template = Template(_read_prompt_template())
     return template.substitute(
+        bedtime_guidelines_fragment=build_bedtime_guidelines_fragment(
+            stage="character",
+            preset_key=context.bedtime_guideline_preset_key,
+        ),
         character_context_json=json.dumps(
             context.model_dump(mode="json"),
             indent=2,

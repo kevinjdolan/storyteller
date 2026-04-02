@@ -4,10 +4,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.bedtime_guidelines import (
+    DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
+    normalize_bedtime_guideline_preset_key,
+)
 from app.models.brief_normalization import NormalizedBriefPreferences
 
 PITCH_GENERATION_SCHEMA_VERSION = 1
-PITCH_GENERATION_PROMPT_VERSION = "pitch_generation.v2"
+PITCH_GENERATION_PROMPT_VERSION = "pitch_generation.v3"
 
 
 def normalize_optional_pitch_text(value: str | None) -> str | None:
@@ -56,6 +60,7 @@ class PitchGenerationPromptContext(BaseModel):
 
     candidate_count: int = Field(default=3, ge=1, le=6)
     generation_goal: Literal["alternatives", "refinement"] = "alternatives"
+    bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
     guidance: str | None = None
     genre_label: str | None = None
     genre_description: str | None = None
@@ -99,6 +104,12 @@ class PitchGenerationPromptContext(BaseModel):
         if value is None:
             return None
         return normalize_optional_pitch_text(str(value))
+
+    @field_validator("bedtime_guideline_preset_key", mode="before")
+    @classmethod
+    def validate_bedtime_guideline_preset_key(cls, value: Any) -> str:
+        text = None if value is None else str(value)
+        return normalize_bedtime_guideline_preset_key(text)
 
     @model_validator(mode="after")
     def validate_candidate_count(self) -> PitchGenerationPromptContext:

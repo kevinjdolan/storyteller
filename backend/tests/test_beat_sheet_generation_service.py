@@ -226,7 +226,9 @@ def test_eval_refinement_fallback_keeps_source_revision_and_guidance_visible() -
         ),
         selected_character_sheet=_build_character_context(),
         raw_brief="A harbor child follows a silver bell and helps the docks settle before bed.",
-        instructions="Soften the midpoint and all-is-lost beats so they feel more awestruck than tense.",
+        instructions=(
+            "Soften the midpoint and all-is-lost beats so they feel more awestruck than tense."
+        ),
         focus_beats=["midpoint", "all_is_lost"],
         bedtime_goal="end on a very sleepy exhale",
         existing_beat_sheet=ExistingBeatSheetContext(
@@ -261,5 +263,5 @@ def test_eval_beat_sheet_model_output_preserves_provider_context_and_criteria() 
 
     assert model_output["generation_source"] == "gemini"
     assert model_output["model_id"] == "gemini-3.1-pro"
-    assert model_output["prompt_version"] == "beat_sheet_generation.v1"
+    assert model_output["prompt_version"] == "beat_sheet_generation.v2"
     assert model_output["evaluation"]["passed"] is True

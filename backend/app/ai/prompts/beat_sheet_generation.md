@@ -26,17 +26,16 @@ Requirements:
   - `summary`: 1-2 calm planning sentences about what happens in this beat
   - `emotional_intent`: one concise sentence naming what the beat should make the child feel
   - `bedtime_softening_note`: one concise sentence explaining how the beat stays bedtime-safe
-- Keep the arc bedtime-appropriate:
-  - wonder, mystery, and movement are welcome
-  - distress must stay brief, readable, and quickly buffered by reassurance
-  - low points should feel meaningful without becoming harsh or scary
-  - the ending should clearly land in safety, repair, and rest
+- Follow the shared bedtime safety policy below when shaping the overall arc and every individual beat.
 - Respect `generation_goal` from the context:
   - if `generation_goal` is `initial`, build a fresh beat sheet from the selected pitch and character sheet
   - if `generation_goal` is `refinement`, preserve the current beat sheet's core arc while applying the requested change
 - Use the selected pitch, character sheet, genre, tone, and brief context directly. Do not invent unrelated side plots or extra protagonists.
 - If `focus_beats` are supplied, make those beats especially responsive to the requested guidance without breaking the full arc.
 - Keep the summaries concrete enough that later outlining and composition can follow them.
+
+Bedtime guidance:
+$bedtime_guidelines_fragment
 
 Beat-sheet generation context:
 $beat_sheet_context_json

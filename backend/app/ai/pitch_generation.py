@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.ai.bedtime_guidelines import build_bedtime_guidelines_fragment
 from app.models import (
     PITCH_GENERATION_PROMPT_VERSION,
     PitchGenerationInvocation,
@@ -134,6 +135,10 @@ class GeminiPitchGenerationAdapter:
 def render_pitch_generation_prompt(context: PitchGenerationPromptContext) -> str:
     template = Template(_read_prompt_template())
     return template.substitute(
+        bedtime_guidelines_fragment=build_bedtime_guidelines_fragment(
+            stage="pitch",
+            preset_key=context.bedtime_guideline_preset_key,
+        ),
         pitch_context_json=json.dumps(
             context.model_dump(mode="json"),
             indent=2,

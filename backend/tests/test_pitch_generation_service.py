@@ -200,7 +200,7 @@ def test_eval_pitch_model_output_preserves_provider_context_and_criteria() -> No
 
     assert model_output["generation_source"] == "gemini"
     assert model_output["model_id"] == "gemini-3.1-pro"
-    assert model_output["prompt_version"] == "pitch_generation.v2"
+    assert model_output["prompt_version"] == "pitch_generation.v3"
     assert model_output["evaluation"]["passed"] is True
 
 

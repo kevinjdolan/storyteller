@@ -5,6 +5,8 @@ from typing import Any
 
 from app.ai import BeatSheetGenerationAdapter, build_beat_sheet_generation_invocation
 from app.models import (
+    SAVE_THE_CAT_BEAT_KEYS,
+    SAVE_THE_CAT_BEAT_SEQUENCE,
     BeatSheetEvaluation,
     BeatSheetEvaluationCriterion,
     BeatSheetGenerationPromptContext,
@@ -15,10 +17,9 @@ from app.models import (
     GeneratedBeatSheetBeat,
     GeneratedBeatSheetCandidate,
     NormalizedBriefPreferences,
-    SAVE_THE_CAT_BEAT_KEYS,
-    SAVE_THE_CAT_BEAT_SEQUENCE,
     normalize_optional_beat_text,
 )
+from app.models.bedtime_guidelines import DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
 
 _TENSION_BEAT_KEYS = {
     "catalyst",
@@ -43,6 +44,7 @@ class BeatSheetGenerationService:
         self,
         *,
         generation_goal: str = "initial",
+        bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
         selected_pitch: ExistingSelectedPitchContext,
         selected_character_sheet: ExistingCharacterSheetContext,
         raw_brief: str,
@@ -68,6 +70,7 @@ class BeatSheetGenerationService:
     ) -> BeatSheetGenerationResult:
         context = BeatSheetGenerationPromptContext(
             generation_goal="refinement" if generation_goal == "refinement" else "initial",
+            bedtime_guideline_preset_key=bedtime_guideline_preset_key,
             guidance=guidance,
             instructions=instructions,
             focus_beats=focus_beats or [],
@@ -181,7 +184,10 @@ def evaluate_beat_sheet(beat_sheet: GeneratedBeatSheetCandidate) -> BeatSheetEva
         ),
         BeatSheetEvaluationCriterion(
             name="overall_summary_and_bedtime_notes_are_present",
-            passed=len(beat_sheet.summary.split()) >= 5 and len(beat_sheet.bedtime_notes.split()) >= 5,
+            passed=(
+                len(beat_sheet.summary.split()) >= 5
+                and len(beat_sheet.bedtime_notes.split()) >= 5
+            ),
             measured_value=2,
             detail="The beat sheet needs a high-level summary and overall bedtime notes.",
         ),
@@ -243,8 +249,11 @@ def _build_heuristic_beat_sheet(
     lead_dynamic = _read_lead_dynamic(context.selected_character_sheet)
     focus_beats = {beat.lower() for beat in context.focus_beats}
     guidance_text = context.instructions or context.guidance
+    existing_beat_entries = (
+        context.existing_beat_sheet.beats if context.existing_beat_sheet is not None else []
+    )
     existing_beats = {
-        beat.key: beat for beat in (context.existing_beat_sheet.beats if context.existing_beat_sheet else [])
+        beat.key: beat for beat in existing_beat_entries
     }
 
     beats: list[GeneratedBeatSheetBeat] = []
@@ -274,10 +283,14 @@ def _build_heuristic_beat_sheet(
         f"guiding the story toward {emotional_goal}."
     )
     if context.generation_goal == "refinement" and guidance_text is not None:
-        summary = f"{summary} This revision preserves the core plan while applying: {guidance_text}."
+        summary = (
+            f"{summary} This revision preserves the core plan while applying: "
+            f"{guidance_text}."
+        )
 
     bedtime_notes = (
-        "Keep the tension readable, the helpers visible, and the final emotional landing unmistakably safe and sleepy."
+        "Keep the tension readable, the helpers visible, and the final emotional landing "
+        "unmistakably safe and sleepy."
     )
     if context.bedtime_goal is not None:
         bedtime_notes = f"{bedtime_notes} Bedtime goal: {context.bedtime_goal}."
@@ -310,77 +323,125 @@ def _build_heuristic_beat(
     motif = motifs[index % len(motifs)]
     templates = {
         "opening_image": (
-            f"{protagonist_name} is introduced in {setting}, surrounded by {motif} and the everyday rhythm that makes the night feel safe.",
+            (
+                f"{protagonist_name} is introduced in {setting}, surrounded by {motif} and the "
+                "everyday rhythm that makes the night feel safe."
+            ),
             "Signal calm curiosity and a stable bedtime baseline.",
             "Use familiar routines and soft sensory cues so the opening already feels sheltered.",
         ),
         "theme_stated": (
-            f"{helper_name} or another trusted voice hints that rest will come when {protagonist_name} stops carrying every worry alone.",
+            (
+                f"{helper_name} or another trusted voice hints that rest will come when "
+                f"{protagonist_name} stops carrying every worry alone."
+            ),
             "Plant the reassurance lesson early and gently.",
             "Keep the theme phrased as comfort or belonging, not a stern moral.",
         ),
         "set_up": (
-            f"The story establishes {lead_dynamic}, the night's small imbalance, and the tender stakes behind {pitch.title}.",
+            (
+                f"The story establishes {lead_dynamic}, the night's small imbalance, and the "
+                f"tender stakes behind {pitch.title}."
+            ),
             "Build investment without rushing the bedtime pace.",
             "Frame the problem as manageable and emotionally readable from the start.",
         ),
         "catalyst": (
-            f"A clear but gentle disruption appears around {motif}, giving {protagonist_name} one reason they cannot simply go to sleep yet.",
+            (
+                f"A clear but gentle disruption appears around {motif}, giving "
+                f"{protagonist_name} one reason they cannot simply go to sleep yet."
+            ),
             "Spark forward motion while keeping the disturbance soft.",
             "Treat the disruption as intriguing or wistful rather than frightening.",
         ),
         "debate": (
-            f"{protagonist_name} hesitates, weighing whether to stay with the familiar calm or follow the night's quiet invitation with {helper_name}.",
+            (
+                f"{protagonist_name} hesitates, weighing whether to stay with the familiar calm "
+                f"or follow the night's quiet invitation with {helper_name}."
+            ),
             "Let the listener feel a small, relatable wobble before the adventure opens.",
             "Keep the hesitation brief and buffered by companionship, ritual, or visible safety.",
         ),
         "break_into_two": (
-            f"{protagonist_name} chooses the bedtime-safe adventure and steps into a more magical side of {setting}.",
+            (
+                f"{protagonist_name} chooses the bedtime-safe adventure and steps into a more "
+                f"magical side of {setting}."
+            ),
             "Turn curiosity into a committed but gentle sense of movement.",
             "Make the transition feel like crossing into wonder, not danger.",
         ),
         "b_story": (
-            f"The bond with {helper_name} deepens, giving the story a relational thread that will carry the emotional repair.",
+            (
+                f"The bond with {helper_name} deepens, giving the story a relational thread "
+                "that will carry the emotional repair."
+            ),
             "Anchor the plot in comfort, trust, and connection.",
             "Use the relationship to explain feelings aloud whenever tension rises.",
         ),
         "fun_and_games": (
-            f"{protagonist_name} explores the promise of the premise through small discoveries, soft obstacles, and {motif}-lit delights.",
+            (
+                f"{protagonist_name} explores the promise of the premise through small "
+                f"discoveries, soft obstacles, and {motif}-lit delights."
+            ),
             "Deliver wonder, play, and bedtime-safe novelty.",
             "Prefer cozy surprises and satisfying patterns over escalating risk.",
         ),
         "midpoint": (
-            f"A luminous breakthrough makes the mission feel real, but it also reveals the deeper feeling that still needs repair before {emotional_goal}.",
+            (
+                "A luminous breakthrough makes the mission feel real, but it also reveals the "
+                f"deeper feeling that still needs repair before {emotional_goal}."
+            ),
             "Create a memorable lift with a touch of tender seriousness.",
-            "Let the midpoint feel awe-filled and emotionally clarifying, never sharp or overwhelming.",
+            (
+                "Let the midpoint feel awe-filled and emotionally clarifying, never sharp or "
+                "overwhelming."
+            ),
         ),
         "bad_guys_close_in": (
-            f"Old worries, fading confidence, or the night's ticking softness start pressing closer as the journey home grows more delicate.",
+            (
+                "Old worries, fading confidence, or the night's ticking softness start "
+                "pressing closer as the journey home grows more delicate."
+            ),
             "Increase pressure without turning the story harsh.",
             "Translate pressure into tiredness, doubt, or misread signals instead of threats.",
         ),
         "all_is_lost": (
-            f"{protagonist_name} briefly believes they may not restore the night's calm after all, especially when the {motif} seems to dim.",
+            (
+                f"{protagonist_name} briefly believes they may not restore the night's calm "
+                f"after all, especially when the {motif} seems to dim."
+            ),
             "Allow one low ebb so the comfort to come feels earned.",
             "Keep the loss moment brief, specific, and visibly survivable with support nearby.",
         ),
         "dark_night_of_the_soul": (
-            f"In the quiet after the setback, {protagonist_name} names the true feeling underneath the journey and understands what kindness is still needed.",
+            (
+                f"In the quiet after the setback, {protagonist_name} names the true feeling "
+                "underneath the journey and understands what kindness is still needed."
+            ),
             "Turn sadness into reflection and emotional honesty.",
             "Use stillness, not despair, so the scene feels hushed and comforting.",
         ),
         "break_into_three": (
-            f"{protagonist_name} and {helper_name} combine what they have learned into one final, gentler plan.",
+            (
+                f"{protagonist_name} and {helper_name} combine what they have learned into one "
+                "final, gentler plan."
+            ),
             "Restore confidence through insight and togetherness.",
             "Make the plan feel simple, warm, and guided by care rather than force.",
         ),
         "finale": (
-            f"The story resolves the outer problem through patient action and shared care, bringing the world back toward {emotional_goal}.",
+            (
+                "The story resolves the outer problem through patient action and shared care, "
+                f"bringing the world back toward {emotional_goal}."
+            ),
             "Deliver release, competence, and emotional repair.",
             "Let the climax peak in reassurance, reunion, and a visibly safe landing.",
         ),
         "final_image": (
-            f"{protagonist_name} returns to rest in {setting}, now changed by the night's lesson and surrounded by a calmer version of the opening image.",
+            (
+                f"{protagonist_name} returns to rest in {setting}, now changed by the night's "
+                "lesson and surrounded by a calmer version of the opening image."
+            ),
             "Leave the listener soothed, complete, and ready for sleep.",
             "Echo the opening with added softness so the ending feels tucked in.",
         ),
@@ -389,7 +450,8 @@ def _build_heuristic_beat(
 
     if existing is not None and is_refinement:
         summary = (
-            f"{existing.summary} This revision keeps the core beat but nudges it toward {guidance_text or 'the requested change'}."
+            f"{existing.summary} This revision keeps the core beat but nudges it toward "
+            f"{guidance_text or 'the requested change'}."
         )
         emotional_intent = existing.emotional_intent
         bedtime_softening_note = existing.bedtime_softening_note
@@ -397,12 +459,14 @@ def _build_heuristic_beat(
     if guidance_text is not None and (key in focus_beats or label.lower() in focus_beats):
         summary = f"{summary} Focus this beat on: {guidance_text}."
         bedtime_softening_note = (
-            f"{bedtime_softening_note} Apply the requested adjustment without losing the overall calm trajectory."
+            f"{bedtime_softening_note} Apply the requested adjustment without losing the "
+            "overall calm trajectory."
         )
 
     if bedtime_goal is not None and key in {"finale", "final_image"}:
         bedtime_softening_note = (
-            f"{bedtime_softening_note} Land this beat in service of the bedtime goal: {bedtime_goal}."
+            f"{bedtime_softening_note} Land this beat in service of the bedtime goal: "
+            f"{bedtime_goal}."
         )
 
     return GeneratedBeatSheetBeat(

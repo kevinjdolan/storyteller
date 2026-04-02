@@ -5,7 +5,7 @@ Return JSON only. Do not include markdown, comments, or prose outside the schema
 Requirements:
 - Produce exactly the requested number of pitches.
 - Keep every pitch clearly distinct from the others. Vary the story engine, inciting incident, emotional repair path, and image system.
-- Keep the tone bedtime-safe: wonder, mystery, or adventure are welcome, but distress should stay gentle and quickly reassuring.
+- Follow the shared bedtime safety policy below while still leaving room for wonder, mystery, and adventure.
 - Respect `generation_goal` from the context:
   - if `generation_goal` is `alternatives`, produce fresh options that explore meaningfully different story lanes
   - if `generation_goal` is `refinement`, preserve the referenced pitch's core bedtime premise while applying the requested guidance
@@ -17,6 +17,9 @@ Requirements:
 - Avoid trivial rewrites where only a noun or adjective changes.
 - If an existing selected pitch is provided for `alternatives`, generate options that feel meaningfully different from it.
 - If an existing selected pitch is provided for `refinement`, keep the emotional lane recognizable while applying the requested change.
+
+Bedtime guidance:
+$bedtime_guidelines_fragment
 
 Pitch generation context:
 $pitch_context_json

@@ -4,12 +4,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.bedtime_guidelines import (
+    DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
+    normalize_bedtime_guideline_preset_key,
+)
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.character_generation import ExistingCharacterSheetContext
 from app.models.pitch_generation import ExistingSelectedPitchContext
 
 BEAT_SHEET_GENERATION_SCHEMA_VERSION = 1
-BEAT_SHEET_GENERATION_PROMPT_VERSION = "beat_sheet_generation.v1"
+BEAT_SHEET_GENERATION_PROMPT_VERSION = "beat_sheet_generation.v2"
 SAVE_THE_CAT_BEAT_SEQUENCE: tuple[tuple[str, str], ...] = (
     ("opening_image", "Opening Image"),
     ("theme_stated", "Theme Stated"),
@@ -114,6 +118,7 @@ class BeatSheetGenerationPromptContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     generation_goal: Literal["initial", "refinement"] = "initial"
+    bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
     guidance: str | None = None
     instructions: str | None = None
     focus_beats: list[str] = Field(default_factory=list)
@@ -164,6 +169,12 @@ class BeatSheetGenerationPromptContext(BaseModel):
         if value is None:
             return None
         return normalize_optional_beat_text(str(value))
+
+    @field_validator("bedtime_guideline_preset_key", mode="before")
+    @classmethod
+    def validate_bedtime_guideline_preset_key(cls, value: Any) -> str:
+        text = None if value is None else str(value)
+        return normalize_bedtime_guideline_preset_key(text)
 
     @field_validator("focus_beats", mode="before")
     @classmethod

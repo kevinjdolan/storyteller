@@ -4,11 +4,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.bedtime_guidelines import (
+    DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY,
+    normalize_bedtime_guideline_preset_key,
+)
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.pitch_generation import ExistingSelectedPitchContext
 
 CHARACTER_GENERATION_SCHEMA_VERSION = 1
-CHARACTER_GENERATION_PROMPT_VERSION = "character_generation.v1"
+CHARACTER_GENERATION_PROMPT_VERSION = "character_generation.v2"
 
 
 def normalize_optional_character_text(value: str | None) -> str | None:
@@ -125,6 +129,7 @@ class CharacterGenerationPromptContext(BaseModel):
 
     candidate_count: int = Field(default=3, ge=1, le=5)
     generation_goal: Literal["alternatives", "refinement"] = "alternatives"
+    bedtime_guideline_preset_key: str = DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY
     guidance: str | None = None
     change_summary: str | None = None
     focus_character_names: list[str] = Field(default_factory=list)
@@ -172,6 +177,12 @@ class CharacterGenerationPromptContext(BaseModel):
         if value is None:
             return None
         return normalize_optional_character_text(str(value))
+
+    @field_validator("bedtime_guideline_preset_key", mode="before")
+    @classmethod
+    def validate_bedtime_guideline_preset_key(cls, value: Any) -> str:
+        text = None if value is None else str(value)
+        return normalize_bedtime_guideline_preset_key(text)
 
     @field_validator("focus_character_names", mode="before")
     @classmethod
