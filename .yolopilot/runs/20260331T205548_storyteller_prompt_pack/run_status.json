@@ -56,9 +56,10 @@
     "53-outline-drill-down.md",
     "54-chapter-scene-card-editor.md",
     "55-continuity-bible.md",
-    "56-revision-history-and-branches.md"
+    "56-revision-history-and-branches.md",
+    "57-composition-prompt-assembly.md"
   ],
-  "current_success_ref": "6024a0cbf9d2b0217277330f2e066c41417112b8",
+  "current_success_ref": "83fee63eed64ccae8de33ddf88288257004bcd53",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",

@@ -1,0 +1,119 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/app/services/composition.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/app/services/story_generation.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python3 -m pytest tests/test_composition_prompt_assembly.py tests/test_story_tools.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python3 -m ruff check app tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python -m ruff check app tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python -m ruff check --fix app/models/__init__.py app/services/__init__.py app/services/composition_prompt_assembly.py tests/test_composition_prompt_assembly.py tests/test_story_tools.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python -m ruff check app/models/__init__.py app/services/__init__.py app/services/composition_prompt_assembly.py tests/test_composition_prompt_assembly.py tests/test_story_tools.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python -m ruff format --check app tests'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 231,
+    "file_paths": [
+      "backend/app/models/composition_prompt.py",
+      "backend/app/services/composition_prompt_assembly.py",
+      "backend/app/models/__init__.py",
+      "backend/app/services/__init__.py",
+      "backend/app/services/story_tools.py",
+      "backend/tests/test_composition_prompt_assembly.py",
+      "backend/tests/test_story_tools.py",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/57_composition_prompt_assembly/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4e0c-5c2f-7fa0-b65a-5539a1478e17",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 8065152,
+      "input_tokens": 8624174,
+      "output_tokens": 45745,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "83fee63eed64ccae8de33ddf88288257004bcd53",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "57-composition-prompt-assembly.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_57_composition_prompt_assembly",
+  "task_name_human": "57 composition prompt assembly",
+  "task_name_system": "57_composition_prompt_assembly",
+  "timing": {
+    "duration_seconds": 1061.0,
+    "finished_at": "2026-04-02T05:13:05-07:00",
+    "started_at": "2026-04-02T04:55:24-07:00"
+  }
+}
