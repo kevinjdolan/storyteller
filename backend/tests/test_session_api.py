@@ -2575,6 +2575,11 @@ def test_save_audio_settings_endpoint_persists_durable_audio_preferences(
     assert payload["snapshot"]["audio_settings"]["music_profile"] == "night_ambience"
     assert payload["snapshot"]["audio_settings"]["narration_volume"] == 88
     assert payload["snapshot"]["audio_settings"]["music_volume"] == 18
+    assert len(payload["snapshot"]["audio_settings"]["music_profile_options"]) == 3
+    assert (
+        payload["snapshot"]["audio_settings"]["mix_preview"]["strategy"]
+        == "curated_bed_ducked"
+    )
     assert (
         payload["snapshot"]["audio_settings"]["runtime_estimate"]["basis_source"]
         == "story_setup_target"

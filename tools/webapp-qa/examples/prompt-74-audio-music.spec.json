@@ -1,0 +1,60 @@
+{
+  "url": "http://frontend:8566/sessions/a059941d-503d-468f-94b5-fca2b62dc4f7?stage=audio",
+  "outputPath": "/workspace/.artifacts/webapp-qa/prompt-74-audio-music-on.png",
+  "viewport": {
+    "width": 1600,
+    "height": 1800
+  },
+  "timeout": 20000,
+  "steps": [
+    {
+      "action": "waitForText",
+      "text": "Shape the narration pass before the audio render starts."
+    },
+    {
+      "action": "assertText",
+      "text": "Narration in planning"
+    },
+    {
+      "action": "assertText",
+      "text": "String drift"
+    },
+    {
+      "action": "assertText",
+      "text": "Music mix"
+    },
+    {
+      "action": "assertText",
+      "text": "Recommended bed level: 10-24%."
+    },
+    {
+      "action": "assertText",
+      "text": "String drift loops under the narration at -27.9 dB before ducking."
+    },
+    {
+      "action": "click",
+      "selector": "textarea"
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false
+    },
+    {
+      "action": "click",
+      "selector": "input[role='switch']"
+    },
+    {
+      "action": "assertText",
+      "text": "Narration will render without a background bed."
+    },
+    {
+      "action": "assertText",
+      "text": "Music off"
+    },
+    {
+      "action": "screenshot",
+      "outputPath": "/workspace/.artifacts/webapp-qa/prompt-74-audio-music-off.png",
+      "fullPage": false
+    }
+  ]
+}

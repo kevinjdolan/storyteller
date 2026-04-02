@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type {
+  AudioMusicProfileOptionView,
   AudioSettingsView,
   SessionHistoryEvent,
   SessionSnapshot,
@@ -88,23 +89,50 @@ const narrationStyleOptions = [
   },
 ] as const
 
-const musicOptions = [
+const fallbackMusicOptions: AudioMusicProfileOptionView[] = [
   {
-    value: 'lullaby_piano',
+    key: 'lullaby_piano',
     label: 'Lullaby piano',
     description: 'Simple keys under the voice without pulling focus.',
+    bedtime_use_case:
+      'Softest choice for tender reassurance and tucked-in endings.',
+    asset_file_name: 'lullaby_piano.wav',
+    loop_duration_seconds: 24,
+    recommended_music_volume: 24,
+    recommended_music_volume_min: 12,
+    recommended_music_volume_max: 28,
+    mix_note:
+      'Loops a sparse piano bed and fades out at the end of the narration.',
   },
   {
-    value: 'string_drift',
+    key: 'string_drift',
     label: 'String drift',
     description: 'Long bowed textures for wonder-heavy stories.',
+    bedtime_use_case:
+      'Best for spacious fantasy or travel scenes that need more glow.',
+    asset_file_name: 'string_drift.wav',
+    loop_duration_seconds: 24,
+    recommended_music_volume: 20,
+    recommended_music_volume_min: 10,
+    recommended_music_volume_max: 24,
+    mix_note:
+      'Uses a lower base gain so the texture stays behind the narration.',
   },
   {
-    value: 'night_ambience',
+    key: 'night_ambience',
     label: 'Night ambience',
     description: 'Low environmental bed for harbor, forest, or sky scenes.',
+    bedtime_use_case:
+      'Fits scene-setting passages that want a steady sense of place.',
+    asset_file_name: 'night_ambience.wav',
+    loop_duration_seconds: 24,
+    recommended_music_volume: 18,
+    recommended_music_volume_min: 8,
+    recommended_music_volume_max: 22,
+    mix_note:
+      'Keeps the bed darkest and quietest so consonants remain easy to hear.',
   },
-] as const
+] satisfies AudioMusicProfileOptionView[]
 
 function buildFormState(snapshot: SessionSnapshot): AudioSettingsFormState {
   const audioSettings = snapshot.audio_settings
@@ -168,12 +196,17 @@ function formatMinutesRange(runtimeEstimate: AudioSettingsView['runtime_estimate
 function getSelectedOptionDescription<
   TValue extends string,
   TOption extends {
-    value: TValue
     label: string
     description: string
   },
 >(options: ReadonlyArray<TOption>, value: TValue) {
-  return options.find((option) => option.value === value)?.description ?? null
+  return (
+    options.find((option) => {
+      const optionValue =
+        'value' in option ? option.value : 'key' in option ? option.key : null
+      return optionValue === value
+    })?.description ?? null
+  )
 }
 
 export function AudioSettingsStage({
@@ -190,7 +223,9 @@ export function AudioSettingsStage({
   const savedState = buildFormState(snapshot)
   const isLocked = selectedStage.availability === 'locked'
   const isDirty = !audioSettingsMatch(formState, savedState)
+  const musicOptions = snapshot.audio_settings?.music_profile_options ?? fallbackMusicOptions
   const persistedRuntimeEstimate = snapshot.audio_settings?.runtime_estimate
+  const persistedMixPreview = snapshot.audio_settings?.mix_preview
   const runtimeEstimate = deriveAudioRuntimeEstimatePreview(
     persistedRuntimeEstimate,
     formState.playbackSpeed,
@@ -217,6 +252,13 @@ export function AudioSettingsStage({
     musicOptions,
     formState.musicProfile,
   )
+  const selectedMusicOption =
+    musicOptions.find((option) => option.key === formState.musicProfile) ?? null
+  const isPersistedMixPreviewCurrent =
+    formState.includeBackgroundMusic === savedState.includeBackgroundMusic &&
+    formState.musicProfile === savedState.musicProfile &&
+    formState.musicVolume === savedState.musicVolume &&
+    formState.narrationVolume === savedState.narrationVolume
 
   useEffect(() => {
     setFormState(buildFormState(snapshot))
@@ -288,19 +330,19 @@ export function AudioSettingsStage({
             label="Voice"
             title={voiceOptions.find((option) => option.value === formState.voiceKey)?.label}
           />
-          <SummaryPanel
-            description={
-              formState.includeBackgroundMusic
-                ? musicDescription
-                : 'The narration will render dry, with no background bed under the voice.'
-            }
-            label="Music"
-            title={
-              formState.includeBackgroundMusic
-                ? musicOptions.find((option) => option.value === formState.musicProfile)?.label
-                : 'Music off'
-            }
-          />
+            <SummaryPanel
+              description={
+                formState.includeBackgroundMusic
+                  ? musicDescription
+                  : 'The narration will render dry, with no background bed under the voice.'
+              }
+              label="Music"
+              title={
+                formState.includeBackgroundMusic
+                  ? selectedMusicOption?.label ?? 'Music on'
+                  : 'Music off'
+              }
+            />
           <SummaryPanel
             description={
               runtimeSummary != null
@@ -360,6 +402,22 @@ export function AudioSettingsStage({
                 </p>
               </InlineHelp>
             )}
+
+            {formState.includeBackgroundMusic && selectedMusicOption != null ? (
+              <InlineHelp title="Music mix" tone="info">
+                <p>
+                  {selectedMusicOption.bedtime_use_case}
+                </p>
+                <p>
+                  {selectedMusicOption.mix_note} Recommended bed level:{' '}
+                  {selectedMusicOption.recommended_music_volume_min}-
+                  {selectedMusicOption.recommended_music_volume_max}%.
+                </p>
+                {isPersistedMixPreviewCurrent && persistedMixPreview != null ? (
+                  <p>{persistedMixPreview.summary}</p>
+                ) : null}
+              </InlineHelp>
+            ) : null}
 
             {snapshot.active_audio_job != null ? (
               <InlineHelp title="Active render" tone="warning">
@@ -501,7 +559,7 @@ export function AudioSettingsStage({
               }}
               options={musicOptions.map((option) => ({
                 label: option.label,
-                value: option.value,
+                value: option.key,
               }))}
               value={formState.musicProfile}
             />

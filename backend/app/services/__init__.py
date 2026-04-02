@@ -22,6 +22,15 @@ from app.services.audio_jobs import (
     build_wav_bytes,
     read_wav_bytes,
 )
+from app.services.audio_mixing import AudioMixingError, AudioMixResult, FfmpegAudioMixer
+from app.services.audio_music import (
+    AudioMixPlan,
+    build_audio_mix_plan,
+    build_audio_mix_preview,
+    deserialize_audio_mix_plan,
+    get_background_music_track,
+    list_audio_music_profile_options,
+)
 from app.services.beat_sheet_generation import (
     BeatSheetGenerationService,
     build_beat_sheet_model_output,
@@ -109,6 +118,9 @@ __all__ = [
     "AssetServiceError",
     "AssetSessionNotFoundError",
     "AUDIO_RUNTIME_JOB_TYPE",
+    "AudioMixPlan",
+    "AudioMixResult",
+    "AudioMixingError",
     "AudioJobNotFoundError",
     "AudioJobService",
     "AudioJobServiceError",
@@ -161,6 +173,8 @@ __all__ = [
     "apply_brief_normalization_overrides",
     "build_beat_sheet_model_output",
     "build_brief_model_output",
+    "build_audio_mix_plan",
+    "build_audio_mix_preview",
     "build_silence_pcm",
     "build_wav_bytes",
     "build_character_model_output",
@@ -171,9 +185,13 @@ __all__ = [
     "evaluate_composition_segment_draft",
     "evaluate_beat_sheet",
     "evaluate_pitch_batch",
+    "deserialize_audio_mix_plan",
+    "FfmpegAudioMixer",
+    "get_background_music_track",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
     "get_story_workflow_tool_schema_bundle",
+    "list_audio_music_profile_options",
     "read_wav_bytes",
     "synthesize_normalized_summary",
     "HeuristicCompositionSegmentWriter",

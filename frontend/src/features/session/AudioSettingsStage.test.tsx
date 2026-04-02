@@ -194,4 +194,65 @@ describe('AudioSettingsStage', () => {
       origin: 'workspace',
     })
   })
+
+  it('renders backend-provided music catalog guidance when music is enabled', () => {
+    const snapshotWithMusic: SessionSnapshot = {
+      ...sampleSnapshot,
+      audio_settings: {
+        ...sampleSnapshot.audio_settings!,
+        include_background_music: true,
+        music_profile: 'night_ambience',
+        music_profile_options: [
+          {
+            key: 'night_ambience',
+            label: 'Night ambience',
+            description: 'Low environmental bed for harbor, forest, or sky scenes.',
+            bedtime_use_case:
+              'Fits scene-setting passages that want a steady sense of place.',
+            asset_file_name: 'night_ambience.wav',
+            loop_duration_seconds: 24,
+            recommended_music_volume: 18,
+            recommended_music_volume_min: 8,
+            recommended_music_volume_max: 22,
+            mix_note:
+              'Keeps the bed darkest and quietest so consonants remain easy to hear.',
+          },
+        ],
+        mix_preview: {
+          strategy: 'curated_bed_ducked',
+          summary:
+            'Night ambience loops under the narration at -30.9 dB before ducking. Voice gain -1.1 dB, 8:1 ducking, and an 8s fade out.',
+          track_key: 'night_ambience',
+          track_label: 'Night ambience',
+          track_description:
+            'Low environmental bed for harbor, forest, or sky scenes.',
+          narration_gain_db: -1.1,
+          music_gain_db: -30.9,
+          ducking_ratio: 8,
+          ducking_threshold: 0.05,
+          fade_out_seconds: 8,
+          loop_duration_seconds: 24,
+        },
+      },
+    }
+
+    renderWithAppProviders(
+      <AudioSettingsStage
+        onSaveAudioSettings={vi.fn()}
+        selectedStage={selectedStage}
+        snapshot={snapshotWithMusic}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        'Fits scene-setting passages that want a steady sense of place.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Night ambience loops under the narration at -30.9 dB before ducking\./,
+      ),
+    ).toBeInTheDocument()
+  })
 })

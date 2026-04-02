@@ -1464,6 +1464,11 @@ def test_save_audio_settings_persists_durable_audio_plan_and_invalidates_stale_a
     assert result.snapshot.audio_settings.guidance_notes == (
         "Ease off even more during the final chapter."
     )
+    assert result.snapshot.audio_settings.music_profile_options is not None
+    assert len(result.snapshot.audio_settings.music_profile_options) == 3
+    assert result.snapshot.audio_settings.mix_preview is not None
+    assert result.snapshot.audio_settings.mix_preview.strategy == "curated_bed_ducked"
+    assert "night ambience" in result.snapshot.audio_settings.mix_preview.summary.lower()
     assert result.snapshot.audio_settings.runtime_estimate is not None
     assert baseline_snapshot.audio_settings.runtime_estimate is not None
     assert (

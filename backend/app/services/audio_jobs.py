@@ -39,6 +39,8 @@ from app.models import (
 )
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
 from app.services.assets import SessionAssetService
+from app.services.audio_mixing import AudioMixingError, AudioMixResult, FfmpegAudioMixer
+from app.services.audio_music import build_audio_mix_plan, deserialize_audio_mix_plan
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobService
 from app.services.model_usage import ModelUsageContext, SessionModelUsageService
@@ -88,6 +90,7 @@ class AudioJobService:
         *,
         object_storage: ObjectStorageService | None = None,
         tts_adapter: NarrationTextToSpeechAdapter | None = None,
+        audio_mixer: FfmpegAudioMixer | None = None,
     ) -> None:
         self._session = session
         self._events = SessionEventLogService(session)
@@ -96,6 +99,7 @@ class AudioJobService:
         self._sessions = SessionService(session)
         self._object_storage = object_storage
         self._tts_adapter = tts_adapter
+        self._audio_mixer = audio_mixer
 
     def start_job(
         self,
@@ -107,6 +111,7 @@ class AudioJobService:
         actor: SessionEventActor | None = None,
     ) -> AudioJobStartResult:
         settings_config = get_settings()
+        mix_plan = build_audio_mix_plan(settings)
         job = AudioJob(
             session_id=session_id,
             source_composition_job_id=source_composition_job_id,
@@ -129,6 +134,7 @@ class AudioJobService:
                 "narration_volume": settings.narration_volume,
                 "music_volume": settings.music_volume,
                 "guidance_notes": settings.guidance_notes,
+                "music_mix": mix_plan.to_config_json(),
             },
         )
         self._session.add(job)
@@ -303,6 +309,9 @@ class AudioJobService:
                     "actual_duration_seconds": final_result["duration_seconds"],
                     "final_audio_asset_id": final_result["asset_id"],
                     "final_audio_object_path": final_result["object_path"],
+                    "mix_strategy": final_result["mix_strategy"],
+                    "mix_applied": final_result["mix_applied"],
+                    "narration_master_object_path": final_result["narration_master_object_path"],
                 }
                 self._events.record_audio_progress(
                     job.session_id,
@@ -320,12 +329,9 @@ class AudioJobService:
                     stage=WorkflowStage.AUDIO,
                     status=WorkflowStageState.COMPLETED,
                     detail=(
-                        "Narration finished and a final audio asset is ready."
-                        if not job.include_background_music
-                        else (
-                            "Narration finished and a final voice render is ready. "
-                            "Background music settings remain recorded in the job metadata."
-                        )
+                        "Narration finished and a final mixed audio asset is ready."
+                        if final_result["mix_applied"]
+                        else "Narration finished and a final audio asset is ready."
                     ),
                     actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
@@ -337,6 +343,8 @@ class AudioJobService:
                     "total_segments": total_segments,
                     "final_asset_id": final_result["asset_id"],
                     "final_audio_object_path": final_result["object_path"],
+                    "mix_applied": final_result["mix_applied"],
+                    "mix_strategy": final_result["mix_strategy"],
                 }
             except Exception as exc:
                 if job.status not in {JobStatus.CANCELLED, JobStatus.FAILED}:
@@ -470,26 +478,31 @@ class AudioJobService:
             raise AudioJobStateError("audio job completed without any rendered segments")
 
         first = rendered_segments[0].synthesis
-        final_pcm = bytearray()
-        for rendered in rendered_segments:
-            if rendered.synthesis.sample_rate_hz != first.sample_rate_hz:
-                raise AudioJobStateError("audio segments must share a single sample rate")
-            final_pcm.extend(rendered.synthesis.pcm_audio_bytes)
-            if rendered.segment.pause_after_seconds > 0:
-                final_pcm.extend(
-                    build_silence_pcm(
-                        duration_seconds=rendered.segment.pause_after_seconds,
-                        sample_rate_hz=rendered.synthesis.sample_rate_hz,
-                        channel_count=rendered.synthesis.channel_count,
-                        sample_width_bytes=rendered.synthesis.sample_width_bytes,
-                    )
-                )
+        narration_master_wav_bytes = self._build_narration_master_wav(rendered_segments)
+        mix_plan = self._read_audio_mix_plan(job)
+        narration_master_location = None
+        mix_result = AudioMixResult(
+            mixed_wav_bytes=narration_master_wav_bytes,
+            output_duration_seconds=_wav_duration_seconds(narration_master_wav_bytes),
+            ffmpeg_command=None,
+        )
 
-        final_wav_bytes = build_wav_bytes(
-            bytes(final_pcm),
-            sample_rate_hz=first.sample_rate_hz,
-            channel_count=first.channel_count,
-            sample_width_bytes=first.sample_width_bytes,
+        if mix_plan.should_mix:
+            narration_master_location = self._persist_narration_master_debug_artifact(
+                job=job,
+                narration_master_wav_bytes=narration_master_wav_bytes,
+            )
+            try:
+                mix_result = self._resolve_audio_mixer().mix(
+                    narration_master_wav_bytes,
+                    plan=mix_plan,
+                )
+            except AudioMixingError as exc:
+                raise AudioJobStateError(str(exc)) from exc
+
+        final_wav_bytes = mix_result.mixed_wav_bytes
+        _, final_sample_rate_hz, final_channel_count, final_sample_width_bytes = read_wav_bytes(
+            final_wav_bytes
         )
         location = self._storage().paths.final_audio(
             session_id=job.session_id,
@@ -523,20 +536,44 @@ class AudioJobService:
                 "segment_count": len(rendered_segments),
                 "include_background_music": job.include_background_music,
                 "music_profile": job.music_profile,
-                "sample_rate_hz": first.sample_rate_hz,
-                "channel_count": first.channel_count,
-                "sample_width_bytes": first.sample_width_bytes,
+                "sample_rate_hz": final_sample_rate_hz,
+                "channel_count": final_channel_count,
+                "sample_width_bytes": final_sample_width_bytes,
+                "mix_strategy": mix_plan.strategy,
+                "mix_summary": mix_plan.summary,
+                "music_track_label": mix_plan.music_track_label,
+                "music_track_description": mix_plan.music_track_description,
+                "music_track_file_name": mix_plan.music_track_file_name,
+                "narration_gain_db": mix_plan.narration_gain_db,
+                "music_gain_db": mix_plan.music_gain_db,
+                "ducking_ratio": mix_plan.ducking_ratio,
+                "ducking_threshold": mix_plan.ducking_threshold,
+                "ducking_attack_ms": mix_plan.ducking_attack_ms,
+                "ducking_release_ms": mix_plan.ducking_release_ms,
+                "fade_out_seconds": mix_plan.fade_out_seconds,
+                "loop_duration_seconds": mix_plan.loop_duration_seconds,
                 "pause_seconds_total": sum(
                     rendered.segment.pause_after_seconds for rendered in rendered_segments
                 ),
+                "narration_master_bucket": (
+                    narration_master_location.bucket
+                    if narration_master_location is not None
+                    else None
+                ),
+                "narration_master_object_path": (
+                    narration_master_location.key if narration_master_location is not None else None
+                ),
+                "ffmpeg_command": mix_result.ffmpeg_command,
             },
         )
         return {
             "asset_id": asset.id,
             "object_path": asset.object_path,
-            "duration_seconds": round(
-                len(final_pcm)
-                / (first.sample_rate_hz * first.channel_count * first.sample_width_bytes)
+            "duration_seconds": round(mix_result.output_duration_seconds),
+            "mix_applied": mix_plan.should_mix,
+            "mix_strategy": mix_plan.strategy,
+            "narration_master_object_path": (
+                narration_master_location.key if narration_master_location is not None else None
             ),
         }
 
@@ -652,6 +689,60 @@ class AudioJobService:
             if segment.status == JobStatus.COMPLETED
         )
 
+    def _build_narration_master_wav(
+        self,
+        rendered_segments: Sequence[_RenderedNarrationSegment],
+    ) -> bytes:
+        first = rendered_segments[0].synthesis
+        final_pcm = bytearray()
+        for rendered in rendered_segments:
+            if rendered.synthesis.sample_rate_hz != first.sample_rate_hz:
+                raise AudioJobStateError("audio segments must share a single sample rate")
+            if rendered.synthesis.channel_count != first.channel_count:
+                raise AudioJobStateError("audio segments must share a single channel layout")
+            if rendered.synthesis.sample_width_bytes != first.sample_width_bytes:
+                raise AudioJobStateError("audio segments must share a single sample width")
+            final_pcm.extend(rendered.synthesis.pcm_audio_bytes)
+            if rendered.segment.pause_after_seconds > 0:
+                final_pcm.extend(
+                    build_silence_pcm(
+                        duration_seconds=rendered.segment.pause_after_seconds,
+                        sample_rate_hz=rendered.synthesis.sample_rate_hz,
+                        channel_count=rendered.synthesis.channel_count,
+                        sample_width_bytes=rendered.synthesis.sample_width_bytes,
+                    )
+                )
+
+        return build_wav_bytes(
+            bytes(final_pcm),
+            sample_rate_hz=first.sample_rate_hz,
+            channel_count=first.channel_count,
+            sample_width_bytes=first.sample_width_bytes,
+        )
+
+    def _persist_narration_master_debug_artifact(
+        self,
+        *,
+        job: AudioJob,
+        narration_master_wav_bytes: bytes,
+    ):
+        location = self._storage().paths.debug_artifact(
+            session_id=job.session_id,
+            artifact_group="audio-mix",
+            artifact_name=f"{job.id}-narration-master",
+            extension="wav",
+        )
+        self._storage().upload_bytes(
+            location,
+            narration_master_wav_bytes,
+            content_type="audio/wav",
+        )
+        return location
+
+    def _read_audio_mix_plan(self, job: AudioJob):
+        config = _read_mapping(job.config_json)
+        return deserialize_audio_mix_plan(config.get("music_mix"))
+
     def _resolve_tts_adapter(self) -> tuple[NarrationTextToSpeechAdapter, bool]:
         if self._tts_adapter is not None:
             return self._tts_adapter, False
@@ -664,6 +755,12 @@ class AudioJobService:
             ),
             True,
         )
+
+    def _resolve_audio_mixer(self) -> FfmpegAudioMixer:
+        if self._audio_mixer is not None:
+            return self._audio_mixer
+        self._audio_mixer = FfmpegAudioMixer()
+        return self._audio_mixer
 
     def _storage(self) -> ObjectStorageService:
         if self._object_storage is None:
@@ -724,6 +821,15 @@ def read_wav_bytes(wav_bytes: bytes) -> tuple[bytes, int, int, int]:
         sample_width_bytes = wav_file.getsampwidth()
         pcm_audio_bytes = wav_file.readframes(wav_file.getnframes())
     return pcm_audio_bytes, sample_rate_hz, channel_count, sample_width_bytes
+
+
+def _wav_duration_seconds(wav_bytes: bytes) -> float:
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+        frame_count = wav_file.getnframes()
+        sample_rate_hz = wav_file.getframerate()
+    if sample_rate_hz <= 0:
+        raise AudioJobStateError("wav bytes must contain a valid sample rate")
+    return round(frame_count / sample_rate_hz, 3)
 
 
 def build_silence_pcm(

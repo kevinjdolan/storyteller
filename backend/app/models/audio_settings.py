@@ -26,6 +26,7 @@ class AudioMusicProfile(str, Enum):
 
 AudioRuntimeEstimateSource = Literal["composition_segments", "story_setup_target", "unknown"]
 AudioNarrationPacingBand = Literal["roomy", "balanced", "brisk"]
+AudioMixStrategy = Literal["voice_only", "curated_bed_ducked"]
 
 DEFAULT_AUDIO_VOICE_KEY = AudioVoiceKey.MOONBEAM
 DEFAULT_AUDIO_NARRATION_STYLE = AudioNarrationStyle.CALM
@@ -38,6 +39,33 @@ DEFAULT_AUDIO_MUSIC_VOLUME = 24
 
 class AudioSettingsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class AudioMusicProfileOptionView(AudioSettingsModel):
+    key: AudioMusicProfile
+    label: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    bedtime_use_case: str = Field(min_length=1)
+    asset_file_name: str = Field(min_length=1)
+    loop_duration_seconds: int = Field(ge=1)
+    recommended_music_volume: int = Field(ge=0, le=100)
+    recommended_music_volume_min: int = Field(ge=0, le=100)
+    recommended_music_volume_max: int = Field(ge=0, le=100)
+    mix_note: str = Field(min_length=1)
+
+
+class AudioMixPreviewView(AudioSettingsModel):
+    strategy: AudioMixStrategy
+    summary: str = Field(min_length=1)
+    track_key: AudioMusicProfile | None = None
+    track_label: str | None = None
+    track_description: str | None = None
+    narration_gain_db: float = Field(ge=-80, le=6)
+    music_gain_db: float | None = Field(default=None, ge=-80, le=6)
+    ducking_ratio: float | None = Field(default=None, ge=1)
+    ducking_threshold: float | None = Field(default=None, gt=0, le=1)
+    fade_out_seconds: int | None = Field(default=None, ge=0, le=60)
+    loop_duration_seconds: int | None = Field(default=None, ge=0)
 
 
 class AudioRuntimeEstimateView(AudioSettingsModel):
@@ -69,4 +97,6 @@ class AudioSettingsView(AudioSettingsModel):
     narration_volume: int = Field(default=DEFAULT_AUDIO_NARRATION_VOLUME, ge=0, le=100)
     music_volume: int = Field(default=DEFAULT_AUDIO_MUSIC_VOLUME, ge=0, le=100)
     guidance_notes: str | None = None
+    music_profile_options: list[AudioMusicProfileOptionView] | None = None
+    mix_preview: AudioMixPreviewView | None = None
     runtime_estimate: AudioRuntimeEstimateView | None = None

@@ -63,6 +63,7 @@ from app.services.audio_settings import (
     build_audio_settings_event_summary,
     build_audio_settings_stage_detail,
     build_audio_settings_view,
+    hydrate_audio_settings_view,
     persist_audio_settings,
 )
 from app.services.beat_sheet_generation import (
@@ -730,15 +731,14 @@ class SessionService:
                 ),
             }
         )
-        next_settings = next_settings.model_copy(
-            update={
-                "runtime_estimate": build_audio_runtime_estimate(
-                    composition_segments=aggregate.composition_segments,
-                    selected_story_setup=aggregate.selected_story_setup,
-                    selected_story_outline=aggregate.selected_story_outline,
-                    playback_speed=next_settings.playback_speed,
-                ),
-            }
+        next_settings = hydrate_audio_settings_view(
+            next_settings,
+            runtime_estimate=build_audio_runtime_estimate(
+                composition_segments=aggregate.composition_segments,
+                selected_story_setup=aggregate.selected_story_setup,
+                selected_story_outline=aggregate.selected_story_outline,
+                playback_speed=next_settings.playback_speed,
+            ),
         )
 
         changed_fields = [

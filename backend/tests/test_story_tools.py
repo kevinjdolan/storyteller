@@ -68,6 +68,7 @@ from app.services import (
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
 )
+from app.services.audio_mixing import AudioMixResult
 from app.services.composition_jobs import (
     GeneratedCompositionSegmentDraft,
     _build_composition_summary_message,
@@ -451,6 +452,19 @@ class RecordingTextToSpeechAdapter:
 
     def close(self) -> None:
         return None
+
+
+class RecordingAudioMixer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[bytes, object]] = []
+
+    def mix(self, narration_wav_bytes: bytes, *, plan) -> AudioMixResult:
+        self.calls.append((narration_wav_bytes, plan))
+        return AudioMixResult(
+            mixed_wav_bytes=narration_wav_bytes,
+            output_duration_seconds=0.2,
+            ffmpeg_command="ffmpeg-test -filter_complex sidechaincompress",
+        )
 
 
 def _build_test_object_storage() -> tuple[FakeGCSJsonAPI, httpx.Client, ObjectStorageService]:
@@ -860,6 +874,61 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
         }
 
         assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: Path) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    adapter = RecordingTextToSpeechAdapter()
+    audio_mixer = RecordingAudioMixer()
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[220, 180],
+            )
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={
+                    "include_background_music": True,
+                    "music_profile": "night_ambience",
+                },
+            )
+
+        with session_factory() as session:
+            run_result = AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=adapter,
+                audio_mixer=audio_mixer,
+            ).run_job(result.audio_job_id)
+
+        with session_factory() as session:
+            audio_job = session.get(AudioJob, result.audio_job_id)
+            final_audio_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.audio_job_id == result.audio_job_id,
+                    SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                    SessionAsset.status == AssetStatus.READY,
+                )
+            ).scalar_one()
+
+        assert audio_job is not None
+        assert audio_job.status == JobStatus.COMPLETED
+        assert len(audio_mixer.calls) == 1
+        assert audio_mixer.calls[0][1].music_profile.value == "night_ambience"
+        assert run_result["mix_applied"] is True
+        assert run_result["mix_strategy"] == "curated_bed_ducked"
+        assert final_audio_asset.metadata_json["mix_strategy"] == "curated_bed_ducked"
+        assert final_audio_asset.metadata_json["music_track_file_name"] == "night_ambience.wav"
+        assert final_audio_asset.metadata_json["narration_master_object_path"] is not None
+        assert "sidechaincompress" in (final_audio_asset.metadata_json["ffmpeg_command"] or "")
     finally:
         object_storage.close()
         client.close()

@@ -21,6 +21,10 @@ from app.services.audio_length_estimation import (
     AudioLengthEstimateInput,
     estimate_audio_length,
 )
+from app.services.audio_music import (
+    build_audio_mix_preview,
+    list_audio_music_profile_options,
+)
 
 AUDIO_VOICE_LABELS: dict[AudioVoiceKey, str] = {
     AudioVoiceKey.MOONBEAM: "Moonbeam",
@@ -88,14 +92,27 @@ def build_audio_settings_view(
         music_volume=_coerce_volume(story_session.audio_music_volume, DEFAULT_AUDIO_MUSIC_VOLUME),
         guidance_notes=_normalize_optional_text(story_session.audio_guidance_notes),
     )
+    return hydrate_audio_settings_view(
+        settings,
+        runtime_estimate=build_audio_runtime_estimate(
+            composition_segments=composition_segments,
+            selected_story_setup=selected_story_setup,
+            selected_story_outline=selected_story_outline,
+            playback_speed=settings.playback_speed,
+        ),
+    )
+
+
+def hydrate_audio_settings_view(
+    settings: AudioSettingsView,
+    *,
+    runtime_estimate: AudioRuntimeEstimateView | None = None,
+) -> AudioSettingsView:
     return settings.model_copy(
         update={
-            "runtime_estimate": build_audio_runtime_estimate(
-                composition_segments=composition_segments,
-                selected_story_setup=selected_story_setup,
-                selected_story_outline=selected_story_outline,
-                playback_speed=settings.playback_speed,
-            )
+            "music_profile_options": list_audio_music_profile_options(),
+            "mix_preview": build_audio_mix_preview(settings),
+            "runtime_estimate": runtime_estimate,
         }
     )
 
@@ -205,6 +222,9 @@ def build_audio_settings_stage_detail(
             else "Music off."
         ),
     ]
+
+    if settings.mix_preview is not None and settings.include_background_music:
+        detail.append(f"Mix plan: {settings.mix_preview.summary}")
 
     if settings.runtime_estimate is not None:
         minimum_minutes = max(1, round(settings.runtime_estimate.minimum_duration_seconds / 60))

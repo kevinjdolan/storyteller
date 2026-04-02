@@ -447,6 +447,33 @@ export type AudioRuntimeEstimateView = {
   pacing_band: 'roomy' | 'balanced' | 'brisk'
 }
 
+export type AudioMusicProfileOptionView = {
+  key: 'lullaby_piano' | 'string_drift' | 'night_ambience'
+  label: string
+  description: string
+  bedtime_use_case: string
+  asset_file_name: string
+  loop_duration_seconds: number
+  recommended_music_volume: number
+  recommended_music_volume_min: number
+  recommended_music_volume_max: number
+  mix_note: string
+}
+
+export type AudioMixPreviewView = {
+  strategy: 'voice_only' | 'curated_bed_ducked'
+  summary: string
+  track_key?: AudioMusicProfileOptionView['key'] | null
+  track_label?: string | null
+  track_description?: string | null
+  narration_gain_db: number
+  music_gain_db?: number | null
+  ducking_ratio?: number | null
+  ducking_threshold?: number | null
+  fade_out_seconds?: number | null
+  loop_duration_seconds?: number | null
+}
+
 export type AudioSettingsView = {
   voice_key: 'moonbeam' | 'hearthside' | 'storykeeper'
   narration_style: 'calm' | 'hushed' | 'warm'
@@ -456,6 +483,8 @@ export type AudioSettingsView = {
   narration_volume: number
   music_volume: number
   guidance_notes?: string | null
+  music_profile_options?: AudioMusicProfileOptionView[] | null
+  mix_preview?: AudioMixPreviewView | null
   runtime_estimate?: AudioRuntimeEstimateView | null
 }
 
