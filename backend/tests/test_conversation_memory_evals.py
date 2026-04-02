@@ -195,6 +195,7 @@ def test_eval_user_preferences_keep_runtime_and_guidance_notes(db_session) -> No
         target_word_count=1800,
         target_runtime_minutes=12,
         chapter_count=3,
+        approximate_scene_count=9,
         chapter_style="three gentle chapters",
         guidance_notes="Let each chapter end on a calmer image than it began.",
         is_selected=True,
@@ -216,7 +217,7 @@ def test_eval_user_preferences_keep_runtime_and_guidance_notes(db_session) -> No
 
     assert latest is not None
     assert (
-        "Story setup: 1800 words, 12 minutes, 3 chapters, three gentle chapters"
+        "Story setup: 1800 words, 12 minutes, 3 chapters, about 9 scenes, three gentle chapters"
         in latest.summary_text
     )
     assert "Setup guidance: Let each chapter end on a calmer image than it began." in (
@@ -369,8 +370,10 @@ def test_eval_intent_parser_prompt_uses_durable_memory_summary_sections(db_sessi
     story_setup = StorySetup(
         session_id=snapshot.id,
         revision_number=1,
+        target_word_count=1600,
         target_runtime_minutes=10,
         chapter_count=2,
+        approximate_scene_count=7,
         guidance_notes="Keep the final page especially still and reassuring.",
         is_selected=True,
         accepted_at=now,
@@ -428,4 +431,7 @@ def test_eval_intent_parser_prompt_uses_durable_memory_summary_sections(db_sessi
     assert "Story decisions:" in rendered_prompt
     assert "User preferences:" in rendered_prompt
     assert "Unresolved questions:" in rendered_prompt
+    assert "Story setup: 1600 words, 10 minutes, 2 chapters, about 7 scenes" in (
+        rendered_prompt
+    )
     assert "Latest saved UI detail: Beat sheet: Soften the midpoint" in rendered_prompt
