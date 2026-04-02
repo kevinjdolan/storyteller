@@ -22,6 +22,11 @@ from app.services.jobs import (
     BackgroundJobServiceError,
     ClaimedBackgroundJob,
 )
+from app.services.session_hydration import (
+    SessionHydrationNotFoundError,
+    SessionHydrationService,
+    SessionHydrationServiceError,
+)
 from app.services.sessions import (
     InvalidStageTransitionError,
     SessionNotFoundError,
@@ -59,6 +64,9 @@ __all__ = [
     "SessionNotFoundError",
     "SessionAssetService",
     "SessionEventLogService",
+    "SessionHydrationNotFoundError",
+    "SessionHydrationService",
+    "SessionHydrationServiceError",
     "SessionService",
     "SessionServiceError",
     "StoryWorkflowActionRouter",

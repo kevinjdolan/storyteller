@@ -164,6 +164,31 @@ export function buildInitialSessionChatMessages(
         createdAt: snapshot.updated_at,
       }),
     )
+  } else if (snapshot.latest_audio_job?.status === 'failed') {
+    messages.push(
+      createSessionChatMessage({
+        id: 'audio-failed',
+        role: 'system',
+        body:
+          snapshot.latest_audio_job.error_message ??
+          snapshot.latest_audio_job.stop_reason ??
+          'The most recent narration run failed.',
+        createdAt: snapshot.latest_audio_job.updated_at ?? snapshot.updated_at,
+      }),
+    )
+  } else if (snapshot.latest_composition_job?.status === 'failed') {
+    messages.push(
+      createSessionChatMessage({
+        id: 'composition-failed',
+        role: 'system',
+        body:
+          snapshot.latest_composition_job.error_message ??
+          snapshot.latest_composition_job.stop_reason ??
+          'The most recent writing run failed.',
+        createdAt:
+          snapshot.latest_composition_job.updated_at ?? snapshot.updated_at,
+      }),
+    )
   } else {
     messages.push(
       createSessionChatMessage({

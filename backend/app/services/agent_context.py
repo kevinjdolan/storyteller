@@ -6,8 +6,12 @@ from app.models.session import SessionSnapshot
 from app.models.workflow import get_workflow_stage_definition
 
 
-def build_session_agent_context_summary(snapshot: SessionSnapshot) -> str:
-    if snapshot.conversation_memory is not None:
+def build_session_agent_context_summary(
+    snapshot: SessionSnapshot,
+    *,
+    use_conversation_memory: bool = True,
+) -> str:
+    if use_conversation_memory and snapshot.conversation_memory is not None:
         return snapshot.conversation_memory.summary_text
 
     lines = [
@@ -71,18 +75,20 @@ def build_session_agent_context_summary(snapshot: SessionSnapshot) -> str:
     if regeneration_stages:
         lines.append("Needs regeneration: " + ", ".join(regeneration_stages))
 
-    if snapshot.active_composition_job is not None:
+    composition_job = snapshot.active_composition_job or snapshot.latest_composition_job
+    if composition_job is not None:
         lines.append(
             "Composition job: "
-            f"{snapshot.active_composition_job.status} at "
-            f"{snapshot.active_composition_job.progress_percent:.1f}%"
+            f"{composition_job.status} at "
+            f"{composition_job.progress_percent:.1f}%"
         )
 
-    if snapshot.active_audio_job is not None:
+    audio_job = snapshot.active_audio_job or snapshot.latest_audio_job
+    if audio_job is not None:
         lines.append(
             "Audio job: "
-            f"{snapshot.active_audio_job.status}, "
-            f"voice={snapshot.active_audio_job.voice_key or 'unset'}"
+            f"{audio_job.status}, "
+            f"voice={audio_job.voice_key or 'unset'}"
         )
 
     return "\n".join(lines)

@@ -233,6 +233,18 @@ function mapJobStatusToStageState(
   return 'in_progress'
 }
 
+function isActiveJobStatus(
+  status:
+    | 'queued'
+    | 'in_progress'
+    | 'paused'
+    | 'completed'
+    | 'failed'
+    | 'cancelled',
+) {
+  return status === 'queued' || status === 'in_progress' || status === 'paused'
+}
+
 function applyJobStageUpdate(
   snapshot: SessionSnapshot,
   options: {
@@ -323,26 +335,35 @@ function applyJobProgressEvent(
 
   if (event.payload.job_kind === 'composition') {
     const currentProgress =
-      snapshot.active_composition_job?.progress_percent ?? 0
+      snapshot.active_composition_job?.progress_percent ??
+      snapshot.latest_composition_job?.progress_percent ??
+      0
     const nextProgress =
       event.type === 'job.progress'
         ? (event.payload.progress_percent ?? currentProgress)
         : event.payload.status === 'completed'
           ? 100
           : currentProgress
+    const nextJob = {
+      ...(snapshot.latest_composition_job ?? snapshot.active_composition_job),
+      id: event.payload.job_id,
+      status: event.payload.status,
+      progress_percent: nextProgress,
+      current_segment_index:
+        event.payload.current_segment_index ??
+        snapshot.latest_composition_job?.current_segment_index ??
+        snapshot.active_composition_job?.current_segment_index ??
+        null,
+      updated_at: event.created_at,
+    }
 
     return applyJobStageUpdate(
       {
         ...snapshot,
-        active_composition_job: {
-          id: event.payload.job_id,
-          status: event.payload.status,
-          progress_percent: nextProgress,
-          current_segment_index:
-            event.payload.current_segment_index ??
-            snapshot.active_composition_job?.current_segment_index ??
-            null,
-        },
+        latest_composition_job: nextJob,
+        active_composition_job: isActiveJobStatus(event.payload.status)
+          ? nextJob
+          : null,
       },
       {
         detail,
@@ -354,20 +375,38 @@ function applyJobProgressEvent(
     )
   }
 
+  const nextAudioJob = {
+    ...(snapshot.latest_audio_job ?? snapshot.active_audio_job),
+    id: event.payload.job_id,
+    status: event.payload.status,
+    voice_key:
+      snapshot.latest_audio_job?.voice_key ??
+      snapshot.active_audio_job?.voice_key ??
+      null,
+    estimated_duration_seconds:
+      event.type === 'job.progress'
+        ? (event.payload.estimated_duration_seconds ??
+          snapshot.latest_audio_job?.estimated_duration_seconds ??
+          snapshot.active_audio_job?.estimated_duration_seconds ??
+          null)
+        : (snapshot.latest_audio_job?.estimated_duration_seconds ??
+          snapshot.active_audio_job?.estimated_duration_seconds ??
+          null),
+    current_segment_index:
+      event.payload.current_segment_index ??
+      snapshot.latest_audio_job?.current_segment_index ??
+      snapshot.active_audio_job?.current_segment_index ??
+      null,
+    updated_at: event.created_at,
+  }
+
   return applyJobStageUpdate(
     {
       ...snapshot,
-      active_audio_job: {
-        id: event.payload.job_id,
-        status: event.payload.status,
-        voice_key: snapshot.active_audio_job?.voice_key ?? null,
-        estimated_duration_seconds:
-          event.type === 'job.progress'
-            ? (event.payload.estimated_duration_seconds ??
-              snapshot.active_audio_job?.estimated_duration_seconds ??
-              null)
-            : (snapshot.active_audio_job?.estimated_duration_seconds ?? null),
-      },
+      latest_audio_job: nextAudioJob,
+      active_audio_job: isActiveJobStatus(event.payload.status)
+        ? nextAudioJob
+        : null,
     },
     {
       detail,

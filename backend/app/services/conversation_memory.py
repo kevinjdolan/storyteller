@@ -193,6 +193,7 @@ def _build_story_decisions(aggregate: SessionAggregate) -> list[str]:
 
 def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
     preferences: list[str] = []
+    audio_job = _resolve_audio_resume_job(aggregate)
 
     if aggregate.selected_story_setup is not None:
         story_setup_summary = _build_story_setup_summary(aggregate)
@@ -205,18 +206,18 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
             + _truncate(aggregate.selected_story_setup.guidance_notes)
         )
 
-    if aggregate.active_audio_job is not None:
+    if audio_job is not None:
         audio_preferences = [
-            f"voice={aggregate.active_audio_job.voice_key or 'unset'}",
-            f"speed={aggregate.active_audio_job.playback_speed:g}",
+            f"voice={audio_job.voice_key or 'unset'}",
+            f"speed={audio_job.playback_speed:g}",
             (
                 "background_music=on"
-                if aggregate.active_audio_job.include_background_music
+                if audio_job.include_background_music
                 else "background_music=off"
             ),
         ]
-        if aggregate.active_audio_job.music_profile:
-            audio_preferences.append(f"music_profile={aggregate.active_audio_job.music_profile}")
+        if audio_job.music_profile:
+            audio_preferences.append(f"music_profile={audio_job.music_profile}")
         preferences.append("Narration settings: " + ", ".join(audio_preferences))
 
     return preferences
@@ -227,6 +228,8 @@ def _build_unresolved_questions(
     current_stage_state,
 ) -> list[str]:
     questions: list[str] = []
+    composition_job = _resolve_composition_resume_job(aggregate)
+    audio_job = _resolve_audio_resume_job(aggregate)
 
     if current_stage_state.detail and current_stage_state.status != WorkflowStageState.COMPLETED:
         stage_label = get_workflow_stage_definition(aggregate.session.current_stage).label
@@ -246,20 +249,20 @@ def _build_unresolved_questions(
     if latest_detail_summary is not None:
         questions.append(latest_detail_summary)
 
-    if aggregate.active_composition_job is not None:
+    if composition_job is not None:
         interruption = _build_job_interruption_summary(
             kind="Composition",
-            status=aggregate.active_composition_job.status,
-            stop_reason=aggregate.active_composition_job.stop_reason,
+            status=composition_job.status,
+            stop_reason=composition_job.stop_reason,
         )
         if interruption is not None:
             questions.append(interruption)
 
-    if aggregate.active_audio_job is not None:
+    if audio_job is not None:
         interruption = _build_job_interruption_summary(
             kind="Audio",
-            status=aggregate.active_audio_job.status,
-            stop_reason=aggregate.active_audio_job.stop_reason,
+            status=audio_job.status,
+            stop_reason=audio_job.stop_reason,
         )
         if interruption is not None:
             questions.append(interruption)
@@ -269,25 +272,37 @@ def _build_unresolved_questions(
 
 def _build_active_jobs(aggregate: SessionAggregate) -> list[str]:
     active_jobs: list[str] = []
+    composition_job = _resolve_composition_resume_job(aggregate)
+    audio_job = _resolve_audio_resume_job(aggregate)
 
-    if aggregate.active_composition_job is not None:
+    if composition_job is not None and composition_job.status in (
+        JobStatus.QUEUED,
+        JobStatus.IN_PROGRESS,
+        JobStatus.PAUSED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    ):
         job_summary = (
-            f"Composition job: {aggregate.active_composition_job.status.value} at "
-            f"{aggregate.active_composition_job.progress_percent:.1f}%"
+            f"Composition job: {composition_job.status.value} at "
+            f"{composition_job.progress_percent:.1f}%"
         )
-        if aggregate.active_composition_job.current_segment_index is not None:
-            job_summary += (
-                f", segment {aggregate.active_composition_job.current_segment_index}"
-            )
+        if composition_job.current_segment_index is not None:
+            job_summary += f", segment {composition_job.current_segment_index}"
         active_jobs.append(job_summary)
 
-    if aggregate.active_audio_job is not None:
+    if audio_job is not None and audio_job.status in (
+        JobStatus.QUEUED,
+        JobStatus.IN_PROGRESS,
+        JobStatus.PAUSED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    ):
         job_summary = (
-            f"Audio job: {aggregate.active_audio_job.status.value}, "
-            f"voice={aggregate.active_audio_job.voice_key or 'unset'}"
+            f"Audio job: {audio_job.status.value}, "
+            f"voice={audio_job.voice_key or 'unset'}"
         )
-        if aggregate.active_audio_job.current_segment_index is not None:
-            job_summary += f", segment {aggregate.active_audio_job.current_segment_index}"
+        if audio_job.current_segment_index is not None:
+            job_summary += f", segment {audio_job.current_segment_index}"
         active_jobs.append(job_summary)
 
     return active_jobs
@@ -326,6 +341,14 @@ def _build_job_interruption_summary(
         return f"{kind} interruption: {status.value} ({_truncate(stop_reason, limit=160)})"
 
     return f"{kind} interruption: {status.value}"
+
+
+def _resolve_composition_resume_job(aggregate: SessionAggregate):
+    return aggregate.active_composition_job or aggregate.latest_composition_job
+
+
+def _resolve_audio_resume_job(aggregate: SessionAggregate):
+    return aggregate.active_audio_job or aggregate.latest_audio_job
 
 
 def _find_stage_state(aggregate: SessionAggregate, stage):

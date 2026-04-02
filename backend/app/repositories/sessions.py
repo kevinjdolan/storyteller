@@ -41,6 +41,8 @@ class SessionAggregate:
     selected_character_sheet: CharacterSheet | None
     selected_beat_sheet: BeatSheet | None
     selected_story_setup: StorySetup | None
+    latest_composition_job: CompositionJob | None
+    latest_audio_job: AudioJob | None
     active_composition_job: CompositionJob | None
     active_audio_job: AudioJob | None
     latest_story_asset: SessionAsset | None
@@ -95,6 +97,8 @@ class StorySessionRepository:
             selected_character_sheet=self._get_selected_character_sheet(session_id),
             selected_beat_sheet=self._get_selected_beat_sheet(session_id),
             selected_story_setup=self._get_selected_story_setup(session_id),
+            latest_composition_job=self._get_latest_composition_job(session_id),
+            latest_audio_job=self._get_latest_audio_job(session_id),
             active_composition_job=self._get_active_composition_job(session_id),
             active_audio_job=self._get_active_audio_job(session_id),
             latest_story_asset=self._get_latest_story_asset(session_id),
@@ -171,6 +175,15 @@ class StorySessionRepository:
         )
         return self._session.execute(stmt).scalar_one_or_none()
 
+    def _get_latest_composition_job(self, session_id: str) -> CompositionJob | None:
+        stmt: Select[tuple[CompositionJob]] = (
+            select(CompositionJob)
+            .where(CompositionJob.session_id == session_id)
+            .order_by(CompositionJob.updated_at.desc(), CompositionJob.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
     def _get_active_audio_job(self, session_id: str) -> AudioJob | None:
         stmt: Select[tuple[AudioJob]] = (
             select(AudioJob)
@@ -179,6 +192,15 @@ class StorySessionRepository:
                 AudioJob.status.in_(ACTIVE_JOB_STATUSES),
             )
             .order_by(AudioJob.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_latest_audio_job(self, session_id: str) -> AudioJob | None:
+        stmt: Select[tuple[AudioJob]] = (
+            select(AudioJob)
+            .where(AudioJob.session_id == session_id)
+            .order_by(AudioJob.updated_at.desc(), AudioJob.created_at.desc())
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()

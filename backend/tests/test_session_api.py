@@ -100,6 +100,28 @@ def test_get_session_snapshot_endpoint_returns_full_snapshot(
     assert payload["agent_context_summary"].startswith("Session title: Moonlit Harbor")
 
 
+def test_hydrate_session_endpoint_returns_snapshot_history_and_metadata(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}/hydrate")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["snapshot"]["id"] == created["id"]
+    assert payload["recent_history"]["session_id"] == created["id"]
+    assert payload["recent_history"]["events"][0]["event_type"] == "session.created"
+    assert payload["hydration"]["strategy"] == "materialized_only"
+    assert payload["hydration"]["latest_sequence_number"] == 1
+    assert payload["hydration"]["history_event_count"] == 1
+
+
 def test_get_session_history_endpoint_returns_durable_timeline(
     session_api_client: TestClient,
 ) -> None:
@@ -209,6 +231,17 @@ def test_get_session_snapshot_endpoint_returns_404_for_missing_session(
     session_api_client: TestClient,
 ) -> None:
     response = session_api_client.get("/api/v1/sessions/missing-session")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "session 'missing-session' was not found",
+    }
+
+
+def test_hydrate_session_endpoint_returns_404_for_missing_session(
+    session_api_client: TestClient,
+) -> None:
+    response = session_api_client.get("/api/v1/sessions/missing-session/hydrate")
 
     assert response.status_code == 404
     assert response.json() == {

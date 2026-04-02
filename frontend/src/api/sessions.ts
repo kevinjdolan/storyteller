@@ -67,6 +67,14 @@ export type PitchView = {
   accepted_at?: string | null
 }
 
+export type BeatSheetView = {
+  id: string
+  revision_number: number
+  summary?: string | null
+  bedtime_notes?: string | null
+  accepted_at?: string | null
+}
+
 export type CharacterSheetView = {
   id: string
   revision_number: number
@@ -90,16 +98,35 @@ export type StorySetupView = {
 
 export type CompositionJobView = {
   id: string
+  job_kind?: string
   status: string
   progress_percent: number
   current_segment_index?: number | null
+  attempt_count?: number
+  stop_reason?: string | null
+  error_message?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export type AudioJobView = {
   id: string
   status: string
   voice_key?: string | null
+  playback_speed?: number
+  include_background_music?: boolean
+  music_profile?: string | null
   estimated_duration_seconds?: number | null
+  current_segment_index?: number | null
+  attempt_count?: number
+  stop_reason?: string | null
+  error_message?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export type SessionAssetView = {
@@ -231,12 +258,31 @@ export type SessionSnapshot = RecentSessionSummary & {
   story_brief?: StoryBriefView | null
   selected_pitch?: PitchView | null
   selected_character_sheet?: CharacterSheetView | null
+  selected_beat_sheet?: BeatSheetView | null
   selected_story_setup?: StorySetupView | null
+  latest_composition_job?: CompositionJobView | null
+  latest_audio_job?: AudioJobView | null
   active_composition_job?: CompositionJobView | null
   active_audio_job?: AudioJobView | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
   agent_context_summary?: string | null
+}
+
+export type SessionHydrationMetadata = {
+  strategy: 'materialized_only' | 'materialized_with_recent_replay'
+  materialized_through_sequence_number?: number | null
+  replay_from_sequence_number?: number | null
+  replayed_event_count: number
+  latest_sequence_number?: number | null
+  history_event_count: number
+  history_window_truncated: boolean
+}
+
+export type SessionHydration = {
+  snapshot: SessionSnapshot
+  recent_history: SessionHistory
+  hydration: SessionHydrationMetadata
 }
 
 export type SessionContextUpdateResponse = {
@@ -252,6 +298,10 @@ export function fetchRecentSessions(limit = 20) {
 
 export function fetchSessionSnapshot(sessionId: string) {
   return getJson<SessionSnapshot>(`/api/v1/sessions/${sessionId}`)
+}
+
+export function fetchSessionHydration(sessionId: string) {
+  return getJson<SessionHydration>(`/api/v1/sessions/${sessionId}/hydrate`)
 }
 
 export function fetchSessionHistory(sessionId: string) {

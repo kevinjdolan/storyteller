@@ -348,6 +348,7 @@ describe('sessionRuntimeStore', () => {
       status: 'in_progress',
       progress_percent: 62.5,
       current_segment_index: 3,
+      updated_at: '2026-04-01T08:13:00Z',
     })
     expect(
       store

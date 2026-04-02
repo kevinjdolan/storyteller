@@ -295,6 +295,8 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.selected_character_sheet is not None
     assert snapshot.selected_beat_sheet is not None
     assert snapshot.selected_story_setup is not None
+    assert snapshot.latest_composition_job is not None
+    assert snapshot.latest_audio_job is not None
     assert snapshot.active_composition_job is not None
     assert snapshot.active_audio_job is not None
     assert snapshot.latest_story_asset is not None

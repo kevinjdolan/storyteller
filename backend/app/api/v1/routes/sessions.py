@@ -19,9 +19,11 @@ from app.models import (
     SessionContextUpdateResponse,
     SessionEventView,
     SessionHistoryView,
+    SessionHydrationView,
     SessionSnapshot,
 )
 from app.services import SessionActionPolicyService, SessionIntentParserService
+from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
     SessionNotFoundError,
     SessionService,
@@ -55,6 +57,28 @@ def get_session_snapshot(
     try:
         return SessionService(db_session).load_session_snapshot(session_id)
     except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{session_id}/hydrate",
+    response_model=SessionHydrationView,
+    summary="Hydrate a story session workspace snapshot",
+)
+def hydrate_session_workspace(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    history_limit: Annotated[int, Query(ge=1, le=200)] = 40,
+) -> SessionHydrationView:
+    try:
+        return SessionHydrationService(db_session).hydrate_session(
+            session_id,
+            history_limit=history_limit,
+        )
+    except SessionHydrationNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),

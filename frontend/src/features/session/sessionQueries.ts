@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createSession,
+  fetchSessionHydration,
   fetchRecentSessions,
   fetchSessionHistory,
   fetchSessionSnapshot,
@@ -10,6 +11,9 @@ export const sessionQueryKeys = {
   all: ['sessions'] as const,
   lists: () => [...sessionQueryKeys.all, 'list'] as const,
   list: (limit: number) => [...sessionQueryKeys.lists(), limit] as const,
+  hydrations: () => [...sessionQueryKeys.all, 'hydration'] as const,
+  hydration: (sessionId: string) =>
+    [...sessionQueryKeys.hydrations(), sessionId] as const,
   details: () => [...sessionQueryKeys.all, 'detail'] as const,
   detail: (sessionId: string) =>
     [...sessionQueryKeys.details(), sessionId] as const,
@@ -30,6 +34,15 @@ export function useSessionSnapshotQuery(sessionId: string) {
   return useQuery({
     queryKey: sessionQueryKeys.detail(sessionId),
     queryFn: () => fetchSessionSnapshot(sessionId),
+    enabled: sessionId.length > 0,
+    staleTime: 10_000,
+  })
+}
+
+export function useSessionHydrationQuery(sessionId: string) {
+  return useQuery({
+    queryKey: sessionQueryKeys.hydration(sessionId),
+    queryFn: () => fetchSessionHydration(sessionId),
     enabled: sessionId.length > 0,
     staleTime: 10_000,
   })

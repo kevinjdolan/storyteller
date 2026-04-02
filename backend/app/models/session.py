@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.models.events import SessionEventView
+from app.models.events import SessionEventView, SessionHistoryView
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -229,6 +229,8 @@ class SessionSnapshot(BaseModel):
     selected_character_sheet: CharacterSheetView | None = None
     selected_beat_sheet: BeatSheetView | None = None
     selected_story_setup: StorySetupView | None = None
+    latest_composition_job: CompositionJobView | None = None
+    latest_audio_job: AudioJobView | None = None
     active_composition_job: CompositionJobView | None = None
     active_audio_job: AudioJobView | None = None
     latest_story_asset: SessionAssetView | None = None
@@ -237,7 +239,26 @@ class SessionSnapshot(BaseModel):
     agent_context_summary: str | None = None
 
 
+class SessionHydrationMetadata(BaseModel):
+    strategy: Literal["materialized_only", "materialized_with_recent_replay"] = (
+        "materialized_only"
+    )
+    materialized_through_sequence_number: int | None = Field(default=None, ge=1)
+    replay_from_sequence_number: int | None = Field(default=None, ge=1)
+    replayed_event_count: int = Field(default=0, ge=0)
+    latest_sequence_number: int | None = Field(default=None, ge=0)
+    history_event_count: int = Field(default=0, ge=0)
+    history_window_truncated: bool = False
+
+
+class SessionHydrationView(BaseModel):
+    snapshot: SessionSnapshot
+    recent_history: SessionHistoryView
+    hydration: SessionHydrationMetadata
+
+
 ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionHydrationView.model_rebuild()

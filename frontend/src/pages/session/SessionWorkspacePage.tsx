@@ -12,9 +12,8 @@ import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWor
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import {
   useSessionChatMessages,
-  useCurrentSessionHistoryQuery,
+  useCurrentSessionHydrationQuery,
   useSessionCurrentSnapshot,
-  useCurrentSessionSnapshotQuery,
   useSessionEventStream,
   useSessionPendingActions,
   useSessionRuntimeActions,
@@ -206,6 +205,22 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
         : ''
 
     return `Audio is ${snapshot.active_audio_job.status.replace(/_/g, ' ')}.${duration}`
+  }
+
+  if (snapshot.latest_audio_job?.status === 'failed') {
+    return (
+      snapshot.latest_audio_job.error_message ??
+      snapshot.latest_audio_job.stop_reason ??
+      'The most recent narration pass failed and needs another attempt.'
+    )
+  }
+
+  if (snapshot.latest_composition_job?.status === 'failed') {
+    return (
+      snapshot.latest_composition_job.error_message ??
+      snapshot.latest_composition_job.stop_reason ??
+      'The most recent writing pass failed and needs another attempt.'
+    )
   }
 
   if (snapshot.latest_story_asset && snapshot.latest_audio_asset) {
@@ -494,34 +509,36 @@ function getWorkspaceConnectionBanner(connectionState: string): {
 
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const snapshotQuery = useCurrentSessionSnapshotQuery()
-  const historyQuery = useCurrentSessionHistoryQuery()
+  const hydrationQuery = useCurrentSessionHydrationQuery()
   const runtimeSnapshot = useSessionCurrentSnapshot()
   const chatMessages = useSessionChatMessages()
   const pendingActions = useSessionPendingActions()
   const eventStream = useSessionEventStream()
   const runtimeStore = useSessionRuntimeActions()
-  const snapshot = runtimeSnapshot ?? snapshotQuery.data
+  const snapshot = runtimeSnapshot ?? hydrationQuery.data?.snapshot
   const [stageNoteDraft, setStageNoteDraft] = useState('')
   const [stageNoteError, setStageNoteError] = useState<string | null>(null)
   const [isSavingStageNote, setIsSavingStageNote] = useState(false)
 
   useEffect(() => {
-    if (snapshotQuery.data == null || snapshotQuery.isError) {
+    if (hydrationQuery.data == null || hydrationQuery.isError) {
       return
     }
 
-    runtimeStore.hydrateSessionSnapshot(snapshotQuery.data)
-  }, [runtimeStore, snapshotQuery.data, snapshotQuery.isError])
+    runtimeStore.hydrateSessionSnapshot(hydrationQuery.data.snapshot)
+  }, [hydrationQuery.data, hydrationQuery.isError, runtimeStore])
 
   useEffect(() => {
-    if (snapshot == null || chatMessages.length > 0 || historyQuery.isPending) {
+    if (snapshot == null || chatMessages.length > 0 || hydrationQuery.isPending) {
       return
     }
 
     const historyMessages =
-      historyQuery.data != null
-        ? buildSessionChatMessagesFromHistory(historyQuery.data, snapshot)
+      hydrationQuery.data != null
+        ? buildSessionChatMessagesFromHistory(
+            hydrationQuery.data.recent_history,
+            snapshot,
+          )
         : []
 
     runtimeStore.replaceChatMessages(
@@ -531,12 +548,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     )
   }, [
     chatMessages.length,
-    historyQuery.data,
-    historyQuery.isPending,
+    hydrationQuery.data,
+    hydrationQuery.isPending,
     runtimeStore,
     snapshot,
-    snapshotQuery.isError,
-    snapshotQuery.isPending,
   ])
 
   const stageScaffold =
@@ -556,14 +571,14 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     setStageNoteError(null)
   }, [selectedStageDetail, selectedStageId])
 
-  if (snapshot == null && snapshotQuery.isPending) {
+  if (snapshot == null && hydrationQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
   }
 
   if (snapshot == null) {
     const errorMessage =
-      snapshotQuery.error instanceof Error
-        ? buildWorkspaceErrorMessage(snapshotQuery.error, sessionId)
+      hydrationQuery.error instanceof Error
+        ? buildWorkspaceErrorMessage(hydrationQuery.error, sessionId)
         : 'The workspace could not load this session right now.'
 
     return (
@@ -571,7 +586,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         errorMessage={errorMessage}
         sessionId={sessionId}
         onRetry={() => {
-          void snapshotQuery.refetch()
+          void hydrationQuery.refetch()
         }}
       />
     )
@@ -584,7 +599,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         errorMessage="The workspace stage scaffold could not be built."
         sessionId={sessionId}
         onRetry={() => {
-          void snapshotQuery.refetch()
+          void hydrationQuery.refetch()
         }}
       />
     )
@@ -655,7 +670,6 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     })
 
     appendHistoryEventToChat(event)
-    void historyQuery.refetch()
   }
 
   async function applySupportedChatAction(action: ChatToUiAction) {
@@ -769,7 +783,6 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
       runtimeStore.hydrateSessionSnapshot(result.snapshot)
       appendHistoryEventToChat(result.event)
-      void historyQuery.refetch()
     } catch (error) {
       setStageNoteError(
         error instanceof Error

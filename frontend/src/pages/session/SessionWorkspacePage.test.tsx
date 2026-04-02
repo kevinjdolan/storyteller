@@ -228,6 +228,20 @@ const sampleHistory = {
   ],
 } as const
 
+const sampleHydration = {
+  snapshot: sampleSnapshot,
+  recent_history: sampleHistory,
+  hydration: {
+    strategy: 'materialized_only',
+    materialized_through_sequence_number: 4,
+    replay_from_sequence_number: null,
+    replayed_event_count: 0,
+    latest_sequence_number: 4,
+    history_event_count: 4,
+    history_window_truncated: false,
+  },
+} as const
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -401,15 +415,20 @@ function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
 
 function mockWorkspaceApi(options?: {
   history?: unknown
-  snapshot?: unknown
-  snapshotStatus?: number
+  hydration?: unknown
+  hydrationStatus?: number
   chatIntentResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
 }) {
   const history = options?.history ?? sampleHistory
-  const snapshot = options?.snapshot ?? sampleSnapshot
-  const snapshotStatus = options?.snapshotStatus ?? 200
+  const hydration =
+    options?.hydration ??
+    ({
+      ...sampleHydration,
+      recent_history: history,
+    } as const)
+  const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
   const chatIntentResponse = options?.chatIntentResponse ?? {
     schema_version: 1,
@@ -457,14 +476,10 @@ function mockWorkspaceApi(options?: {
       const { pathname } = new URL(url, 'http://localhost')
 
       if (
-        pathname === '/api/v1/sessions/moonlit-harbor' &&
+        pathname === '/api/v1/sessions/moonlit-harbor/hydrate' &&
         (init?.method == null || init.method === 'GET')
       ) {
-        return Promise.resolve(buildJsonResponse(snapshotStatus, snapshot))
-      }
-
-      if (pathname === '/api/v1/sessions/moonlit-harbor/history') {
-        return Promise.resolve(buildJsonResponse(200, history))
+        return Promise.resolve(buildJsonResponse(hydrationStatus, hydration))
       }
 
       if (
@@ -781,8 +796,8 @@ describe('SessionWorkspacePage', () => {
 
   it('shows a missing-session state when the snapshot request returns 404', async () => {
     mockWorkspaceApi({
-      snapshotStatus: 404,
-      snapshot: { detail: 'missing' },
+      hydrationStatus: 404,
+      hydration: { detail: 'missing' },
     })
 
     renderWorkspaceRoute()
