@@ -19,6 +19,7 @@ import {
   recordSessionUiAction,
   resumeSessionComposition,
   restoreSessionPlanRevision,
+  saveSessionAudioSettings,
   saveSessionStoryBrief,
   saveSessionStoryOutline,
   saveSessionStorySetup,
@@ -34,6 +35,7 @@ import {
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
+import { AudioSettingsStage } from '../../features/session/AudioSettingsStage.tsx'
 import { BeatSheetStage } from '../../features/session/BeatSheetStage.tsx'
 import { CharacterSelectionStage } from '../../features/session/CharacterSelectionStage.tsx'
 import { CompositionStage } from '../../features/session/CompositionStage.tsx'
@@ -1262,6 +1264,35 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyAudioSettingsSave(options: {
+    voiceKey?: 'moonbeam' | 'hearthside' | 'storykeeper' | null
+    narrationStyle?: 'calm' | 'hushed' | 'warm' | null
+    playbackSpeed?: number | null
+    includeBackgroundMusic?: boolean | null
+    musicProfile?: 'lullaby_piano' | 'string_drift' | 'night_ambience' | null
+    narrationVolume?: number | null
+    musicVolume?: number | null
+    guidanceNotes?: string | null
+    origin: string
+  }) {
+    const result = await saveSessionAudioSettings(sessionId, {
+      voice_key: options.voiceKey ?? null,
+      narration_style: options.narrationStyle ?? null,
+      playback_speed: options.playbackSpeed ?? null,
+      include_background_music: options.includeBackgroundMusic ?? null,
+      music_profile: options.musicProfile ?? null,
+      narration_volume: options.narrationVolume ?? null,
+      music_volume: options.musicVolume ?? null,
+      guidance_notes: options.guidanceNotes ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    return result
+  }
+
   async function applyStoryOutlineSave(options: {
     outlineId?: string | null
     summary?: string | null
@@ -1614,6 +1645,31 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         guidanceNotes: action.extracted_values.guidance_notes,
         origin: 'chat',
         previewCurrentStage: false,
+      })
+      return
+    }
+
+    if (action.action_type === 'update_audio_settings') {
+      await applyAudioSettingsSave({
+        voiceKey:
+          (action.extracted_values.voice_key as
+            | 'moonbeam'
+            | 'hearthside'
+            | 'storykeeper'
+            | null
+            | undefined) ?? null,
+        playbackSpeed: action.extracted_values.playback_speed ?? null,
+        includeBackgroundMusic:
+          action.extracted_values.include_background_music ?? null,
+        musicProfile:
+          (action.extracted_values.music_profile as
+            | 'lullaby_piano'
+            | 'string_drift'
+            | 'night_ambience'
+            | null
+            | undefined) ?? null,
+        guidanceNotes: action.extracted_values.guidance_notes ?? null,
+        origin: 'chat',
       })
       return
     }
@@ -2203,6 +2259,12 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       origin: body.origin ?? 'workspace',
                     })
                   }
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'audio' ? (
+                <AudioSettingsStage
+                  onSaveAudioSettings={applyAudioSettingsSave}
+                  selectedStage={selectedStage}
                   snapshot={snapshot}
                 />
               ) : selectedStage.stage === 'finalize' ? (

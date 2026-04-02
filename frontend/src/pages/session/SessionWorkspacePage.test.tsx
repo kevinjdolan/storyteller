@@ -758,6 +758,139 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
   }
 }
 
+function buildAudioSettingsSaveResponse(
+  body: Record<string, unknown>,
+) {
+  const savedAt = '2026-04-01T03:05:00Z'
+  const currentAudioSettings = sampleSnapshot.audio_settings ?? {
+    voice_key: 'moonbeam',
+    narration_style: 'calm',
+    playback_speed: 0.95,
+    include_background_music: false,
+    music_profile: 'lullaby_piano',
+    narration_volume: 92,
+    music_volume: 24,
+    guidance_notes: null,
+    runtime_estimate: {
+      estimated_word_count: 1800,
+      target_duration_seconds: 780,
+      minimum_duration_seconds: 660,
+      maximum_duration_seconds: 900,
+      basis_source: 'story_setup_target',
+      pacing_band: 'balanced',
+    },
+  }
+  const readOptionalString = (key: string) =>
+    typeof body[key] === 'string' && body[key].trim().length > 0
+      ? body[key].trim()
+      : null
+  const nextPlaybackSpeed =
+    typeof body.playback_speed === 'number'
+      ? body.playback_speed
+      : currentAudioSettings.playback_speed
+  const nextAudioSettings = {
+    ...currentAudioSettings,
+    voice_key:
+      typeof body.voice_key === 'string'
+        ? body.voice_key
+        : currentAudioSettings.voice_key,
+    narration_style:
+      typeof body.narration_style === 'string'
+        ? body.narration_style
+        : currentAudioSettings.narration_style,
+    playback_speed: nextPlaybackSpeed,
+    include_background_music:
+      typeof body.include_background_music === 'boolean'
+        ? body.include_background_music
+        : currentAudioSettings.include_background_music,
+    music_profile:
+      typeof body.music_profile === 'string'
+        ? body.music_profile
+        : currentAudioSettings.music_profile,
+    narration_volume:
+      typeof body.narration_volume === 'number'
+        ? body.narration_volume
+        : currentAudioSettings.narration_volume,
+    music_volume:
+      typeof body.music_volume === 'number'
+        ? body.music_volume
+        : currentAudioSettings.music_volume,
+    guidance_notes:
+      'guidance_notes' in body
+        ? readOptionalString('guidance_notes')
+        : currentAudioSettings.guidance_notes,
+    runtime_estimate: {
+      estimated_word_count:
+        currentAudioSettings.runtime_estimate?.estimated_word_count ?? 1800,
+      target_duration_seconds: Math.round((12 / nextPlaybackSpeed) * 60),
+      minimum_duration_seconds: Math.round((10 / nextPlaybackSpeed) * 60),
+      maximum_duration_seconds: Math.round((14 / nextPlaybackSpeed) * 60),
+      basis_source:
+        currentAudioSettings.runtime_estimate?.basis_source ?? 'story_setup_target',
+      pacing_band:
+        nextPlaybackSpeed < 0.9
+          ? 'roomy'
+          : nextPlaybackSpeed > 1
+            ? 'brisk'
+            : 'balanced',
+    },
+  }
+  const summaryText = `Updated audio settings: ${nextAudioSettings.voice_key} voice, ${nextAudioSettings.narration_style} narration, ${nextAudioSettings.playback_speed}x speed, ${nextAudioSettings.include_background_music ? 'music on' : 'no background music'}.`
+
+  return {
+    snapshot: {
+      ...sampleSnapshot,
+      current_stage: 'audio',
+      resume_stage: 'audio',
+      updated_at: savedAt,
+      audio_settings: nextAudioSettings,
+      stage_states: sampleSnapshot.stage_states.map((stageState) =>
+        stageState.stage === 'audio'
+          ? {
+              ...stageState,
+              status: 'in_progress',
+              detail:
+                'Audio settings updated. Estimated runtime about 12 minutes, often 10-14. Final length can vary with the finished story and narration delivery.',
+              last_event_summary: summaryText,
+              last_event_type: 'content.user_edit.recorded',
+              last_event_at: savedAt,
+            }
+          : stageState,
+      ),
+    },
+    event: {
+      id: 'audio-settings-save-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 9,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'content.user_edit.recorded',
+      stage: 'audio',
+      summary: 'Saved user edit for audio settings.',
+      payload: {
+        schema_version: 1,
+        target_kind: 'audio_settings',
+        changed_fields: [
+          'voice_key',
+          'narration_style',
+          'playback_speed',
+          'include_background_music',
+          'music_profile',
+          'narration_volume',
+          'music_volume',
+          'guidance_notes',
+        ],
+        source: body.origin ?? 'workspace',
+        field_values: body,
+        summary_text: summaryText,
+      },
+      created_at: savedAt,
+    },
+  }
+}
+
 function buildStorySetupSaveResponse(
   body: Record<string, unknown>,
 ): SessionStorySetupResponse {
@@ -2929,6 +3062,9 @@ function mockWorkspaceApi(options?: {
   storyBriefSaveResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
+  audioSettingsSaveResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   storySetupSaveResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
@@ -2971,6 +3107,7 @@ function mockWorkspaceApi(options?: {
   const pitchRefinementRequests: Record<string, unknown>[] = []
   const pitchSelectionRequests: Record<string, unknown>[] = []
   const storyBriefSaveRequests: Record<string, unknown>[] = []
+  const audioSettingsSaveRequests: Record<string, unknown>[] = []
   const storySetupSaveRequests: Record<string, unknown>[] = []
   const toneSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionResponse =
@@ -2983,6 +3120,8 @@ function mockWorkspaceApi(options?: {
     options?.pitchRefinementResponse ?? buildPitchRefinementResponse
   const storyBriefSaveResponse =
     options?.storyBriefSaveResponse ?? buildStoryBriefSaveResponse
+  const audioSettingsSaveResponse =
+    options?.audioSettingsSaveResponse ?? buildAudioSettingsSaveResponse
   const storySetupSaveResponse =
     options?.storySetupSaveResponse ?? buildStorySetupSaveResponse
   const toneSelectionResponse =
@@ -3377,6 +3516,25 @@ function mockWorkspaceApi(options?: {
       }
 
       if (
+        pathname === '/api/v1/sessions/moonlit-harbor/audio-settings' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        audioSettingsSaveRequests.push(requestBody)
+        const resolvedAudioSettingsSaveResponse =
+          typeof audioSettingsSaveResponse === 'function'
+            ? audioSettingsSaveResponse(requestBody)
+            : audioSettingsSaveResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedAudioSettingsSaveResponse),
+        )
+      }
+
+      if (
         pathname === '/api/v1/sessions/moonlit-harbor/story-setup' &&
         init?.method === 'POST'
       ) {
@@ -3412,6 +3570,7 @@ function mockWorkspaceApi(options?: {
     pitchGenerationRequests,
     pitchRefinementRequests,
     pitchSelectionRequests,
+    audioSettingsSaveRequests,
     storyBriefSaveRequests,
     storySetupSaveRequests,
     toneSelectionRequests,
@@ -5621,7 +5780,7 @@ describe('SessionWorkspacePage', () => {
     ])
   })
 
-  it('saves a stage note through the durable context update pipeline', async () => {
+  it('saves audio settings through the durable audio-settings endpoint', async () => {
     const audioHydration = {
       ...sampleHydration,
       snapshot: {
@@ -5629,6 +5788,24 @@ describe('SessionWorkspacePage', () => {
         current_stage: 'audio',
         resume_stage: 'audio',
         furthest_completed_stage: 'composition',
+        audio_settings: {
+          voice_key: 'moonbeam',
+          narration_style: 'calm',
+          playback_speed: 0.95,
+          include_background_music: false,
+          music_profile: 'lullaby_piano',
+          narration_volume: 92,
+          music_volume: 24,
+          guidance_notes: null,
+          runtime_estimate: {
+            estimated_word_count: 1800,
+            target_duration_seconds: 780,
+            minimum_duration_seconds: 660,
+            maximum_duration_seconds: 900,
+            basis_source: 'story_setup_target',
+            pacing_band: 'balanced',
+          },
+        },
         stage_states: sampleSnapshot.stage_states.map((stageState) => {
           if (stageState.stage === 'beats') {
             return {
@@ -5667,61 +5844,64 @@ describe('SessionWorkspacePage', () => {
       },
     } as const
 
-    mockWorkspaceApi({
+    const { audioSettingsSaveRequests } = mockWorkspaceApi({
       hydration: audioHydration,
-      contextUpdateResponse: (requestBody: Record<string, unknown>) => ({
-        ...buildContextUpdateResponse(requestBody),
-        snapshot: {
-          ...audioHydration.snapshot,
-          updated_at: '2026-04-01T03:05:00Z',
-          stage_states: audioHydration.snapshot.stage_states.map((stageState) =>
-            stageState.stage === 'audio'
-              ? {
-                  ...stageState,
-                  detail: 'Keep the narration especially slow and warm.',
-                  last_event_summary:
-                    'Updated audio notes from the workspace.',
-                  last_event_type: 'content.user_edit.recorded',
-                  last_event_at: '2026-04-01T03:05:00Z',
-                }
-              : stageState,
-          ),
-        },
-        event: {
-          ...buildContextUpdateResponse(requestBody).event,
-          stage: 'audio',
-          summary: 'Saved user edit for audio.',
-          payload: {
-            ...buildContextUpdateResponse(requestBody).event.payload,
-            target_kind: 'audio_settings',
-            summary_text: 'Updated audio notes from the workspace.',
-          },
-        },
-      }),
     })
 
     renderWorkspaceRoute('/sessions/moonlit-harbor?stage=audio')
 
-    const noteField = await screen.findByLabelText('Audio note')
-
-    fireEvent.change(noteField, {
+    fireEvent.change(await screen.findByLabelText('Narration voice'), {
+      target: { value: 'hearthside' },
+    })
+    fireEvent.change(screen.getByLabelText('Narration style'), {
+      target: { value: 'warm' },
+    })
+    fireEvent.change(screen.getByLabelText('Playback speed'), {
+      target: { value: '0.85' },
+    })
+    fireEvent.click(screen.getByLabelText('Background music'))
+    fireEvent.change(screen.getByLabelText('Music style'), {
+      target: { value: 'string_drift' },
+    })
+    fireEvent.change(screen.getByLabelText('Narration volume'), {
+      target: { value: '88' },
+    })
+    fireEvent.change(screen.getByLabelText('Music volume'), {
+      target: { value: '18' },
+    })
+    fireEvent.change(screen.getByLabelText('Mix and delivery note'), {
       target: {
-        value: 'Keep the narration especially slow and warm.',
+        value: 'Keep chapter breaks soft and leave longer pauses after dialogue.',
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save audio settings' }))
 
+    expect(audioSettingsSaveRequests).toEqual([
+      {
+        voice_key: 'hearthside',
+        narration_style: 'warm',
+        playback_speed: 0.85,
+        include_background_music: true,
+        music_profile: 'string_drift',
+        narration_volume: 88,
+        music_volume: 18,
+        guidance_notes:
+          'Keep chapter breaks soft and leave longer pauses after dialogue.',
+        origin: 'workspace',
+      },
+    ])
     expect(
-      await screen.findByDisplayValue(
-        'Keep the narration especially slow and warm.',
+      await screen.findByText(
+        'Updated audio settings: hearthside voice, warm narration, 0.85x speed, music on.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Audio note')).toHaveValue(
-      'Keep the narration especially slow and warm.',
+    expect(screen.getByLabelText('Narration voice')).toHaveValue('hearthside')
+    expect(screen.getByLabelText('Mix and delivery note')).toHaveValue(
+      'Keep chapter breaks soft and leave longer pauses after dialogue.',
     )
   })
 
-  it('replays durable ui-originated echoes and hydrated stage detail when resuming', async () => {
+  it('replays durable audio-setting echoes and hydrated field values when resuming', async () => {
     const resumedHistory = {
       ...sampleHistory,
       latest_sequence_number: 6,
@@ -5761,13 +5941,25 @@ describe('SessionWorkspacePage', () => {
           payload: {
             schema_version: 1,
             target_kind: 'audio_settings',
-            changed_fields: ['detail'],
+            changed_fields: [
+              'voice_key',
+              'narration_style',
+              'playback_speed',
+              'guidance_notes',
+            ],
             source: 'workspace',
             field_values: {
-              detail: 'Keep the narration especially slow and warm.',
-              control_id: 'stage-note-editor',
+              voice_key: 'hearthside',
+              narration_style: 'warm',
+              playback_speed: 0.85,
+              include_background_music: false,
+              music_profile: 'lullaby_piano',
+              narration_volume: 90,
+              music_volume: 20,
+              guidance_notes: 'Keep the consonants soft and the pauses roomy.',
             },
-            summary_text: 'Updated audio notes from the workspace.',
+            summary_text:
+              'Updated audio settings: hearthside voice, warm narration, 0.85x speed, no background music.',
           },
           created_at: '2026-04-01T03:05:00Z',
         },
@@ -5781,13 +5973,33 @@ describe('SessionWorkspacePage', () => {
         resume_stage: 'audio',
         furthest_completed_stage: 'composition',
         updated_at: '2026-04-01T03:05:00Z',
+        audio_settings: {
+          voice_key: 'hearthside',
+          narration_style: 'warm',
+          playback_speed: 0.85,
+          include_background_music: false,
+          music_profile: 'lullaby_piano',
+          narration_volume: 90,
+          music_volume: 20,
+          guidance_notes: 'Keep the consonants soft and the pauses roomy.',
+          runtime_estimate: {
+            estimated_word_count: 1800,
+            target_duration_seconds: 840,
+            minimum_duration_seconds: 720,
+            maximum_duration_seconds: 960,
+            basis_source: 'story_setup_target',
+            pacing_band: 'roomy',
+          },
+        },
         stage_states: sampleSnapshot.stage_states.map((stageState) =>
           stageState.stage === 'audio'
             ? {
                 ...stageState,
                 status: 'in_progress',
-                detail: 'Keep the narration especially slow and warm.',
-                last_event_summary: 'Updated audio notes from the workspace.',
+                detail:
+                  'Audio settings updated. Estimated runtime about 14 minutes, often 12-16. Final length can vary with the finished story and narration delivery.',
+                last_event_summary:
+                  'Updated audio settings: hearthside voice, warm narration, 0.85x speed, no background music.',
                 last_event_type: 'content.user_edit.recorded',
                 last_event_at: '2026-04-01T03:05:00Z',
               }
@@ -5821,9 +6033,14 @@ describe('SessionWorkspacePage', () => {
     expect(
       await screen.findByText('Opened Audio in the main pane.'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Updated audio notes from the workspace.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Audio note')).toHaveValue(
-      'Keep the narration especially slow and warm.',
+    expect(
+      screen.getByText(
+        'Updated audio settings: hearthside voice, warm narration, 0.85x speed, no background music.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Narration voice')).toHaveValue('hearthside')
+    expect(screen.getByLabelText('Mix and delivery note')).toHaveValue(
+      'Keep the consonants soft and the pauses roomy.',
     )
   })
 

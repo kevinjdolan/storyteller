@@ -5,6 +5,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.audio_settings import (
+    AudioMusicProfile,
+    AudioNarrationStyle,
+    AudioSettingsView,
+    AudioVoiceKey,
+)
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.chat_actions import (
     CharacterChangeImpact,
@@ -516,6 +522,40 @@ class SessionStorySetupResponse(BaseModel):
     event: SessionEventView
 
 
+class SaveSessionAudioSettingsRequest(BaseModel):
+    voice_key: AudioVoiceKey | None = None
+    narration_style: AudioNarrationStyle | None = None
+    playback_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    include_background_music: bool | None = None
+    music_profile: AudioMusicProfile | None = None
+    narration_volume: int | None = Field(default=None, ge=0, le=100)
+    music_volume: int | None = Field(default=None, ge=0, le=100)
+    guidance_notes: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "SaveSessionAudioSettingsRequest":
+        editable_fields = {
+            "voice_key",
+            "narration_style",
+            "playback_speed",
+            "include_background_music",
+            "music_profile",
+            "narration_volume",
+            "music_volume",
+            "guidance_notes",
+        }
+        if not editable_fields.intersection(self.model_fields_set):
+            raise ValueError("audio settings saves require at least one provided field")
+
+        return self
+
+
+class SessionAudioSettingsResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class EditSessionStoryOutlineCardRequest(BaseModel):
     card_key: str = Field(min_length=1)
     card_type: str = Field(min_length=1)
@@ -891,6 +931,7 @@ class SessionSnapshot(BaseModel):
     composition_segments: list[CompositionSegmentView] = Field(default_factory=list)
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
+    audio_settings: AudioSettingsView
     continuity_bible: ContinuityBibleView | None = None
     usage_summary: SessionUsageSummaryView = Field(default_factory=SessionUsageSummaryView)
     conversation_memory: ConversationMemorySnapshotView | None = None
@@ -917,6 +958,7 @@ ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionAudioSettingsResponse.model_rebuild()
 SessionBeatSheetGenerationResponse.model_rebuild()
 SessionBeatSheetUpdateResponse.model_rebuild()
 SessionCharacterSheetGenerationResponse.model_rebuild()

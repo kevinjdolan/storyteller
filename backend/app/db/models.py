@@ -198,6 +198,16 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(36),
         ForeignKey("tone_profiles.id", ondelete="SET NULL"),
     )
+    audio_voice_key: Mapped[str | None] = mapped_column(String(120))
+    audio_narration_style: Mapped[str | None] = mapped_column(String(60))
+    audio_playback_speed: Mapped[float | None] = mapped_column(
+        Numeric(4, 2, asdecimal=False)
+    )
+    audio_include_background_music: Mapped[bool | None] = mapped_column(Boolean)
+    audio_music_profile: Mapped[str | None] = mapped_column(String(120))
+    audio_narration_volume: Mapped[int | None] = mapped_column(Integer)
+    audio_music_volume: Mapped[int | None] = mapped_column(Integer)
+    audio_guidance_notes: Mapped[str | None] = mapped_column(Text)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     selected_genre: Mapped["Genre | None"] = relationship(back_populates="sessions")

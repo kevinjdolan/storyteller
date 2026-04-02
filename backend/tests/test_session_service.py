@@ -33,6 +33,7 @@ from app.models import (
     GeneratedCharacterProfile,
     GeneratedCharacterSheetCandidate,
     NormalizedBriefPreferences,
+    SaveSessionAudioSettingsRequest,
     SessionContextUpdateRequest,
     UserEditTargetKind,
     WorkflowStage,
@@ -1333,6 +1334,160 @@ def test_record_ui_action_persists_a_history_entry(db_session) -> None:
     history = service.load_session_history(snapshot.id)
     assert history.latest_sequence_number == 2
     assert history.events[-1].event_type == "ui.action.recorded"
+
+
+def test_save_audio_settings_persists_durable_audio_plan_and_invalidates_stale_audio(
+    db_session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Audio Settings")
+
+    for stage in (
+        WorkflowStage.GENRE,
+        WorkflowStage.TONE,
+        WorkflowStage.BRIEF,
+        WorkflowStage.PITCHES,
+        WorkflowStage.CHARACTERS,
+        WorkflowStage.BEATS,
+        WorkflowStage.STORY_SETUP,
+        WorkflowStage.COMPOSITION,
+        WorkflowStage.AUDIO,
+        WorkflowStage.FINALIZE,
+    ):
+        snapshot = service.update_stage_state(
+            snapshot.id,
+            stage=stage,
+            status=WorkflowStageState.COMPLETED,
+            detail=f"Accepted {stage.value}.",
+        )
+
+    story_setup = StorySetup(
+        session_id=snapshot.id,
+        revision_number=1,
+        target_word_count=1800,
+        target_runtime_minutes=12,
+        chapter_count=3,
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add(story_setup)
+    db_session.flush()
+
+    audio_job = AudioJob(
+        session_id=snapshot.id,
+        status=JobStatus.COMPLETED,
+        voice_key="moonbeam",
+        playback_speed=0.95,
+        include_background_music=False,
+        music_profile="lullaby_piano",
+        completed_at=now,
+    )
+    db_session.add(audio_job)
+    db_session.flush()
+
+    db_session.add(
+        SessionAsset(
+            session_id=snapshot.id,
+            audio_job_id=audio_job.id,
+            asset_kind=AssetKind.FINAL_AUDIO,
+            status=AssetStatus.READY,
+            storage_bucket="storyteller-exports",
+            object_path="sessions/audio-settings/story.mp3",
+            mime_type="audio/mpeg",
+            byte_size=8192,
+            ready_at=now,
+        )
+    )
+    db_session.commit()
+
+    baseline_snapshot = service.load_session_snapshot(snapshot.id)
+    assert baseline_snapshot.audio_settings.voice_key == "moonbeam"
+    assert baseline_snapshot.audio_settings.runtime_estimate is not None
+
+    result = service.save_audio_settings(
+        snapshot.id,
+        payload=SaveSessionAudioSettingsRequest.model_validate(
+            {
+                "voice_key": "hearthside",
+                "narration_style": "warm",
+                "playback_speed": 0.85,
+                "include_background_music": True,
+                "music_profile": "night_ambience",
+                "narration_volume": 88,
+                "music_volume": 18,
+                "guidance_notes": "Ease off even more during the final chapter.",
+                "origin": "workspace",
+            }
+        ),
+    )
+
+    stage_map = {stage.stage: stage for stage in result.snapshot.stage_states}
+    stored_session = db_session.get(StorySession, snapshot.id)
+
+    assert stored_session is not None
+    assert stored_session.audio_voice_key == "hearthside"
+    assert stored_session.audio_narration_style == "warm"
+    assert stored_session.audio_playback_speed == pytest.approx(0.85)
+    assert stored_session.audio_include_background_music is True
+    assert stored_session.audio_music_profile == "night_ambience"
+    assert stored_session.audio_narration_volume == 88
+    assert stored_session.audio_music_volume == 18
+    assert stored_session.audio_guidance_notes == (
+        "Ease off even more during the final chapter."
+    )
+
+    assert result.event.event_type == "content.user_edit.recorded"
+    assert result.event.stage == WorkflowStage.AUDIO
+    assert result.event.payload is not None
+    assert result.event.payload.changed_fields == [
+        "voice_key",
+        "narration_style",
+        "playback_speed",
+        "include_background_music",
+        "music_profile",
+        "narration_volume",
+        "music_volume",
+        "guidance_notes",
+    ]
+    assert result.event.payload.summary_text == (
+        "Updated audio settings: Hearthside voice, warm narration, 0.85x speed, "
+        "music on (night ambience), Ease off even more during the final chapter."
+    )
+    assert result.snapshot.audio_settings.voice_key == "hearthside"
+    assert result.snapshot.audio_settings.narration_style == "warm"
+    assert result.snapshot.audio_settings.playback_speed == pytest.approx(0.85)
+    assert result.snapshot.audio_settings.include_background_music is True
+    assert result.snapshot.audio_settings.music_profile == "night_ambience"
+    assert result.snapshot.audio_settings.narration_volume == 88
+    assert result.snapshot.audio_settings.music_volume == 18
+    assert result.snapshot.audio_settings.guidance_notes == (
+        "Ease off even more during the final chapter."
+    )
+    assert result.snapshot.audio_settings.runtime_estimate is not None
+    assert baseline_snapshot.audio_settings.runtime_estimate is not None
+    assert (
+        result.snapshot.audio_settings.runtime_estimate.target_duration_seconds
+        > baseline_snapshot.audio_settings.runtime_estimate.target_duration_seconds
+    )
+    assert stage_map[WorkflowStage.AUDIO].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.AUDIO].detail.startswith(
+        "Audio settings changed. Regenerate narration to apply them."
+    )
+    assert "Voice: Hearthside." in stage_map[WorkflowStage.AUDIO].detail
+    assert "Style: warm." in stage_map[WorkflowStage.AUDIO].detail
+    assert "Playback speed 0.85x." in stage_map[WorkflowStage.AUDIO].detail
+    assert "Music: night ambience at 18%." in stage_map[WorkflowStage.AUDIO].detail
+    assert "Estimated runtime about 15 minutes" in stage_map[WorkflowStage.AUDIO].detail
+    assert (
+        "Final length can vary with the finished story and narration delivery."
+        in stage_map[WorkflowStage.AUDIO].detail
+    )
+    assert (
+        "Ease off even more during the final chapter."
+        in stage_map[WorkflowStage.AUDIO].detail
+    )
+    assert stage_map[WorkflowStage.FINALIZE].status == WorkflowStageState.NEEDS_REGENERATION
 
 
 def test_apply_context_update_persists_stage_note_and_invalidates_dependents(db_session) -> None:

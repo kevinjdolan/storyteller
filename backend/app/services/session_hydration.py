@@ -65,6 +65,7 @@ from app.models import (
 from app.models.composition_interruptions import build_composition_interruption_message
 from app.repositories import SessionAggregate, StorySessionRepository
 from app.services.agent_context import build_session_agent_context_summary
+from app.services.audio_settings import build_audio_settings_view
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 from app.services.model_usage import SessionModelUsageService
@@ -324,6 +325,12 @@ def build_session_snapshot(
         composition_segments=build_composition_segment_views(aggregate.composition_segments),
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
+        audio_settings=build_audio_settings_view(
+            story_session=story_session,
+            latest_audio_job=aggregate.latest_audio_job,
+            composition_segments=aggregate.composition_segments,
+            selected_story_setup=aggregate.selected_story_setup,
+        ),
         continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
         usage_summary=usage_summary,
         conversation_memory=conversation_memory,

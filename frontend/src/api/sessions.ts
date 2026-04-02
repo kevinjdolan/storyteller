@@ -430,6 +430,27 @@ export type AudioJobView = {
   updated_at?: string
 }
 
+export type AudioRuntimeEstimateView = {
+  estimated_word_count: number
+  target_duration_seconds: number
+  minimum_duration_seconds: number
+  maximum_duration_seconds: number
+  basis_source: 'composition_segments' | 'story_setup_target' | 'unknown'
+  pacing_band: 'roomy' | 'balanced' | 'brisk'
+}
+
+export type AudioSettingsView = {
+  voice_key: 'moonbeam' | 'hearthside' | 'storykeeper'
+  narration_style: 'calm' | 'hushed' | 'warm'
+  playback_speed: number
+  include_background_music: boolean
+  music_profile: 'lullaby_piano' | 'string_drift' | 'night_ambience'
+  narration_volume: number
+  music_volume: number
+  guidance_notes?: string | null
+  runtime_estimate?: AudioRuntimeEstimateView | null
+}
+
 export type SessionAssetView = {
   id: string
   asset_kind: string
@@ -552,6 +573,18 @@ export type SessionContextUpdateRequest = {
   values: SessionContextStageNoteValues
 }
 
+export type SaveSessionAudioSettingsRequest = {
+  voice_key?: AudioSettingsView['voice_key'] | null
+  narration_style?: AudioSettingsView['narration_style'] | null
+  playback_speed?: number | null
+  include_background_music?: boolean | null
+  music_profile?: AudioSettingsView['music_profile'] | null
+  narration_volume?: number | null
+  music_volume?: number | null
+  guidance_notes?: string | null
+  origin?: string
+}
+
 export type EditSessionBeatSheetBeatRequest = {
   key: string
   summary?: string | null
@@ -591,6 +624,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   composition_segments?: CompositionSegmentView[] | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
+  audio_settings?: AudioSettingsView | null
   continuity_bible?: ContinuityBibleView | null
   agent_context_summary?: string | null
 }
@@ -612,6 +646,11 @@ export type SessionHydration = {
 }
 
 export type SessionContextUpdateResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
+export type SessionAudioSettingsResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
 }
@@ -845,6 +884,16 @@ export function saveSessionStorySetup(
 ) {
   return postJson<SessionStorySetupResponse>(
     `/api/v1/sessions/${sessionId}/story-setup`,
+    body,
+  )
+}
+
+export function saveSessionAudioSettings(
+  sessionId: string,
+  body: SaveSessionAudioSettingsRequest,
+) {
+  return postJson<SessionAudioSettingsResponse>(
+    `/api/v1/sessions/${sessionId}/audio-settings`,
     body,
   )
 }

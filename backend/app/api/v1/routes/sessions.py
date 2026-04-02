@@ -38,6 +38,7 @@ from app.models import (
     RefineSessionPitchRequest,
     RejectRewriteSessionCompositionRequest,
     RestoreSessionPlanRevisionRequest,
+    SaveSessionAudioSettingsRequest,
     SaveSessionStoryBriefRequest,
     SaveSessionStoryOutlineRequest,
     SaveSessionStorySetupRequest,
@@ -55,6 +56,7 @@ from app.models import (
     SessionCompositionResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
+    SessionAudioSettingsResponse,
     SessionEventView,
     SessionHistoryView,
     SessionHydrationView,
@@ -99,6 +101,7 @@ from app.services.sessions import (
     SessionPitchSelectionError,
     SessionPlanRevisionError,
     SessionService,
+    SessionAudioSettingsSaveError,
     SessionStoryBriefSaveError,
     SessionToneSelectionError,
     UnsupportedSessionContextUpdateError,
@@ -374,6 +377,39 @@ def save_session_story_setup(
             detail=str(exc),
         ) from exc
     except StoryWorkflowToolServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/audio-settings",
+    response_model=SessionAudioSettingsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist durable audio settings for a story session",
+)
+def save_session_audio_settings(
+    session_id: str,
+    payload: SaveSessionAudioSettingsRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionAudioSettingsResponse:
+    try:
+        return SessionService(db_session).save_audio_settings(
+            session_id,
+            payload=payload,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionAudioSettingsSaveError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

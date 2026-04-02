@@ -4,6 +4,7 @@ from datetime import timezone
 
 from app.models.session import SessionSnapshot
 from app.models.workflow import get_workflow_stage_definition
+from app.services.audio_settings import build_audio_settings_memory_summary
 
 
 def build_session_agent_context_summary(
@@ -117,6 +118,10 @@ def build_session_agent_context_summary(
             f"{audio_job.status}, "
             f"voice={audio_job.voice_key or 'unset'}"
         )
+
+    lines.append(
+        "Audio settings: " + build_audio_settings_memory_summary(snapshot.audio_settings)
+    )
 
     return "\n".join(lines)
 

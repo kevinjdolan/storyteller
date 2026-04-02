@@ -6,12 +6,17 @@ from typing import Iterator
 
 import pytest
 from app.db import (
+    AssetKind,
+    AssetStatus,
+    AudioJob,
     Base,
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
     CompositionSegmentAcceptanceState,
     JobStatus,
+    SessionAsset,
+    StorySetup,
     StorySession,
 )
 from app.db.session import get_engine, get_session_factory
@@ -2453,6 +2458,133 @@ def test_hydrate_session_endpoint_replays_context_updates_into_resumed_snapshot(
     assert payload["snapshot"]["overall_status"] == "needs_regeneration"
     assert payload["hydration"]["history_event_count"] == 13
     assert payload["hydration"]["latest_sequence_number"] == 13
+
+
+def test_save_audio_settings_endpoint_persists_durable_audio_preferences(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    now = datetime.now(timezone.utc)
+    try:
+        service = SessionService(db_session)
+        snapshot = service.create_session(working_title="Audio API")
+        for stage in (
+            WorkflowStage.GENRE,
+            WorkflowStage.TONE,
+            WorkflowStage.BRIEF,
+            WorkflowStage.PITCHES,
+            WorkflowStage.CHARACTERS,
+            WorkflowStage.BEATS,
+            WorkflowStage.STORY_SETUP,
+            WorkflowStage.COMPOSITION,
+            WorkflowStage.AUDIO,
+            WorkflowStage.FINALIZE,
+        ):
+            service.update_stage_state(
+                snapshot.id,
+                stage=stage,
+                status=WorkflowStageState.COMPLETED,
+                detail=f"Accepted {stage.value}.",
+            )
+
+        db_session.add(
+            StorySetup(
+                session_id=snapshot.id,
+                revision_number=1,
+                target_word_count=1800,
+                target_runtime_minutes=12,
+                is_selected=True,
+                accepted_at=now,
+            )
+        )
+        db_session.flush()
+
+        audio_job = AudioJob(
+            session_id=snapshot.id,
+            status=JobStatus.COMPLETED,
+            voice_key="moonbeam",
+            playback_speed=0.95,
+            include_background_music=False,
+            music_profile="lullaby_piano",
+            completed_at=now,
+        )
+        db_session.add(audio_job)
+        db_session.flush()
+
+        db_session.add(
+            SessionAsset(
+                session_id=snapshot.id,
+                audio_job_id=audio_job.id,
+                asset_kind=AssetKind.FINAL_AUDIO,
+                status=AssetStatus.READY,
+                storage_bucket="storyteller-exports",
+                object_path="sessions/audio-api/story.mp3",
+                mime_type="audio/mpeg",
+                byte_size=8192,
+                ready_at=now,
+            )
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{snapshot.id}/audio-settings",
+        json={
+            "voice_key": "hearthside",
+            "narration_style": "warm",
+            "playback_speed": 0.85,
+            "include_background_music": True,
+            "music_profile": "night_ambience",
+            "narration_volume": 88,
+            "music_volume": 18,
+            "guidance_notes": "Ease off even more during the final chapter.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "content.user_edit.recorded"
+    assert payload["event"]["stage"] == "audio"
+    assert payload["event"]["payload"]["changed_fields"] == [
+        "voice_key",
+        "narration_style",
+        "playback_speed",
+        "include_background_music",
+        "music_profile",
+        "narration_volume",
+        "music_volume",
+        "guidance_notes",
+    ]
+    assert payload["event"]["payload"]["field_values"] == {
+        "voice_key": "hearthside",
+        "narration_style": "warm",
+        "playback_speed": 0.85,
+        "include_background_music": True,
+        "music_profile": "night_ambience",
+        "narration_volume": 88,
+        "music_volume": 18,
+        "guidance_notes": "Ease off even more during the final chapter.",
+    }
+    assert payload["snapshot"]["audio_settings"]["voice_key"] == "hearthside"
+    assert payload["snapshot"]["audio_settings"]["narration_style"] == "warm"
+    assert payload["snapshot"]["audio_settings"]["playback_speed"] == 0.85
+    assert payload["snapshot"]["audio_settings"]["include_background_music"] is True
+    assert payload["snapshot"]["audio_settings"]["music_profile"] == "night_ambience"
+    assert payload["snapshot"]["audio_settings"]["narration_volume"] == 88
+    assert payload["snapshot"]["audio_settings"]["music_volume"] == 18
+    assert (
+        payload["snapshot"]["audio_settings"]["runtime_estimate"]["basis_source"]
+        == "story_setup_target"
+    )
+    stage_map = {
+        stage["stage"]: stage
+        for stage in payload["snapshot"]["stage_states"]
+    }
+    assert stage_map["audio"]["status"] == "needs_regeneration"
+    assert stage_map["finalize"]["status"] == "needs_regeneration"
 
 
 def test_get_session_snapshot_endpoint_returns_404_for_missing_session(

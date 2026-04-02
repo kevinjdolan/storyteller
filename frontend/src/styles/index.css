@@ -942,7 +942,9 @@ h4 {
 .beat-stage__controls,
 .beat-stage__grid,
 .beat-stage__editor-grid,
-.beat-stage__history {
+.beat-stage__history,
+.audio-stage__cards,
+.audio-stage__summary {
   align-items: stretch;
 }
 
@@ -1062,6 +1064,24 @@ h4 {
   justify-content: space-between;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+.audio-stage__summary {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.audio-stage__form-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.audio-stage__fields {
+  align-items: start;
+}
+
+.audio-stage__actions {
+  align-items: center;
 }
 
 .plan-revision-panel__header {

@@ -11,6 +11,21 @@ from app.models.action_policy import (
     SessionActionSideEffectKind,
     build_action_policy_request_from_batch,
 )
+from app.models.audio_settings import (
+    DEFAULT_AUDIO_INCLUDE_BACKGROUND_MUSIC,
+    DEFAULT_AUDIO_MUSIC_PROFILE,
+    DEFAULT_AUDIO_MUSIC_VOLUME,
+    DEFAULT_AUDIO_NARRATION_STYLE,
+    DEFAULT_AUDIO_NARRATION_VOLUME,
+    DEFAULT_AUDIO_PLAYBACK_SPEED,
+    DEFAULT_AUDIO_VOICE_KEY,
+    AudioMusicProfile,
+    AudioNarrationStyle,
+    AudioRuntimeEstimateSource,
+    AudioRuntimeEstimateView,
+    AudioSettingsView,
+    AudioVoiceKey,
+)
 from app.models.beat_sheet_generation import (
     BEAT_SHEET_GENERATION_PROMPT_VERSION,
     BEAT_SHEET_GENERATION_SCHEMA_VERSION,
@@ -255,6 +270,7 @@ from app.models.realtime import (
 )
 from app.models.session import (
     AcceptRewriteSessionCompositionRequest,
+    SaveSessionAudioSettingsRequest,
     AudioJobView,
     BeatSheetBeatView,
     BeatSheetEditView,
@@ -298,6 +314,7 @@ from app.models.session import (
     SelectSessionPitchRequest,
     SelectSessionToneRequest,
     SessionAssetView,
+    SessionAudioSettingsResponse,
     SessionBeatSheetGenerationResponse,
     SessionBeatSheetUpdateResponse,
     SessionCatalogSelection,

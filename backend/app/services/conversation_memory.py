@@ -19,6 +19,10 @@ from app.repositories import (
     SessionMemorySnapshotRepository,
     StorySessionRepository,
 )
+from app.services.audio_settings import (
+    build_audio_settings_memory_summary,
+    build_audio_settings_view,
+)
 
 _INTERRUPTION_JOB_STATUSES = {
     JobStatus.PAUSED,
@@ -231,19 +235,28 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
             outline_bits.append(_truncate(last_change_summary))
         preferences.append("Story outline: " + ", ".join(outline_bits))
 
-    if audio_job is not None:
-        audio_preferences = [
-            f"voice={audio_job.voice_key or 'unset'}",
-            f"speed={audio_job.playback_speed:g}",
-            (
-                "background_music=on"
-                if audio_job.include_background_music
-                else "background_music=off"
-            ),
-        ]
-        if audio_job.music_profile:
-            audio_preferences.append(f"music_profile={audio_job.music_profile}")
-        preferences.append("Narration settings: " + ", ".join(audio_preferences))
+    if audio_job is not None or any(
+        getattr(aggregate.session, field_name) is not None
+        for field_name in (
+            "audio_voice_key",
+            "audio_narration_style",
+            "audio_playback_speed",
+            "audio_include_background_music",
+            "audio_music_profile",
+            "audio_narration_volume",
+            "audio_music_volume",
+            "audio_guidance_notes",
+        )
+    ):
+        settings = build_audio_settings_view(
+            story_session=aggregate.session,
+            latest_audio_job=audio_job,
+            composition_segments=aggregate.composition_segments,
+            selected_story_setup=aggregate.selected_story_setup,
+        )
+        preferences.append(
+            "Narration settings: " + build_audio_settings_memory_summary(settings)
+        )
 
     return preferences
 

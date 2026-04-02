@@ -1280,11 +1280,16 @@ class StoryWorkflowToolService:
         actor: SessionEventActor | None = None,
     ) -> EstimateAudioLengthToolResult:
         del actor
-        self._sessions.load_session_snapshot(session_id)
+        snapshot = self._sessions.load_session_snapshot(session_id)
+        playback_speed = (
+            request.playback_speed
+            if "playback_speed" in request.model_fields_set
+            else snapshot.audio_settings.playback_speed
+        )
         word_count, source = self._estimate_word_count(session_id, request)
         estimated_seconds = _estimate_duration_seconds(
             word_count,
-            playback_speed=request.playback_speed,
+            playback_speed=playback_speed,
         )
         return EstimateAudioLengthToolResult(
             tool_name=StoryWorkflowToolName.ESTIMATE_AUDIO_LENGTH,
@@ -1292,7 +1297,7 @@ class StoryWorkflowToolService:
             summary="Estimated narration duration from the current story material.",
             estimated_duration_seconds=estimated_seconds,
             estimated_word_count=word_count,
-            playback_speed=request.playback_speed,
+            playback_speed=playback_speed,
             basis_source=source,
         )
 
@@ -1303,7 +1308,28 @@ class StoryWorkflowToolService:
         request: StartAudioGenerationToolInput,
         actor: SessionEventActor | None = None,
     ) -> StartAudioGenerationToolResult:
-        self._sessions.load_session_snapshot(session_id)
+        snapshot = self._sessions.load_session_snapshot(session_id)
+        resolved_settings = snapshot.audio_settings
+        voice_key = (
+            request.voice_key
+            if "voice_key" in request.model_fields_set
+            else resolved_settings.voice_key.value
+        )
+        playback_speed = (
+            request.playback_speed
+            if "playback_speed" in request.model_fields_set
+            else resolved_settings.playback_speed
+        )
+        include_background_music = (
+            request.include_background_music
+            if "include_background_music" in request.model_fields_set
+            else resolved_settings.include_background_music
+        )
+        music_profile = (
+            request.music_profile
+            if "music_profile" in request.model_fields_set
+            else resolved_settings.music_profile.value
+        )
         self._cancel_active_audio_jobs(
             session_id,
             reason="Cancelled because a new audio generation run started.",
@@ -1311,8 +1337,8 @@ class StoryWorkflowToolService:
         estimate = self._estimate_audio_length(
             session_id=session_id,
             request=EstimateAudioLengthToolInput(
-                playback_speed=request.playback_speed,
-                voice_key=request.voice_key,
+                playback_speed=playback_speed,
+                voice_key=voice_key,
             ),
             actor=actor,
         )
@@ -1320,13 +1346,23 @@ class StoryWorkflowToolService:
             session_id=session_id,
             source_composition_job_id=self._latest_composition_job_id(session_id),
             status=JobStatus.IN_PROGRESS,
-            voice_key=request.voice_key,
-            playback_speed=request.playback_speed,
-            include_background_music=request.include_background_music,
-            music_profile=request.music_profile,
+            voice_key=voice_key,
+            playback_speed=playback_speed,
+            include_background_music=include_background_music,
+            music_profile=music_profile,
             estimated_duration_seconds=estimate.estimated_duration_seconds,
             current_segment_index=1,
-            config_json=request.model_dump(mode="json", exclude_none=True),
+            config_json={
+                **request.model_dump(mode="json", exclude_none=True),
+                "voice_key": voice_key,
+                "playback_speed": playback_speed,
+                "include_background_music": include_background_music,
+                "music_profile": music_profile,
+                "narration_style": resolved_settings.narration_style.value,
+                "narration_volume": resolved_settings.narration_volume,
+                "music_volume": resolved_settings.music_volume,
+                "guidance_notes": resolved_settings.guidance_notes,
+            },
             started_at=utc_now(),
         )
         self._session.add(job)
@@ -1349,9 +1385,9 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     "Starting audio generation.",
-                    _optional_detail("Voice", request.voice_key),
-                    f"Playback speed {request.playback_speed:g}x.",
-                    "Background music enabled." if request.include_background_music else None,
+                    _optional_detail("Voice", voice_key),
+                    f"Playback speed {playback_speed:g}x.",
+                    "Background music enabled." if include_background_music else None,
                 ]
             ),
             actor=actor,
