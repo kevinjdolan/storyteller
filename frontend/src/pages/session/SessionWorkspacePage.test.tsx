@@ -553,6 +553,7 @@ function mockWorkspaceApi(options?: {
     } as const)
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
+  const genreSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionResponse =
     options?.genreSelectionResponse ?? buildGenreSelectionResponse
   const chatIntentResponse = options?.chatIntentResponse ?? {
@@ -672,6 +673,7 @@ function mockWorkspaceApi(options?: {
           typeof init.body === 'string'
             ? (JSON.parse(init.body) as Record<string, unknown>)
             : {}
+        genreSelectionRequests.push(requestBody)
         const resolvedGenreSelectionResponse =
           typeof genreSelectionResponse === 'function'
             ? genreSelectionResponse(requestBody)
@@ -688,6 +690,7 @@ function mockWorkspaceApi(options?: {
 
   return {
     chatIntentRequests,
+    genreSelectionRequests,
   }
 }
 
@@ -801,7 +804,7 @@ describe('SessionWorkspacePage', () => {
       events: [sampleHistory.events[0]],
     } as const
 
-    mockWorkspaceApi({
+    const { genreSelectionRequests } = mockWorkspaceApi({
       history: genreStageHistory,
       hydration: {
         snapshot: genreStageSnapshot,
@@ -858,6 +861,12 @@ describe('SessionWorkspacePage', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('Quest Fantasy / Tone pending')).toBeInTheDocument()
+    expect(genreSelectionRequests).toEqual([
+      {
+        genre_id: sampleGenreCatalog[0].id,
+        origin: 'workspace',
+      },
+    ])
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {

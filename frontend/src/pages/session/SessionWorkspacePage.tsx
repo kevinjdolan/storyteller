@@ -685,15 +685,26 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     origin: string
     previewCurrentStage?: boolean
   }) {
+    const requestBody =
+      options.genreId != null
+        ? {
+            genre_id: options.genreId,
+            origin: options.origin,
+          }
+        : options.genreSlug != null
+          ? {
+              genre_slug: options.genreSlug,
+              origin: options.origin,
+            }
+          : {
+              genre_label: options.genreLabel ?? null,
+              origin: options.origin,
+            }
+
     const result = await selectSessionGenre<
       SessionSnapshot,
       SessionHistoryEvent
-    >(sessionId, {
-      genre_id: options.genreId ?? null,
-      genre_label: options.genreLabel ?? null,
-      genre_slug: options.genreSlug ?? null,
-      origin: options.origin,
-    })
+    >(sessionId, requestBody)
 
     runtimeStore.hydrateSessionSnapshot(result.snapshot)
     appendHistoryEventToChat(result.event)
