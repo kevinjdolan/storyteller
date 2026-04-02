@@ -255,6 +255,9 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             revision_number=1,
             status=JobStatus.IN_PROGRESS,
             planned_summary="Pip reaches the reeds and hears the lake settle.",
+            accepted_summary="Pip reaches the reeds and the lake settles with him.",
+            accepted_text="Pip reaches the reeds and the lake settles with him.",
+            raw_generated_text="Raw draft: Pip reaches the reeds and the lake settles with him.",
         )
 
         completed_session = StorySession(
@@ -335,6 +338,12 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             .segments[0]
             .planned_summary.startswith("Pip reaches")
         )
+        assert (
+            session_rows[0]
+            .composition_jobs[0]
+            .segments[0]
+            .accepted_summary.startswith("Pip reaches")
+        )
         assert session_rows[0].story_outlines[0].outline_kind == "chapter"
         assert session_rows[0].continuity_bibles[0].summary_text == (
             "Pip anchors the current story in a moonlit lake."
@@ -379,13 +388,9 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         workflow_indexes = {
             index["name"] for index in inspector.get_indexes("workflow_stage_states")
         }
-        continuity_indexes = {
-            index["name"] for index in inspector.get_indexes("continuity_bibles")
-        }
+        continuity_indexes = {index["name"] for index in inspector.get_indexes("continuity_bibles")}
         asset_indexes = {index["name"] for index in inspector.get_indexes("session_assets")}
-        story_brief_columns = {
-            column["name"] for column in inspector.get_columns("story_briefs")
-        }
+        story_brief_columns = {column["name"] for column in inspector.get_columns("story_briefs")}
 
         assert {
             "ix_story_sessions_current_stage",

@@ -115,7 +115,12 @@ class SessionContinuityService:
                 continue
             if row.status != JobStatus.COMPLETED and row.completed_at is None:
                 continue
-            if row.text_content is None and row.planned_summary is None:
+            if (
+                row.accepted_text is None
+                and row.text_content is None
+                and row.planned_summary is None
+                and row.accepted_summary is None
+            ):
                 continue
             latest_by_segment[row.segment_index] = row
         return [latest_by_segment[index] for index in sorted(latest_by_segment)]
@@ -193,11 +198,14 @@ def _build_continuity_facts(
         aggregate.session.selected_tone_profile is not None
     ):
         tone = aggregate.session.selected_tone_profile
-        tone_detail = " ".join(
-            part
-            for part in (tone.description, tone.bedtime_notes)
-            if _normalize_optional_text(part) is not None
-        ) or f"Preserve the {tone.label} bedtime tone."
+        tone_detail = (
+            " ".join(
+                part
+                for part in (tone.description, tone.bedtime_notes)
+                if _normalize_optional_text(part) is not None
+            )
+            or f"Preserve the {tone.label} bedtime tone."
+        )
         add_fact(
             ContinuityFactCategory.VOICE_CONSTRAINT,
             "Tone lane",
@@ -332,9 +340,8 @@ def _build_continuity_facts(
         supporting_cast = []
         if isinstance(candidate_payload.get("candidate"), Mapping):
             supporting_cast = candidate_payload["candidate"].get("supporting_cast", [])
-        if (
-            not isinstance(supporting_cast, list)
-            and isinstance(character_sheet.supporting_cast, list)
+        if not isinstance(supporting_cast, list) and isinstance(
+            character_sheet.supporting_cast, list
         ):
             supporting_cast = character_sheet.supporting_cast
         for member in supporting_cast or []:
@@ -433,11 +440,7 @@ def _build_continuity_facts(
             and card["position"] > highest_locked_segment_index
         ]
         if not upcoming_cards:
-            upcoming_cards = [
-                card
-                for card in raw_cards
-                if isinstance(card, Mapping)
-            ]
+            upcoming_cards = [card for card in raw_cards if isinstance(card, Mapping)]
         for card in upcoming_cards[:3]:
             add_fact(
                 ContinuityFactCategory.UNRESOLVED_THREAD,
@@ -459,10 +462,16 @@ def _build_continuity_facts(
 
     for segment in locked_segments:
         payload = segment.payload if isinstance(segment.payload, Mapping) else {}
-        detail = _normalize_optional_text(segment.planned_summary) or _truncate(
-            _normalize_optional_text(segment.text_content) or "",
-            limit=200,
+        detail = (
+            _normalize_optional_text(segment.accepted_summary)
+            or _normalize_optional_text(segment.planned_summary)
+            or _truncate(
+                _normalize_optional_text(segment.accepted_text or segment.text_content) or "",
+                limit=200,
+            )
         )
+        if detail is None:
+            continue
         add_fact(
             ContinuityFactCategory.LOCKED_DETAIL,
             _read_optional_mapping_text(payload, "outline_card_title")
@@ -563,10 +572,7 @@ def _split_phrases(value: str | None, *, allow_commas: bool = False) -> list[str
     pattern = r"[\n;]+"
     if allow_commas:
         pattern = r"[\n;,]+"
-    parts = [
-        item.strip()
-        for item in re.split(pattern, normalized)
-    ]
+    parts = [item.strip() for item in re.split(pattern, normalized)]
     return [part for part in parts if part]
 
 

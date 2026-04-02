@@ -114,6 +114,25 @@ EXPECTED_STORY_BRIEF_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_COMPOSITION_SEGMENT_COLUMNS = {
+    "id",
+    "session_id",
+    "composition_job_id",
+    "superseded_by_segment_id",
+    "segment_index",
+    "revision_number",
+    "status",
+    "planned_summary",
+    "raw_generated_text",
+    "accepted_text",
+    "accepted_summary",
+    "text_content",
+    "word_count",
+    "payload",
+    "completed_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -165,6 +184,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
+    assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _column_names(
+        database_url,
+        "composition_segments",
+    )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,
         "session_memory_snapshots",
@@ -179,6 +202,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
+    assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _column_names(
+        database_url,
+        "composition_segments",
+    )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,
         "session_memory_snapshots",

@@ -7,7 +7,7 @@ from app.services.composition_jobs import (
     COMPOSITION_RUNTIME_JOB_TYPE,
     CompositionJobService,
     CompositionJobServiceError,
-    HeuristicCompositionSegmentWriter,
+    CompositionSegmentWriter,
 )
 from app.services.story_tools import (
     StoryWorkflowToolService,
@@ -21,7 +21,7 @@ from app.worker.runtime import JobExecutionContext
 def build_default_job_handler_registry(
     *,
     object_storage: ObjectStorageService | None = None,
-    composition_writer: HeuristicCompositionSegmentWriter | None = None,
+    composition_writer: CompositionSegmentWriter | None = None,
 ) -> JobHandlerRegistry:
     registry = JobHandlerRegistry()
     registry.register("demo.echo", demo_echo_handler)
@@ -88,7 +88,7 @@ def build_story_workflow_tool_handler(job_type: str):
 def build_composition_runtime_handler(
     *,
     object_storage: ObjectStorageService | None = None,
-    composition_writer: HeuristicCompositionSegmentWriter | None = None,
+    composition_writer: CompositionSegmentWriter | None = None,
 ):
     def handler(
         payload: dict[str, Any] | list[Any] | None,

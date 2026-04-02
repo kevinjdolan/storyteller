@@ -871,6 +871,9 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=JobStatus.QUEUED,
     )
     planned_summary: Mapped[str | None] = mapped_column(Text)
+    raw_generated_text: Mapped[str | None] = mapped_column(Text)
+    accepted_text: Mapped[str | None] = mapped_column(Text)
+    accepted_summary: Mapped[str | None] = mapped_column(Text)
     text_content: Mapped[str | None] = mapped_column(Text)
     word_count: Mapped[int | None] = mapped_column(Integer)
     payload: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)

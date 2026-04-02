@@ -1165,8 +1165,8 @@ class StoryWorkflowToolService:
                 "compose_next_segment requires a selected beat sheet",
             )
 
-        next_segment_index = request.restart_from_segment_index or self._next_segment_index(
-            session_id
+        next_segment_index = request.restart_from_segment_index or (
+            self._composition_jobs.resolve_continue_start_segment(session_id)
         )
         start_result = self._composition_jobs.start_job(
             session_id,
@@ -1488,15 +1488,34 @@ class StoryWorkflowToolService:
         if request.word_count_override is not None:
             return request.word_count_override, AudioLengthEstimateSource.REQUEST_OVERRIDE
 
-        stmt = select(CompositionSegment).where(CompositionSegment.session_id == session_id)
-        segments = list(self._session.execute(stmt).scalars().all())
+        stmt = (
+            select(CompositionSegment)
+            .where(CompositionSegment.session_id == session_id)
+            .order_by(
+                CompositionSegment.segment_index.asc(),
+                CompositionSegment.revision_number.desc(),
+            )
+        )
+        rows = list(self._session.execute(stmt).scalars().all())
+        latest_by_segment: dict[int, CompositionSegment] = {}
+        for row in rows:
+            if row.segment_index in latest_by_segment:
+                continue
+            if row.status != JobStatus.COMPLETED and row.completed_at is None:
+                continue
+            if row.accepted_text is None and row.text_content is None and row.word_count is None:
+                continue
+            latest_by_segment[row.segment_index] = row
+
+        segments = [latest_by_segment[index] for index in sorted(latest_by_segment)]
         total_words = 0
         for segment in segments:
             if segment.word_count is not None:
                 total_words += segment.word_count
                 continue
-            if segment.text_content:
-                total_words += len(segment.text_content.split())
+            accepted_text = segment.accepted_text or segment.text_content
+            if accepted_text:
+                total_words += len(accepted_text.split())
 
         if total_words > 0:
             return total_words, AudioLengthEstimateSource.COMPOSITION_SEGMENTS

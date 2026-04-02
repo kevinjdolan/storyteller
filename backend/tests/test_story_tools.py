@@ -46,9 +46,11 @@ from app.services import (
     SessionService,
     StoryWorkflowActionRouter,
     StoryWorkflowToolService,
+    evaluate_composition_segment_draft,
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
 )
+from app.services.composition_jobs import GeneratedCompositionSegmentDraft
 from app.settings import load_settings
 from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
@@ -144,6 +146,85 @@ class FakeGCSJsonAPI:
             return httpx.Response(status_code=200, json=stored["metadata"])
 
         return httpx.Response(status_code=500, json={"error": {"message": "unhandled"}})
+
+
+class RecordingCompositionWriter:
+    def __init__(self, *, label: str) -> None:
+        self.label = label
+        self.payloads: list[dict[str, object]] = []
+
+    def compose_segment(
+        self,
+        *,
+        segment_payload,
+        prior_segments,
+        current_partial_text,
+        total_segments,
+    ) -> GeneratedCompositionSegmentDraft:
+        del prior_segments, current_partial_text, total_segments
+        payload = dict(segment_payload)
+        self.payloads.append(payload)
+        prompt = payload["composition_prompt"]
+        dynamic_context = prompt["dynamic_context"]
+        segment_index = int(dynamic_context["segment_index"])
+        protagonist_name = (
+            dynamic_context["selected_character_sheet"].get("protagonist_name") or "Mira"
+        )
+        companion_name = "Pip"
+        accepted_text = _build_recorded_segment_text(
+            label=self.label,
+            segment_index=segment_index,
+            protagonist_name=protagonist_name,
+            companion_name=companion_name,
+        )
+        carryover_summary = (
+            f"{self.label} segment {segment_index} leaves {protagonist_name} calmer, keeps the "
+            f"bell promise active, and sends {companion_name} forward as visible support."
+        )
+        evaluation = evaluate_composition_segment_draft(
+            accepted_text,
+            protagonist_name=protagonist_name,
+            supporting_character_name=companion_name,
+            carryover_summary=carryover_summary,
+        )
+        paragraphs = [paragraph for paragraph in accepted_text.split("\n\n") if paragraph.strip()]
+        return GeneratedCompositionSegmentDraft(
+            raw_text=f"{accepted_text}\n\nRaw drafting note: {self.label} pass.",
+            accepted_text=accepted_text,
+            carryover_summary=carryover_summary,
+            remaining_chunks=tuple(paragraphs),
+            evaluation=evaluation,
+            source="heuristic",
+        )
+
+
+def _build_recorded_segment_text(
+    *,
+    label: str,
+    segment_index: int,
+    protagonist_name: str,
+    companion_name: str,
+) -> str:
+    return "\n\n".join(
+        [
+            (
+                f"{label} segment {segment_index} lets {protagonist_name} follow the silver bell "
+                f"through a gentle stretch of harbor water while the night stays readable, warm, "
+                "and unmistakably safe for bedtime listening."
+            ),
+            (
+                f"{companion_name} stays close enough to steady every surprise, and the prose "
+                "keeps "
+                "the movement soft, patient, visibly cared for, and easy for a sleepy child to "
+                "trust."
+            ),
+            (
+                f"The moment lands in calm repair, so {protagonist_name} and {companion_name} can "
+                "rest before the next handoff, with the harbor settled, the promise intact, and "
+                "the final image quiet."
+            ),
+        ]
+    )
 
 
 def _build_test_object_storage() -> tuple[FakeGCSJsonAPI, httpx.Client, ObjectStorageService]:
@@ -801,6 +882,152 @@ def test_composition_job_service_resume_does_not_duplicate_runtime_attempts(
     assert len(pending_for_job) == 1
 
 
+def test_composition_job_service_carries_forward_structured_segment_summaries(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    writer = RecordingCompositionWriter(label="Draft")
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=writer,
+            )
+            first_result = service.run_job(result.composition_job_id)
+            second_result = service.run_job(result.composition_job_id)
+
+            segment_one = session.execute(
+                select(CompositionSegment)
+                .where(
+                    CompositionSegment.composition_job_id == result.composition_job_id,
+                    CompositionSegment.segment_index == 1,
+                )
+                .order_by(CompositionSegment.revision_number.desc())
+            ).scalar_one()
+            segment_two = session.execute(
+                select(CompositionSegment)
+                .where(
+                    CompositionSegment.composition_job_id == result.composition_job_id,
+                    CompositionSegment.segment_index == 2,
+                )
+                .order_by(CompositionSegment.revision_number.desc())
+            ).scalar_one()
+
+        assert first_result["action"] == "queued_next_segment"
+        assert second_result["action"] == "queued_next_segment"
+        assert segment_one.raw_generated_text is not None
+        assert segment_one.accepted_text is not None
+        assert segment_one.accepted_summary is not None
+        assert segment_two.payload["context_carryover"]["prior_segment_count"] == 1
+        assert (
+            segment_two.payload["context_carryover"]["prior_segments"][0]["accepted_summary"]
+            == segment_one.accepted_summary
+        )
+        assert (
+            segment_two.payload["context_carryover"]["latest_accepted_summary"]
+            == segment_one.accepted_summary
+        )
+        assert writer.payloads[0]["context_carryover"]["prior_segment_count"] == 0
+        assert writer.payloads[1]["context_carryover"]["prior_segment_count"] == 1
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_rewrite_job_compiles_story_from_latest_segment_revisions(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    initial_writer = RecordingCompositionWriter(label="Draft")
+    rewrite_writer = RecordingCompositionWriter(label="Rewrite")
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            draft_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            draft_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=initial_writer,
+            )
+            for _ in range(3):
+                draft_service.run_job(draft_result.composition_job_id)
+
+            rewrite_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+                session_id=seeded["session_id"],
+                arguments={
+                    "instructions": "Rewrite the last two chapters with even gentler support.",
+                    "rewrite_from_segment_index": 2,
+                },
+            )
+
+        with session_factory() as session:
+            rewrite_service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=rewrite_writer,
+            )
+            for _ in range(2):
+                rewrite_service.run_job(rewrite_result.composition_job_id)
+
+            rewritten_job = session.get(CompositionJob, rewrite_result.composition_job_id)
+            rewritten_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.composition_job_id == rewrite_result.composition_job_id,
+                    SessionAsset.asset_kind == AssetKind.STORY_TEXT,
+                )
+            ).scalar_one()
+            segment_two_revisions = list(
+                session.execute(
+                    select(CompositionSegment)
+                    .where(
+                        CompositionSegment.session_id == seeded["session_id"],
+                        CompositionSegment.segment_index == 2,
+                    )
+                    .order_by(CompositionSegment.revision_number.asc())
+                ).scalars()
+            )
+
+        assert rewritten_job is not None
+        assert rewritten_job.status == JobStatus.COMPLETED
+        story_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=rewritten_asset.storage_bucket,
+                key=rewritten_asset.object_path,
+            )
+        )
+        assert "Draft segment 1" in story_text
+        assert "Rewrite segment 2" in story_text
+        assert "Rewrite segment 3" in story_text
+        assert "Draft segment 2" not in story_text
+        assert len(segment_two_revisions) == 2
+        assert segment_two_revisions[0].superseded_by_segment_id == segment_two_revisions[1].id
+        assert rewrite_writer.payloads[0]["context_carryover"]["prior_segment_count"] == 1
+        assert rewrite_writer.payloads[1]["context_carryover"]["prior_segment_count"] == 2
+    finally:
+        object_storage.close()
+        client.close()
+
+
 def test_worker_completes_durable_composition_job_and_persists_story_text_asset(
     tmp_path: Path,
 ) -> None:
@@ -837,6 +1064,14 @@ def test_worker_completes_durable_composition_job_and_persists_story_text_asset(
                     SessionAsset.asset_kind == AssetKind.STORY_TEXT,
                 )
             ).scalar_one_or_none()
+            segment_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.composition_job_id == result.composition_job_id,
+                        SessionAsset.asset_kind == AssetKind.COMPOSITION_SEGMENT,
+                    )
+                ).scalars()
+            )
             segments = list(
                 session.execute(
                     select(CompositionSegment)
@@ -851,6 +1086,11 @@ def test_worker_completes_durable_composition_job_and_persists_story_text_asset(
         assert composition_job.progress_percent == 100
         assert len(segments) == 3
         assert all(segment.status == JobStatus.COMPLETED for segment in segments)
+        assert all(segment.raw_generated_text for segment in segments)
+        assert all(segment.accepted_text for segment in segments)
+        assert all(segment.accepted_summary for segment in segments)
+        assert len(segment_assets) == 3
+        assert all(asset.status == AssetStatus.READY for asset in segment_assets)
         assert story_asset is not None
         assert story_asset.status == AssetStatus.READY
         story_text = object_storage.download_text(

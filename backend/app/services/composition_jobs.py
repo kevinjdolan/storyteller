@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Protocol
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
+from app.ai import (
+    CompositionSegmentGenerationAdapter,
+    GeminiCompositionSegmentGenerationAdapter,
+    build_composition_segment_generation_invocation,
+)
 from app.db import (
     AssetKind,
     AssetStatus,
@@ -19,7 +25,13 @@ from app.db import (
 )
 from app.db.base import utc_now
 from app.models import (
+    COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
     CompositionPromptAssemblyInput,
+    CompositionSegmentCarryoverContext,
+    CompositionSegmentCarryoverItem,
+    CompositionSegmentGenerationPromptContext,
+    ModelCallOutcome,
+    ModelUsageBucket,
     SessionEventActor,
     WorkflowStage,
     WorkflowStageState,
@@ -28,6 +40,7 @@ from app.services.assets import SessionAssetService
 from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobService
+from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.plan_revisions import PlanRevisionService
 from app.services.sessions import SessionService
 from app.settings import get_settings
@@ -73,9 +86,15 @@ class CompositionSegmentDraftEvaluation:
 
 @dataclass(frozen=True)
 class GeneratedCompositionSegmentDraft:
-    full_text: str
+    raw_text: str
+    accepted_text: str
+    carryover_summary: str
     remaining_chunks: tuple[str, ...]
     evaluation: CompositionSegmentDraftEvaluation
+    source: str = "heuristic"
+    model_id: str | None = None
+    prompt_version: str | None = None
+    raw_response: dict[str, Any] | list[Any] | str | None = None
 
 
 class CompositionSegmentWriter(Protocol):
@@ -101,6 +120,7 @@ class HeuristicCompositionSegmentWriter:
         dynamic_context = _read_mapping(
             _read_mapping(segment_payload, "composition_prompt"), "dynamic_context"
         )
+        carryover_context = _read_mapping(segment_payload, "context_carryover")
         outline_card = _read_mapping(dynamic_context, "outline_card")
         selected_character_sheet = _read_mapping(dynamic_context, "selected_character_sheet")
         protagonist = _read_mapping(selected_character_sheet, "protagonist")
@@ -165,8 +185,9 @@ class HeuristicCompositionSegmentWriter:
             first_fact = continuity_facts[0]
             if isinstance(first_fact, Mapping):
                 continuity_detail = _read_text(first_fact, "detail")
-        prior_story_reference = None
-        if prior_segments:
+        carryover_story_summary = _read_text(carryover_context, "story_so_far_summary")
+        prior_story_reference = _read_text(carryover_context, "latest_accepted_summary")
+        if prior_story_reference is None and prior_segments:
             prior_story_reference = _extract_last_sentence(prior_segments[-1])
 
         paragraph_one = (
@@ -195,6 +216,8 @@ class HeuristicCompositionSegmentWriter:
             paragraph_three_parts.append(
                 f"The rhythm carried forward from the earlier pages, where {prior_story_reference}."
             )
+        if carryover_story_summary is not None:
+            paragraph_three_parts.append(f"Story-so-far focus: {carryover_story_summary}")
         if continuity_detail is not None:
             paragraph_three_parts.append(f"A remembered detail stayed steady: {continuity_detail}")
         if bedtime_guardrail is not None:
@@ -216,28 +239,137 @@ class HeuristicCompositionSegmentWriter:
             if part and part.strip()
         )
 
-        full_text = "\n\n".join(
+        accepted_text = "\n\n".join(
             paragraph.strip()
             for paragraph in (paragraph_one, paragraph_two, paragraph_three)
             if paragraph.strip()
         ).strip()
+        raw_text = accepted_text
+        carryover_summary = _build_carryover_summary(
+            protagonist_name=protagonist_name,
+            outline_title=outline_title,
+            outline_summary=outline_summary,
+            emotional_shift=emotional_shift,
+            prior_story_reference=prior_story_reference,
+            companion_name=companion_name,
+        )
         prefix = current_partial_text or ""
-        remaining_text = full_text
-        if prefix and full_text.startswith(prefix):
-            remaining_text = full_text[len(prefix) :]
+        remaining_text = accepted_text
+        if prefix and accepted_text.startswith(prefix):
+            remaining_text = accepted_text[len(prefix) :]
         remaining_chunks = tuple(
             chunk for chunk in _split_remaining_text(prefix, remaining_text) if chunk.strip()
         )
         evaluation = evaluate_composition_segment_draft(
-            full_text,
+            accepted_text,
             protagonist_name=protagonist_name,
             supporting_character_name=companion_name,
+            carryover_summary=carryover_summary,
         )
         return GeneratedCompositionSegmentDraft(
-            full_text=full_text,
+            raw_text=raw_text,
+            accepted_text=accepted_text,
+            carryover_summary=carryover_summary,
             remaining_chunks=remaining_chunks,
             evaluation=evaluation,
         )
+
+
+class GeminiCompositionSegmentWriter:
+    def __init__(
+        self,
+        *,
+        adapter: CompositionSegmentGenerationAdapter | None = None,
+        fallback_writer: CompositionSegmentWriter | None = None,
+    ) -> None:
+        self._adapter = adapter
+        self._fallback_writer = fallback_writer or HeuristicCompositionSegmentWriter()
+
+    @classmethod
+    def from_settings(cls) -> "GeminiCompositionSegmentWriter":
+        settings = get_settings()
+        return cls(
+            adapter=GeminiCompositionSegmentGenerationAdapter(
+                credential=settings.gemini.api_key.get_secret_value(),
+                model_id=settings.gemini.composition_model,
+            )
+        )
+
+    def compose_segment(
+        self,
+        *,
+        segment_payload: Mapping[str, Any],
+        prior_segments: Sequence[str],
+        current_partial_text: str | None,
+        total_segments: int,
+    ) -> GeneratedCompositionSegmentDraft:
+        prompt_payload = _read_mapping(segment_payload, "composition_prompt")
+        carryover_payload = _read_mapping(segment_payload, "context_carryover")
+        if not prompt_payload or self._adapter is None:
+            return self._fallback_writer.compose_segment(
+                segment_payload=segment_payload,
+                prior_segments=prior_segments,
+                current_partial_text=current_partial_text,
+                total_segments=total_segments,
+            )
+
+        try:
+            prompt_context = CompositionSegmentGenerationPromptContext(
+                composition_prompt=prompt_payload,
+                carryover=carryover_payload,
+            )
+            invocation = build_composition_segment_generation_invocation(
+                prompt_context,
+                model_id=self._adapter.model_id,
+            )
+            result = self._adapter.generate(invocation)
+            structured_output = result.structured_output
+            evaluation = evaluate_composition_segment_draft(
+                structured_output.accepted_text,
+                protagonist_name=_resolve_generation_protagonist_name(prompt_payload),
+                supporting_character_name=_resolve_generation_support_name(prompt_payload),
+                carryover_summary=structured_output.carryover_summary,
+            )
+            if not evaluation.passed:
+                raise CompositionJobServiceError(
+                    _build_validation_failure_reason(evaluation),
+                )
+            prefix = current_partial_text or ""
+            remaining_text = structured_output.accepted_text
+            if prefix and structured_output.accepted_text.startswith(prefix):
+                remaining_text = structured_output.accepted_text[len(prefix) :]
+            remaining_chunks = tuple(
+                chunk for chunk in _split_remaining_text(prefix, remaining_text) if chunk.strip()
+            )
+            return GeneratedCompositionSegmentDraft(
+                raw_text=structured_output.raw_text,
+                accepted_text=structured_output.accepted_text,
+                carryover_summary=structured_output.carryover_summary,
+                remaining_chunks=remaining_chunks,
+                evaluation=evaluation,
+                source="gemini",
+                model_id=result.invocation.model_id,
+                prompt_version=result.invocation.prompt_version,
+                raw_response=result.raw_response,
+            )
+        except Exception as exc:
+            fallback = self._fallback_writer.compose_segment(
+                segment_payload=segment_payload,
+                prior_segments=prior_segments,
+                current_partial_text=current_partial_text,
+                total_segments=total_segments,
+            )
+            return GeneratedCompositionSegmentDraft(
+                raw_text=fallback.raw_text,
+                accepted_text=fallback.accepted_text,
+                carryover_summary=fallback.carryover_summary,
+                remaining_chunks=fallback.remaining_chunks,
+                evaluation=fallback.evaluation,
+                source="heuristic",
+                model_id=self._adapter.model_id,
+                prompt_version=COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
+                raw_response={"fallback_reason": str(exc)},
+            )
 
 
 def evaluate_composition_segment_draft(
@@ -245,6 +377,7 @@ def evaluate_composition_segment_draft(
     *,
     protagonist_name: str,
     supporting_character_name: str | None,
+    carryover_summary: str | None = None,
 ) -> CompositionSegmentDraftEvaluation:
     paragraphs = [paragraph for paragraph in full_text.split("\n\n") if paragraph.strip()]
     lower_text = full_text.lower()
@@ -286,6 +419,15 @@ def evaluate_composition_segment_draft(
             else False,
             measured_value=paragraphs[-1] if paragraphs else "",
             detail="The closing paragraph should resolve toward visible calm.",
+        ),
+        CompositionSegmentDraftCriterion(
+            name="carryover_summary_present",
+            passed=(
+                carryover_summary is None
+                or len([part for part in carryover_summary.split() if part.strip()]) >= 12
+            ),
+            measured_value=carryover_summary or "",
+            detail="Each segment should leave a concise durable handoff for the next pass.",
         ),
     )
     return CompositionSegmentDraftEvaluation(
@@ -679,15 +821,33 @@ class CompositionJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
 
-        completed_segments = self._completed_segment_texts(
-            job.id, before_segment_index=current_segment.segment_index
+        refreshed_payload = self._refresh_runtime_segment_payload(
+            job=job,
+            segment=current_segment,
         )
+        job.metadata_json = {
+            **_read_metadata(job),
+            **_read_job_prompt_metadata(refreshed_payload),
+            "current_segment_id": current_segment.id,
+        }
+        completed_segments = self._latest_completed_segment_texts(
+            job.session_id,
+            before_segment_index=current_segment.segment_index,
+        )
+        draft_started_at = perf_counter()
         draft = self._writer.compose_segment(
-            segment_payload=_read_mapping(current_segment.payload),
+            segment_payload=refreshed_payload,
             prior_segments=completed_segments,
-            current_partial_text=current_segment.text_content,
+            current_partial_text=current_segment.accepted_text or current_segment.text_content,
             total_segments=total_segments,
         )
+        self._record_segment_model_usage(
+            session_id=job.session_id,
+            draft=draft,
+            elapsed_ms=max(round((perf_counter() - draft_started_at) * 1000), 0),
+        )
+        current_segment.raw_generated_text = draft.raw_text
+        current_segment.accepted_summary = draft.carryover_summary
         segment_storage_location = self._storage().paths.partial_draft_segment(
             session_id=job.session_id,
             job_id=job.id,
@@ -695,10 +855,11 @@ class CompositionJobService:
         )
 
         chunk_count = max(len(draft.remaining_chunks), 1)
-        current_text = current_segment.text_content or ""
+        current_text = current_segment.accepted_text or current_segment.text_content or ""
         chunk_index = 0
         for chunk in draft.remaining_chunks:
             current_text += chunk
+            current_segment.accepted_text = current_text
             current_segment.text_content = current_text
             current_segment.word_count = _count_words(current_text)
             job.progress_percent = _segment_progress_percent(
@@ -781,21 +942,29 @@ class CompositionJobService:
                     "action": "cancelled",
                 }
 
-        current_segment.text_content = draft.full_text
-        current_segment.word_count = _count_words(draft.full_text)
+        current_segment.accepted_text = draft.accepted_text
+        current_segment.text_content = draft.accepted_text
+        current_segment.word_count = _count_words(draft.accepted_text)
         current_segment.status = JobStatus.COMPLETED
         current_segment.completed_at = utc_now()
         self._storage().upload_text(
             segment_storage_location,
-            draft.full_text,
+            draft.accepted_text,
             content_type="text/markdown; charset=utf-8",
+        )
+        self._replace_prior_segment_revision(current_segment)
+        self._save_segment_asset(
+            job=job,
+            segment=current_segment,
+            storage_location=segment_storage_location,
+            draft=draft,
         )
 
         next_segment = self._next_queued_segment(
             job, after_segment_index=current_segment.segment_index
         )
         if next_segment is None:
-            story_text = self._compile_story_text(job.id)
+            story_text = self._compile_story_text(job.session_id)
             story_location = _story_text_location(
                 self._storage(), session_id=job.session_id, job_id=job.id
             )
@@ -817,6 +986,8 @@ class CompositionJobService:
                 byte_size=story_metadata.size_bytes,
                 metadata_json={
                     "orchestration_version": "composition_job.v1",
+                    "generation_source": draft.source,
+                    "final_segment_summary": current_segment.accepted_summary,
                     "evaluation": [
                         {
                             "name": criterion.name,
@@ -869,7 +1040,8 @@ class CompositionJobService:
         )
         job.metadata_json = {
             **_read_metadata(job),
-            "latest_partial_output": current_segment.text_content,
+            **_read_job_prompt_metadata(_read_mapping(next_segment.payload)),
+            "latest_partial_output": current_segment.accepted_text,
             "current_segment_id": next_segment.id,
         }
         self._events.record_composition_progress(
@@ -968,27 +1140,130 @@ class CompositionJobService:
         )
         return self._session.execute(stmt).scalar_one_or_none()
 
-    def _completed_segment_texts(
+    def _refresh_runtime_segment_payload(
         self,
-        composition_job_id: str,
+        *,
+        job: CompositionJob,
+        segment: CompositionSegment,
+    ) -> dict[str, Any]:
+        existing_payload = _read_mapping(segment.payload)
+        prompt_package = self._prompt_assembly.assemble_prompt_package(
+            CompositionPromptAssemblyInput(
+                session_id=job.session_id,
+                job_kind=job.job_kind.value,
+                segment_index=segment.segment_index,
+                instructions=_read_optional_prompt_text(
+                    _read_metadata(job), "request_instructions"
+                ),
+                restart_from_segment_index=(
+                    _read_start_segment_index(job)
+                    if job.job_kind == CompositionJobKind.DRAFT
+                    else None
+                ),
+                rewrite_from_segment_index=(
+                    _read_start_segment_index(job)
+                    if job.job_kind == CompositionJobKind.REWRITE
+                    else None
+                ),
+            )
+        )
+        carryover = self._build_context_carryover(
+            session_id=job.session_id,
+            before_segment_index=segment.segment_index,
+        )
+        payload = {
+            **existing_payload,
+            "job_kind": job.job_kind.value,
+            "request_instructions": _read_optional_prompt_text(
+                _read_metadata(job), "request_instructions"
+            ),
+            **prompt_package.build_storage_payload(),
+            "context_carryover": carryover.model_dump(mode="json"),
+        }
+        segment.payload = payload
+        segment.planned_summary = prompt_package.dynamic_context.segment_goal_summary
+        return payload
+
+    def _build_context_carryover(
+        self,
+        *,
+        session_id: str,
+        before_segment_index: int,
+    ) -> CompositionSegmentCarryoverContext:
+        prior_segments = self._latest_completed_segments(
+            session_id,
+            before_segment_index=before_segment_index,
+        )
+        carryover_items: list[CompositionSegmentCarryoverItem] = []
+        for row in prior_segments:
+            summary = _resolve_segment_summary(row)
+            if summary is None:
+                continue
+            payload = _read_mapping(row.payload)
+            carryover_items.append(
+                CompositionSegmentCarryoverItem(
+                    segment_index=row.segment_index,
+                    outline_card_title=_read_optional_prompt_text(payload, "outline_card_title"),
+                    accepted_summary=summary,
+                    accepted_word_count=row.word_count,
+                )
+            )
+
+        story_so_far_summary = _build_story_so_far_summary(carryover_items)
+        latest_summary = carryover_items[-1].accepted_summary if carryover_items else None
+        return CompositionSegmentCarryoverContext(
+            prior_segment_count=len(carryover_items),
+            story_so_far_summary=story_so_far_summary,
+            latest_accepted_summary=latest_summary,
+            prior_segments=carryover_items,
+        )
+
+    def _latest_completed_segment_texts(
+        self,
+        session_id: str,
         *,
         before_segment_index: int | None = None,
     ) -> list[str]:
+        rows = self._latest_completed_segments(
+            session_id,
+            before_segment_index=before_segment_index,
+        )
+        return [
+            row.accepted_text or row.text_content
+            for row in rows
+            if row.accepted_text or row.text_content
+        ]
+
+    def _latest_completed_segments(
+        self,
+        session_id: str,
+        *,
+        before_segment_index: int | None = None,
+    ) -> list[CompositionSegment]:
         stmt: Select[tuple[CompositionSegment]] = (
             select(CompositionSegment)
-            .where(
-                CompositionSegment.composition_job_id == composition_job_id,
-                CompositionSegment.status == JobStatus.COMPLETED,
+            .where(CompositionSegment.session_id == session_id)
+            .order_by(
+                CompositionSegment.segment_index.asc(),
+                CompositionSegment.revision_number.desc(),
             )
-            .order_by(CompositionSegment.segment_index.asc())
         )
         if before_segment_index is not None:
             stmt = stmt.where(CompositionSegment.segment_index < before_segment_index)
         rows = list(self._session.execute(stmt).scalars().all())
-        return [row.text_content for row in rows if row.text_content]
+        latest_by_segment: dict[int, CompositionSegment] = {}
+        for row in rows:
+            if row.segment_index in latest_by_segment:
+                continue
+            if row.status != JobStatus.COMPLETED and row.completed_at is None:
+                continue
+            if row.accepted_text is None and row.text_content is None:
+                continue
+            latest_by_segment[row.segment_index] = row
+        return [latest_by_segment[index] for index in sorted(latest_by_segment)]
 
-    def _compile_story_text(self, composition_job_id: str) -> str:
-        completed_segments = self._completed_segment_texts(composition_job_id)
+    def _compile_story_text(self, session_id: str) -> str:
+        completed_segments = self._latest_completed_segment_texts(session_id)
         if not completed_segments:
             raise CompositionJobStateError(
                 "cannot finalize a composition job without completed text"
@@ -996,6 +1271,92 @@ class CompositionJobService:
         return "\n\n".join(
             segment.strip() for segment in completed_segments if segment.strip()
         ).strip()
+
+    def _replace_prior_segment_revision(self, segment: CompositionSegment) -> None:
+        stmt = select(CompositionSegment).where(
+            CompositionSegment.session_id == segment.session_id,
+            CompositionSegment.segment_index == segment.segment_index,
+            CompositionSegment.id != segment.id,
+            CompositionSegment.superseded_by_segment_id.is_(None),
+        )
+        for row in self._session.execute(stmt).scalars().all():
+            row.superseded_by_segment_id = segment.id
+
+    def _save_segment_asset(
+        self,
+        *,
+        job: CompositionJob,
+        segment: CompositionSegment,
+        storage_location,
+        draft: GeneratedCompositionSegmentDraft,
+    ) -> None:
+        object_metadata = self._storage().fetch_object_metadata(storage_location)
+        self._supersede_segment_assets(job.session_id, segment.segment_index)
+        self._assets.save_asset_record(
+            session_id=job.session_id,
+            asset_kind=AssetKind.COMPOSITION_SEGMENT,
+            storage_bucket=storage_location.bucket,
+            object_path=storage_location.key,
+            mime_type="text/markdown",
+            status=AssetStatus.READY,
+            composition_job_id=job.id,
+            composition_segment_id=segment.id,
+            segment_index=segment.segment_index,
+            byte_size=object_metadata.size_bytes,
+            metadata_json={
+                "orchestration_version": "composition_job.v1",
+                "generation_source": draft.source,
+                "carryover_summary": segment.accepted_summary,
+                "evaluation": [
+                    {
+                        "name": criterion.name,
+                        "passed": criterion.passed,
+                        "measured_value": criterion.measured_value,
+                        "detail": criterion.detail,
+                    }
+                    for criterion in draft.evaluation.criteria
+                ],
+            },
+        )
+
+    def _record_segment_model_usage(
+        self,
+        *,
+        session_id: str,
+        draft: GeneratedCompositionSegmentDraft,
+        elapsed_ms: int,
+    ) -> None:
+        if draft.model_id is None:
+            return
+
+        SessionModelUsageService(self._session).record_model_call(
+            context=ModelUsageContext(
+                session_id=session_id,
+                usage_bucket=ModelUsageBucket.COMPOSITION,
+                workflow_stage=WorkflowStage.COMPOSITION,
+                purpose="segmented_composition_segment",
+                model_id=draft.model_id,
+                prompt_version=draft.prompt_version,
+            ),
+            elapsed_ms=elapsed_ms,
+            outcome=_resolve_model_usage_outcome(
+                source=draft.source,
+                raw_response=draft.raw_response,
+            ),
+            raw_response=draft.raw_response,
+            error_message=_extract_model_usage_error_message(draft.raw_response),
+        )
+
+    def _supersede_segment_assets(self, session_id: str, segment_index: int) -> None:
+        stmt = select(SessionAsset).where(
+            SessionAsset.session_id == session_id,
+            SessionAsset.asset_kind == AssetKind.COMPOSITION_SEGMENT,
+            SessionAsset.segment_index == segment_index,
+            SessionAsset.status == AssetStatus.READY,
+        )
+        for asset in self._session.execute(stmt).scalars().all():
+            asset.status = AssetStatus.SUPERSEDED
+            asset.superseded_at = utc_now()
 
     def _next_segment_revision(self, session_id: str, segment_index: int) -> int:
         stmt = (
@@ -1165,6 +1526,150 @@ def _read_start_segment_index(job: CompositionJob) -> int:
     )
 
 
+def _resolve_generation_protagonist_name(prompt_payload: Mapping[str, Any]) -> str:
+    dynamic_context = _read_mapping(prompt_payload, "dynamic_context")
+    selected_character_sheet = _read_mapping(dynamic_context, "selected_character_sheet")
+    protagonist = _read_mapping(selected_character_sheet, "protagonist")
+    return (
+        _read_text(protagonist, "name")
+        or _read_text(selected_character_sheet, "protagonist_name")
+        or "The young guide"
+    )
+
+
+def _resolve_generation_support_name(prompt_payload: Mapping[str, Any]) -> str | None:
+    dynamic_context = _read_mapping(prompt_payload, "dynamic_context")
+    selected_character_sheet = _read_mapping(dynamic_context, "selected_character_sheet")
+    supporting_cast = _read_list(selected_character_sheet, "supporting_cast")
+    if not supporting_cast:
+        return None
+    first_support = supporting_cast[0]
+    if not isinstance(first_support, Mapping):
+        return None
+    return _read_text(first_support, "name")
+
+
+def _build_validation_failure_reason(
+    evaluation: CompositionSegmentDraftEvaluation,
+) -> str:
+    failed = [criterion.name for criterion in evaluation.criteria if not criterion.passed]
+    if not failed:
+        return "composition segment validation failed"
+    return "composition segment validation failed: " + ", ".join(failed)
+
+
+def _build_carryover_summary(
+    *,
+    protagonist_name: str,
+    outline_title: str,
+    outline_summary: str,
+    emotional_shift: str,
+    prior_story_reference: str | None,
+    companion_name: str | None,
+) -> str:
+    parts = [
+        (
+            f"{protagonist_name} completed {outline_title.lower()} with this durable turn: "
+            f"{outline_summary}"
+        ),
+        f"Emotional handoff: {emotional_shift}.",
+    ]
+    if prior_story_reference is not None:
+        parts.append(f"Keep continuity with the earlier thread: {prior_story_reference}.")
+    if companion_name is not None:
+        parts.append(f"Keep {companion_name} visibly supportive in the next segment.")
+    return _truncate_text(" ".join(parts), limit=320)
+
+
+def _resolve_segment_summary(segment: CompositionSegment) -> str | None:
+    for candidate in (
+        segment.accepted_summary,
+        segment.planned_summary,
+        _extract_last_sentence(segment.accepted_text or segment.text_content or ""),
+    ):
+        normalized = candidate.strip() if isinstance(candidate, str) else ""
+        if normalized:
+            return normalized
+    return None
+
+
+def _build_story_so_far_summary(
+    items: Sequence[CompositionSegmentCarryoverItem],
+) -> str | None:
+    if not items:
+        return None
+    parts = []
+    for item in items[-3:]:
+        prefix = (
+            f"Segment {item.segment_index}"
+            if item.outline_card_title is None
+            else f"Segment {item.segment_index} ({item.outline_card_title})"
+        )
+        parts.append(f"{prefix}: {item.accepted_summary}")
+    return _truncate_text(" ".join(parts), limit=420)
+
+
+def _read_job_prompt_metadata(segment_payload: Mapping[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    for key in (
+        "prompt_assembly_version",
+        "story_outline_id",
+        "story_outline_revision_number",
+        "outline_kind",
+        "outline_card_key",
+        "outline_card_position",
+        "outline_card_title",
+        "outline_card_summary",
+        "outline_card_drafting_brief",
+        "outline_card_beat_keys",
+        "outline_card_emotional_shift",
+        "continuity_bible_id",
+        "continuity_revision_number",
+        "continuity_summary",
+        "continuity_facts",
+        "composition_prompt",
+        "context_carryover",
+    ):
+        value = segment_payload.get(key)
+        if value is not None:
+            metadata[key] = value
+    return metadata
+
+
+def _read_optional_prompt_text(value: object, key: str) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    candidate = value.get(key)
+    if candidate is None:
+        return None
+    normalized = str(candidate).strip()
+    return normalized or None
+
+
+def _resolve_model_usage_outcome(
+    *,
+    source: str,
+    raw_response: Any,
+) -> ModelCallOutcome:
+    if source != "heuristic":
+        return ModelCallOutcome.SUCCEEDED
+
+    if isinstance(raw_response, Mapping) and raw_response.get("fallback_reason"):
+        return ModelCallOutcome.SUCCEEDED_WITH_FALLBACK
+
+    return ModelCallOutcome.FAILED
+
+
+def _extract_model_usage_error_message(raw_response: Any) -> str | None:
+    if not isinstance(raw_response, Mapping):
+        return None
+    error = raw_response.get("fallback_reason")
+    if error is None:
+        return None
+    normalized = str(error).strip()
+    return normalized or None
+
+
 def _read_mapping(value: object, key: str | None = None) -> Mapping[str, Any]:
     candidate = value
     if key is not None and isinstance(value, Mapping):
@@ -1191,3 +1696,9 @@ def _read_text(value: object, key: str) -> str | None:
         return None
     normalized = str(candidate).strip()
     return normalized or None
+
+
+def _truncate_text(value: str, *, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3].rstrip()}..."
