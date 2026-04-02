@@ -40,9 +40,10 @@
     "37-agent-tool-registry.md",
     "38-session-replay-and-resume-hydration.md",
     "39-bridge-and-replay-tests.md",
-    "40-genre-selection-api-and-ui.md"
+    "40-genre-selection-api-and-ui.md",
+    "41-tone-selection-api-and-ui.md"
   ],
-  "current_success_ref": "6e3bb222c63d193e90a9fa08dde723f62c4659d7",
+  "current_success_ref": "baec48c55b9620399e7634c0688a3b5d3deccf5d",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
