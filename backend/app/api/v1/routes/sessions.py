@@ -20,6 +20,7 @@ from app.api.dependencies import (
     get_intent_parser_adapter,
     get_pitch_generation_adapter,
 )
+from app.db import CompositionJob, JobStatus
 from app.models import (
     CreateSessionRequest,
     EditSessionBeatSheetRequest,
@@ -30,6 +31,7 @@ from app.models import (
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    RedirectSessionCompositionRequest,
     RefineSessionBeatSheetRequest,
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
@@ -47,6 +49,7 @@ from app.models import (
     SessionBeatSheetGenerationResponse,
     SessionBeatSheetUpdateResponse,
     SessionCharacterSheetGenerationResponse,
+    SessionCompositionResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
     SessionEventView,
@@ -59,6 +62,7 @@ from app.models import (
     SessionStoryOutlineResponse,
     SessionStorySetupResponse,
     SessionUsageDiagnosticsView,
+    StartSessionCompositionRequest,
     StoryWorkflowToolName,
     WorkflowStage,
 )
@@ -66,12 +70,19 @@ from app.services import (
     BeatSheetGenerationService,
     BriefNormalizationService,
     CharacterGenerationService,
+    CompositionJobNotFoundError,
+    CompositionJobService,
+    CompositionJobStateError,
     PitchGenerationService,
     SessionActionPolicyService,
     SessionIntentParserService,
     StoryWorkflowToolService,
 )
-from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
+from app.services.session_hydration import (
+    SessionHydrationNotFoundError,
+    SessionHydrationService,
+    build_composition_job_view,
+)
 from app.services.sessions import (
     InvalidStageTransitionError,
     SessionBeatSheetEditError,
@@ -405,6 +416,269 @@ def save_session_story_outline(
     except StoryWorkflowToolServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/start",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Queue a durable composition job for a story session",
+)
+def start_session_composition(
+    session_id: str,
+    payload: StartSessionCompositionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+    composition_jobs = CompositionJobService(db_session)
+
+    try:
+        if payload.mode == "rewrite":
+            result = StoryWorkflowToolService(db_session).execute(
+                tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+                session_id=session_id,
+                arguments={
+                    "instructions": payload.instructions,
+                    "rewrite_from_segment_index": payload.restart_from_segment_index,
+                    "preserve_completed_segments": False,
+                },
+            )
+        else:
+            restart_from_segment_index = (
+                payload.restart_from_segment_index
+                if payload.mode == "fresh"
+                else composition_jobs.resolve_continue_start_segment(session_id)
+            )
+            result = StoryWorkflowToolService(db_session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=session_id,
+                arguments={
+                    "instructions": payload.instructions,
+                    "restart_from_segment_index": restart_from_segment_index,
+                },
+            )
+
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=result.composition_job_id,
+        )
+        event = _resolve_composition_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            composition_job_id=result.composition_job_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (CompositionJobStateError, StoryWorkflowToolServiceError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/pause",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Pause a durable composition job",
+)
+def pause_session_composition(
+    session_id: str,
+    composition_job_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        CompositionJobService(db_session).pause_job(session_id, composition_job_id)
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=composition_job_id,
+        )
+        event = _resolve_composition_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            composition_job_id=composition_job_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/resume",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Resume a paused durable composition job",
+)
+def resume_session_composition(
+    session_id: str,
+    composition_job_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        CompositionJobService(db_session).resume_job(session_id, composition_job_id)
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=composition_job_id,
+        )
+        event = _resolve_composition_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            composition_job_id=composition_job_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/cancel",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel a durable composition job",
+)
+def cancel_session_composition(
+    session_id: str,
+    composition_job_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        CompositionJobService(db_session).cancel_job(
+            session_id,
+            composition_job_id,
+            reason="Cancelled before the current composition pass finished.",
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=composition_job_id,
+        )
+        event = _resolve_composition_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            composition_job_id=composition_job_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/redirect",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Redirect the active composition job into a rewrite pass",
+)
+def redirect_session_composition(
+    session_id: str,
+    composition_job_id: str,
+    payload: RedirectSessionCompositionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        job = db_session.get(CompositionJob, composition_job_id)
+        if job is None or job.session_id != session_id:
+            raise CompositionJobNotFoundError(
+                f"composition job {composition_job_id!r} does not belong to session {session_id!r}",
+            )
+        if job.status not in {JobStatus.QUEUED, JobStatus.IN_PROGRESS, JobStatus.PAUSED}:
+            raise CompositionJobStateError("redirect requires an active composition job")
+
+        result = StoryWorkflowToolService(db_session).execute(
+            tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+            session_id=session_id,
+            arguments={
+                "instructions": payload.instructions,
+                "rewrite_from_segment_index": (
+                    payload.rewrite_from_segment_index or job.current_segment_index or 1
+                ),
+                "preserve_completed_segments": False,
+            },
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=result.composition_job_id,
+        )
+        event = _resolve_composition_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            composition_job_id=result.composition_job_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (CompositionJobStateError, StoryWorkflowToolServiceError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 
@@ -1009,3 +1283,56 @@ def _resolve_story_outline_response_event(
             return event
 
     raise RuntimeError("story outline save did not produce a replayable event")
+
+
+def _resolve_composition_response_event(
+    *,
+    session_service: SessionService,
+    session_id: str,
+    composition_job_id: str,
+) -> SessionEventView:
+    history = session_service.load_session_history(session_id, limit=20)
+
+    for event in reversed(history.events):
+        if event.stage != WorkflowStage.COMPOSITION:
+            continue
+        if event.event_type != "composition.progress.recorded":
+            continue
+        if getattr(event.payload, "job_id", None) == composition_job_id:
+            return event
+
+    for event in reversed(history.events):
+        if event.stage == WorkflowStage.COMPOSITION:
+            return event
+
+    raise RuntimeError("composition operation did not produce a replayable event")
+
+
+def _resolve_composition_job_view(
+    *,
+    snapshot: SessionSnapshot,
+    db_session: Session,
+    composition_job_id: str,
+):
+    if (
+        snapshot.active_composition_job is not None
+        and snapshot.active_composition_job.id == composition_job_id
+    ):
+        return snapshot.active_composition_job
+    if (
+        snapshot.latest_composition_job is not None
+        and snapshot.latest_composition_job.id == composition_job_id
+    ):
+        return snapshot.latest_composition_job
+
+    job = db_session.get(CompositionJob, composition_job_id)
+    if job is None:
+        raise CompositionJobNotFoundError(
+            f"composition job {composition_job_id!r} was not found",
+        )
+    job_view = build_composition_job_view(job)
+    if job_view is None:
+        raise CompositionJobNotFoundError(
+            f"composition job {composition_job_id!r} was not found",
+        )
+    return job_view

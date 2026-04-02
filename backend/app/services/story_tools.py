@@ -24,7 +24,6 @@ from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     ChatToUIActionBatch,
     ChatToUIActionType,
-    CompositionPromptAssemblyInput,
     CompositionStartMode,
     SelectionKind,
     SessionEventActor,
@@ -69,7 +68,7 @@ from app.models.story_tools import (
 )
 from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
-from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
+from app.services.composition_jobs import CompositionJobService
 from app.services.continuity import SessionContinuityService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
@@ -654,7 +653,7 @@ class StoryWorkflowToolService:
         self._registry = registry or get_story_workflow_tool_registry()
         self._sessions = SessionService(session)
         self._continuity = SessionContinuityService(session)
-        self._composition_prompt_assembly = CompositionPromptAssemblyService(session)
+        self._composition_jobs = CompositionJobService(session)
         self._events = SessionEventLogService(session)
         self._plan_revisions = PlanRevisionService(session)
         self._jobs = BackgroundJobService(session)
@@ -1166,78 +1165,30 @@ class StoryWorkflowToolService:
                 "compose_next_segment requires a selected beat sheet",
             )
 
-        self._cancel_active_composition_jobs(
-            session_id,
-            reason="Cancelled because a new composition pass started.",
-        )
         next_segment_index = request.restart_from_segment_index or self._next_segment_index(
             session_id
         )
-        assembled_prompt = self._composition_prompt_assembly.assemble_prompt_package(
-            CompositionPromptAssemblyInput(
-                session_id=session_id,
-                job_kind=CompositionJobKind.DRAFT.value,
-                segment_index=next_segment_index,
-                instructions=request.instructions,
-                restart_from_segment_index=request.restart_from_segment_index,
-            )
-        )
-        prompt_storage_payload = assembled_prompt.build_storage_payload()
-        plan_revision = self._plan_revisions.ensure_current_revision(
+        start_result = self._composition_jobs.start_job(
             session_id,
-            source_stage=WorkflowStage.STORY_SETUP,
-            change_summary="Captured the current plan for composition.",
-        )
-        job = CompositionJob(
-            session_id=session_id,
-            beat_sheet_id=snapshot.selected_beat_sheet.id,
-            story_setup_id=snapshot.selected_story_setup.id,
-            plan_revision_id=plan_revision.id if plan_revision is not None else None,
             job_kind=CompositionJobKind.DRAFT,
-            status=JobStatus.IN_PROGRESS,
-            progress_percent=0,
-            current_segment_index=next_segment_index,
-            metadata_json={
-                **request.model_dump(mode="json", exclude_none=True),
-                **prompt_storage_payload,
-            },
-            started_at=utc_now(),
-        )
-        self._session.add(job)
-        self._session.flush()
-
-        segment = CompositionSegment(
-            session_id=session_id,
-            composition_job_id=job.id,
-            segment_index=next_segment_index,
-            revision_number=self._next_segment_revision(session_id, next_segment_index),
-            status=JobStatus.IN_PROGRESS,
-            planned_summary=assembled_prompt.dynamic_context.segment_goal_summary,
-            payload={
-                **request.model_dump(mode="json", exclude_none=True),
-                **prompt_storage_payload,
-            },
-        )
-        self._session.add(segment)
-        self._session.flush()
-
-        self._events.record_composition_progress(
-            session_id,
-            job_id=job.id,
-            status=job.status,
-            progress_percent=0,
-            current_segment_index=next_segment_index,
-            total_segments=None,
-            segment_id=segment.id,
-            actor=actor or DEFAULT_SYSTEM_ACTOR,
+            start_segment_index=next_segment_index,
+            instructions=request.instructions,
+            actor=actor,
+            cancel_reason="Cancelled because a new composition pass started.",
         )
         stage_snapshot = self._transition_stage_to_in_progress(
             session_id,
             stage=WorkflowStage.COMPOSITION,
             detail=_join_detail_parts(
                 [
-                    f"Composing segment {next_segment_index}.",
-                    assembled_prompt.debug_context.outline_card_title,
+                    (
+                        "Queued composition from segment "
+                        f"{next_segment_index} of {start_result.total_segments}."
+                    ),
+                    _read_optional_prompt_text(
+                        start_result.job.metadata_json,
+                        "outline_card_title",
+                    ),
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),
@@ -1246,11 +1197,11 @@ class StoryWorkflowToolService:
         return CompositionToolResult(
             tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
             stage=WorkflowStage.COMPOSITION,
-            summary="Created the next composition job and seeded its segment.",
+            summary="Created the next composition job and queued its durable execution.",
             stage_status=_stage_status(stage_snapshot, WorkflowStage.COMPOSITION),
-            composition_job_id=job.id,
-            segment_id=segment.id,
-            segment_index=segment.segment_index,
+            composition_job_id=start_result.job.id,
+            segment_id=start_result.first_segment.id,
+            segment_index=start_result.first_segment.segment_index,
         )
 
     def _rewrite_segments(
@@ -1270,78 +1221,27 @@ class StoryWorkflowToolService:
                 "rewrite_segments requires a selected beat sheet",
             )
 
-        self._cancel_active_composition_jobs(
+        start_result = self._composition_jobs.start_job(
             session_id,
-            reason="Cancelled because a rewrite pass started.",
-        )
-        assembled_prompt = self._composition_prompt_assembly.assemble_prompt_package(
-            CompositionPromptAssemblyInput(
-                session_id=session_id,
-                job_kind=CompositionJobKind.REWRITE.value,
-                segment_index=request.rewrite_from_segment_index,
-                instructions=request.instructions,
-                rewrite_from_segment_index=request.rewrite_from_segment_index,
-            )
-        )
-        prompt_storage_payload = assembled_prompt.build_storage_payload()
-        plan_revision = self._plan_revisions.ensure_current_revision(
-            session_id,
-            source_stage=WorkflowStage.STORY_SETUP,
-            change_summary="Captured the current plan for a rewrite pass.",
-        )
-        job = CompositionJob(
-            session_id=session_id,
-            beat_sheet_id=snapshot.selected_beat_sheet.id,
-            story_setup_id=snapshot.selected_story_setup.id,
-            plan_revision_id=plan_revision.id if plan_revision is not None else None,
             job_kind=CompositionJobKind.REWRITE,
-            status=JobStatus.IN_PROGRESS,
-            progress_percent=0,
-            current_segment_index=request.rewrite_from_segment_index,
-            metadata_json={
-                **request.model_dump(mode="json", exclude_none=True),
-                **prompt_storage_payload,
-            },
-            started_at=utc_now(),
-        )
-        self._session.add(job)
-        self._session.flush()
-
-        segment = CompositionSegment(
-            session_id=session_id,
-            composition_job_id=job.id,
-            segment_index=request.rewrite_from_segment_index,
-            revision_number=self._next_segment_revision(
-                session_id,
-                request.rewrite_from_segment_index,
-            ),
-            status=JobStatus.IN_PROGRESS,
-            planned_summary=assembled_prompt.dynamic_context.segment_goal_summary,
-            payload={
-                **request.model_dump(mode="json", exclude_none=True),
-                **prompt_storage_payload,
-            },
-        )
-        self._session.add(segment)
-        self._session.flush()
-
-        self._events.record_composition_progress(
-            session_id,
-            job_id=job.id,
-            status=job.status,
-            progress_percent=0,
-            current_segment_index=request.rewrite_from_segment_index,
-            total_segments=None,
-            segment_id=segment.id,
-            actor=actor or DEFAULT_SYSTEM_ACTOR,
+            start_segment_index=request.rewrite_from_segment_index,
+            instructions=request.instructions,
+            actor=actor,
+            cancel_reason="Cancelled because a rewrite pass started.",
         )
         stage_snapshot = self._transition_stage_to_in_progress(
             session_id,
             stage=WorkflowStage.COMPOSITION,
             detail=_join_detail_parts(
                 [
-                    f"Rewriting from segment {request.rewrite_from_segment_index}.",
-                    assembled_prompt.debug_context.outline_card_title,
+                    (
+                        f"Queued a rewrite from segment {request.rewrite_from_segment_index} "
+                        f"of {start_result.total_segments}."
+                    ),
+                    _read_optional_prompt_text(
+                        start_result.job.metadata_json,
+                        "outline_card_title",
+                    ),
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),
@@ -1350,11 +1250,11 @@ class StoryWorkflowToolService:
         return CompositionToolResult(
             tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
             stage=WorkflowStage.COMPOSITION,
-            summary="Created a rewrite job and seeded the revised segment.",
+            summary="Created a rewrite job and queued its durable execution.",
             stage_status=_stage_status(stage_snapshot, WorkflowStage.COMPOSITION),
-            composition_job_id=job.id,
-            segment_id=segment.id,
-            segment_index=segment.segment_index,
+            composition_job_id=start_result.job.id,
+            segment_id=start_result.first_segment.id,
+            segment_index=start_result.first_segment.segment_index,
         )
 
     def _estimate_audio_length(
@@ -1622,6 +1522,13 @@ class StoryWorkflowToolService:
             row.status = JobStatus.CANCELLED
             row.stop_reason = reason
             row.completed_at = row.completed_at or utc_now()
+            for segment in row.segments:
+                if segment.status in (
+                    JobStatus.QUEUED,
+                    JobStatus.IN_PROGRESS,
+                    JobStatus.PAUSED,
+                ):
+                    segment.status = JobStatus.CANCELLED
 
     def _cancel_active_audio_jobs(self, session_id: str, *, reason: str) -> None:
         stmt = select(AudioJob).where(
@@ -1725,6 +1632,16 @@ def _optional_detail(label: str, value: str | None) -> str | None:
     if not normalized:
         return None
     return f"{label}: {normalized}"
+
+
+def _read_optional_prompt_text(metadata: object, key: str) -> str | None:
+    if not isinstance(metadata, dict):
+        return None
+    value = metadata.get(key)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def _story_setup_label(row: StorySetup) -> str:

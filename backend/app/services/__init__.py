@@ -28,6 +28,15 @@ from app.services.character_generation import (
     build_character_model_output,
     evaluate_character_sheet_batch,
 )
+from app.services.composition_jobs import (
+    COMPOSITION_RUNTIME_JOB_TYPE,
+    CompositionJobNotFoundError,
+    CompositionJobService,
+    CompositionJobServiceError,
+    CompositionJobStateError,
+    HeuristicCompositionSegmentWriter,
+    evaluate_composition_segment_draft,
+)
 from app.services.composition_prompt_assembly import (
     CompositionPromptAssemblyService,
     CompositionPromptAssemblyServiceError,
@@ -90,6 +99,11 @@ __all__ = [
     "BriefNormalizationService",
     "CharacterGenerationService",
     "ClaimedBackgroundJob",
+    "COMPOSITION_RUNTIME_JOB_TYPE",
+    "CompositionJobNotFoundError",
+    "CompositionJobService",
+    "CompositionJobServiceError",
+    "CompositionJobStateError",
     "CompositionPromptAssemblyService",
     "CompositionPromptAssemblyServiceError",
     "SessionContinuityService",
@@ -123,10 +137,12 @@ __all__ = [
     "build_brief_normalization_result_from_existing",
     "build_pitch_model_output",
     "evaluate_character_sheet_batch",
+    "evaluate_composition_segment_draft",
     "evaluate_beat_sheet",
     "evaluate_pitch_batch",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
     "get_story_workflow_tool_schema_bundle",
     "synthesize_normalized_summary",
+    "HeuristicCompositionSegmentWriter",
 ]

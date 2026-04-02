@@ -6,7 +6,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.brief_normalization import NormalizedBriefPreferences
-from app.models.chat_actions import CharacterChangeImpact, StoryBriefEditMode
+from app.models.chat_actions import (
+    CharacterChangeImpact,
+    CompositionStartMode,
+    StoryBriefEditMode,
+)
 from app.models.continuity import ContinuityBibleView
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.model_usage import SessionUsageSummaryView
@@ -271,6 +275,7 @@ class CompositionJobView(BaseModel):
     job_kind: str
     status: str
     progress_percent: float
+    total_segments: int | None = None
     plan_revision_id: str | None = None
     plan_revision_number: int | None = None
     beat_sheet_id: str | None = None
@@ -279,7 +284,9 @@ class CompositionJobView(BaseModel):
     story_setup_revision_number: int | None = None
     story_outline_id: str | None = None
     story_outline_revision_number: int | None = None
+    current_segment_id: str | None = None
     current_segment_index: int | None = None
+    latest_partial_output: str | None = None
     attempt_count: int
     stop_reason: str | None = None
     error_message: str | None = None
@@ -509,6 +516,31 @@ class SessionStoryOutlineResponse(BaseModel):
     event: SessionEventView
 
 
+class StartSessionCompositionRequest(BaseModel):
+    mode: CompositionStartMode = CompositionStartMode.FRESH
+    instructions: str | None = Field(default=None, min_length=1)
+    restart_from_segment_index: int | None = Field(default=None, ge=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_mode_requirements(self) -> "StartSessionCompositionRequest":
+        if self.mode == CompositionStartMode.REWRITE and self.restart_from_segment_index is None:
+            raise ValueError("rewrite composition starts require restart_from_segment_index")
+        return self
+
+
+class RedirectSessionCompositionRequest(BaseModel):
+    instructions: str = Field(min_length=1)
+    rewrite_from_segment_index: int | None = Field(default=None, ge=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class SessionCompositionResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+    job: CompositionJobView
+
+
 class SelectSessionPitchRequest(BaseModel):
     pitch_id: str | None = Field(default=None, min_length=1)
     generation_key: str | None = Field(default=None, min_length=1)
@@ -546,9 +578,7 @@ class SelectSessionCharacterSheetRequest(BaseModel):
         ]
         selected_count = sum(value is not None for value in selectors)
         if selected_count == 0:
-            raise ValueError(
-                "one of character_sheet_id, revision_number, or title is required"
-            )
+            raise ValueError("one of character_sheet_id, revision_number, or title is required")
 
         return self
 
@@ -650,9 +680,7 @@ class EditSessionBeatSheetRequest(BaseModel):
             self.bedtime_goal,
         ]
         if not self.beat_updates and all(value is None for value in values):
-            raise ValueError(
-                "beat-sheet edits require at least one top-level field or beat update"
-            )
+            raise ValueError("beat-sheet edits require at least one top-level field or beat update")
 
         return self
 

@@ -3,15 +3,26 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.services.composition_jobs import (
+    COMPOSITION_RUNTIME_JOB_TYPE,
+    CompositionJobService,
+    CompositionJobServiceError,
+    HeuristicCompositionSegmentWriter,
+)
 from app.services.story_tools import (
     StoryWorkflowToolService,
     get_story_workflow_tool_registry,
 )
+from app.storage import ObjectStorageService
 from app.worker.registry import JobHandlerRegistry
 from app.worker.runtime import JobExecutionContext
 
 
-def build_default_job_handler_registry() -> JobHandlerRegistry:
+def build_default_job_handler_registry(
+    *,
+    object_storage: ObjectStorageService | None = None,
+    composition_writer: HeuristicCompositionSegmentWriter | None = None,
+) -> JobHandlerRegistry:
     registry = JobHandlerRegistry()
     registry.register("demo.echo", demo_echo_handler)
     tool_registry = get_story_workflow_tool_registry()
@@ -20,6 +31,13 @@ def build_default_job_handler_registry() -> JobHandlerRegistry:
             definition.job_type,
             build_story_workflow_tool_handler(definition.job_type),
         )
+    registry.register(
+        COMPOSITION_RUNTIME_JOB_TYPE,
+        build_composition_runtime_handler(
+            object_storage=object_storage,
+            composition_writer=composition_writer,
+        ),
+    )
     return registry
 
 
@@ -63,5 +81,48 @@ def build_story_workflow_tool_handler(job_type: str):
             )
         )
         return result.model_dump(mode="json")
+
+    return handler
+
+
+def build_composition_runtime_handler(
+    *,
+    object_storage: ObjectStorageService | None = None,
+    composition_writer: HeuristicCompositionSegmentWriter | None = None,
+):
+    def handler(
+        payload: dict[str, Any] | list[Any] | None,
+        context: JobExecutionContext,
+    ) -> dict[str, Any]:
+        payload_dict = payload if isinstance(payload, dict) else {}
+        composition_job_id = payload_dict.get("composition_job_id")
+        if not isinstance(composition_job_id, str) or not composition_job_id.strip():
+            raise CompositionJobServiceError(
+                "composition runtime jobs require a composition_job_id payload",
+            )
+
+        try:
+            return context.with_session(
+                lambda session: CompositionJobService(
+                    session,
+                    object_storage=object_storage,
+                    writer=composition_writer,
+                ).run_job(
+                    composition_job_id.strip(),
+                )
+            )
+        except Exception as exc:
+            error_message = str(exc).strip() or exc.__class__.__name__
+            context.with_session(
+                lambda session: CompositionJobService(
+                    session,
+                    object_storage=object_storage,
+                    writer=composition_writer,
+                ).mark_job_failed(
+                    composition_job_id.strip(),
+                    error_message=error_message,
+                )
+            )
+            raise
 
     return handler

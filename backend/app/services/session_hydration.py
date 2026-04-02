@@ -485,12 +485,29 @@ def merge_composition_job_view(
         job_kind=current_job.job_kind if current_job is not None else "draft",
         status=payload.status,
         progress_percent=progress_percent,
+        total_segments=(
+            payload.total_segments
+            if payload.total_segments is not None
+            else current_job.total_segments
+            if current_job is not None
+            else None
+        ),
+        current_segment_id=(
+            payload.segment_id
+            if payload.segment_id is not None
+            else current_job.current_segment_id
+            if current_job is not None
+            else None
+        ),
         current_segment_index=(
             payload.current_segment_index
             if payload.current_segment_index is not None
             else current_job.current_segment_index
             if current_job is not None
             else None
+        ),
+        latest_partial_output=(
+            current_job.latest_partial_output if current_job is not None else None
         ),
         attempt_count=current_job.attempt_count if current_job is not None else 1,
         stop_reason=current_job.stop_reason if current_job is not None else None,
@@ -1608,12 +1625,16 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         metadata,
         "story_outline_revision_number",
     )
+    total_segments = _read_optional_mapping_int(metadata, "total_segments")
+    current_segment_id = _read_optional_mapping_text(metadata, "current_segment_id")
+    latest_partial_output = _read_optional_mapping_text(metadata, "latest_partial_output")
 
     return CompositionJobView(
         id=row.id,
         job_kind=row.job_kind,
         status=row.status,
         progress_percent=row.progress_percent,
+        total_segments=total_segments,
         plan_revision_id=row.plan_revision_id,
         plan_revision_number=(
             row.plan_revision.revision_number
@@ -1632,7 +1653,9 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         ),
         story_outline_id=story_outline_id,
         story_outline_revision_number=story_outline_revision_number,
+        current_segment_id=current_segment_id,
         current_segment_index=row.current_segment_index,
+        latest_partial_output=latest_partial_output,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
         error_message=row.error_message,

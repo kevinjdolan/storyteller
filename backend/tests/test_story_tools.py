@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
+import httpx
 import pytest
 from app.ai import render_intent_parser_prompt
 from app.db import (
+    AssetKind,
+    AssetStatus,
     AudioJob,
+    BackgroundJob,
     Base,
     BeatSheet,
     CharacterSheet,
@@ -16,6 +22,7 @@ from app.db import (
     Genre,
     JobStatus,
     Pitch,
+    SessionAsset,
     StoryBrief,
     StoryOutline,
     StorySession,
@@ -33,14 +40,19 @@ from app.models import (
     WorkflowStageState,
 )
 from app.services import (
+    COMPOSITION_RUNTIME_JOB_TYPE,
     BackgroundJobService,
+    CompositionJobService,
     SessionService,
     StoryWorkflowActionRouter,
     StoryWorkflowToolService,
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
 )
+from app.settings import load_settings
+from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -69,6 +81,92 @@ def _build_session_factory(tmp_path: Path) -> sessionmaker[Session]:
     _enable_sqlite_foreign_keys(engine)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+class FakeGCSJsonAPI:
+    def __init__(self) -> None:
+        self.buckets: set[str] = set()
+        self.objects: dict[tuple[str, str], dict[str, object]] = {}
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.raw_path.decode().split("?", 1)[0]
+
+        if request.method == "POST" and path == "/storage/v1/b":
+            payload = json.loads(request.content.decode("utf-8"))
+            bucket_name = str(payload["name"])
+            if bucket_name in self.buckets:
+                return httpx.Response(status_code=409, json={"error": {"message": "exists"}})
+            self.buckets.add(bucket_name)
+            return httpx.Response(status_code=200, json={"name": bucket_name})
+
+        upload_prefix = "/upload/storage/v1/b/"
+        if request.method == "POST" and path.startswith(upload_prefix) and path.endswith("/o"):
+            bucket_name = unquote(path[len(upload_prefix) : -2])
+            key = unquote(request.url.params["name"])
+            if bucket_name not in self.buckets:
+                self.buckets.add(bucket_name)
+            generation = str(len(self.objects) + 1)
+            metadata = {
+                "bucket": bucket_name,
+                "name": key,
+                "size": str(len(request.content)),
+                "contentType": request.headers.get("Content-Type"),
+                "etag": f"etag-{generation}",
+                "generation": generation,
+                "md5Hash": "fake-md5",
+                "updated": "2026-04-02T00:00:00Z",
+            }
+            self.objects[(bucket_name, key)] = {
+                "metadata": metadata,
+                "content": request.content,
+            }
+            return httpx.Response(status_code=200, json=metadata)
+
+        metadata_prefix = "/storage/v1/b/"
+        if request.method == "GET" and path.startswith(metadata_prefix) and "/o/" in path:
+            remainder = path[len(metadata_prefix) :]
+            bucket_name, key = remainder.split("/o/", 1)
+            stored = self.objects.get((unquote(bucket_name), unquote(key)))
+            if stored is None:
+                return httpx.Response(status_code=404, json={"error": {"message": "missing"}})
+            if request.url.params.get("alt") == "media":
+                return httpx.Response(
+                    status_code=200,
+                    content=stored["content"],
+                    headers={
+                        "Content-Type": str(
+                            stored["metadata"].get("contentType")
+                            if isinstance(stored["metadata"], dict)
+                            else ""
+                        )
+                    },
+                )
+            return httpx.Response(status_code=200, json=stored["metadata"])
+
+        return httpx.Response(status_code=500, json={"error": {"message": "unhandled"}})
+
+
+def _build_test_object_storage() -> tuple[FakeGCSJsonAPI, httpx.Client, ObjectStorageService]:
+    fake_gcs = FakeGCSJsonAPI()
+    settings = load_settings(
+        {
+            "STORYTELLER_SECRETS_FILE": "",
+            "STORYTELLER_DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "STORYTELLER_GEMINI_API_KEY": "test-gemini-key",
+            "STORYTELLER_GCS_ENDPOINT": "http://gcs:4443",
+            "STORYTELLER_GCS_PROJECT_ID": "storyteller-local",
+            "STORYTELLER_GCS_PUBLIC_URL": "http://localhost:8568",
+            "STORYTELLER_GCS_SESSIONS_BUCKET_NAME": "storyteller-sessions",
+            "STORYTELLER_GCS_AUDIO_BUCKET_NAME": "storyteller-audio",
+            "STORYTELLER_GCS_EXPORTS_BUCKET_NAME": "storyteller-exports",
+        },
+    )
+    client = httpx.Client(
+        base_url=settings.gcs_endpoint,
+        transport=httpx.MockTransport(fake_gcs.handle),
+    )
+    object_storage = build_object_storage_service(settings, client=client)
+    return fake_gcs, client, object_storage
 
 
 def test_story_workflow_tool_schema_bundle_lists_expected_operations() -> None:
@@ -629,6 +727,144 @@ def test_worker_processes_story_tool_job_via_default_registry(tmp_path: Path) ->
     assert job.result_summary["tool_name"] == "update_setup_heuristics"
     assert snapshot.selected_story_setup is not None
     assert snapshot.selected_story_setup.target_runtime_minutes == 7
+
+
+def test_story_workflow_tool_service_queues_durable_composition_execution(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(db_session)
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+
+    job = db_session.get(CompositionJob, result.composition_job_id)
+    segments = list(
+        db_session.execute(
+            select(CompositionSegment)
+            .where(CompositionSegment.composition_job_id == result.composition_job_id)
+            .order_by(CompositionSegment.segment_index.asc())
+        ).scalars()
+    )
+    queued_runtime_jobs = list(
+        db_session.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.job_type == COMPOSITION_RUNTIME_JOB_TYPE)
+            .order_by(BackgroundJob.created_at.asc())
+        ).scalars()
+    )
+
+    assert job is not None
+    assert job.status == JobStatus.QUEUED
+    assert job.current_segment_index == 1
+    assert job.metadata_json["total_segments"] == 3
+    assert [segment.segment_index for segment in segments] == [1, 2, 3]
+    assert all(segment.status == JobStatus.QUEUED for segment in segments)
+    assert len(queued_runtime_jobs) == 1
+    assert queued_runtime_jobs[0].payload["composition_job_id"] == result.composition_job_id
+
+
+def test_composition_job_service_resume_does_not_duplicate_runtime_attempts(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(db_session)
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+    service = CompositionJobService(db_session)
+
+    service.pause_job(seeded["session_id"], result.composition_job_id)
+    service.resume_job(seeded["session_id"], result.composition_job_id)
+
+    queued_runtime_jobs = list(
+        db_session.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.job_type == COMPOSITION_RUNTIME_JOB_TYPE)
+            .order_by(BackgroundJob.created_at.asc())
+        ).scalars()
+    )
+    pending_for_job = [
+        job
+        for job in queued_runtime_jobs
+        if isinstance(job.payload, dict)
+        and job.payload.get("composition_job_id") == result.composition_job_id
+        and job.status == JobStatus.QUEUED
+    ]
+    composition_job = db_session.get(CompositionJob, result.composition_job_id)
+
+    assert composition_job is not None
+    assert composition_job.status == JobStatus.QUEUED
+    assert len(pending_for_job) == 1
+
+
+def test_worker_completes_durable_composition_job_and_persists_story_text_asset(
+    tmp_path: Path,
+) -> None:
+    fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        worker = JobWorker(
+            session_factory=session_factory,
+            registry=build_default_job_handler_registry(object_storage=object_storage),
+            worker_id="composition-worker",
+            lease_duration=timedelta(seconds=30),
+            poll_interval_seconds=0.01,
+        )
+
+        processed_jobs = 0
+        while worker.run_once():
+            processed_jobs += 1
+            assert processed_jobs < 10
+
+        with session_factory() as session:
+            composition_job = session.get(CompositionJob, result.composition_job_id)
+            story_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.composition_job_id == result.composition_job_id,
+                    SessionAsset.asset_kind == AssetKind.STORY_TEXT,
+                )
+            ).scalar_one_or_none()
+            segments = list(
+                session.execute(
+                    select(CompositionSegment)
+                    .where(CompositionSegment.composition_job_id == result.composition_job_id)
+                    .order_by(CompositionSegment.segment_index.asc())
+                ).scalars()
+            )
+
+        assert processed_jobs == 3
+        assert composition_job is not None
+        assert composition_job.status == JobStatus.COMPLETED
+        assert composition_job.progress_percent == 100
+        assert len(segments) == 3
+        assert all(segment.status == JobStatus.COMPLETED for segment in segments)
+        assert story_asset is not None
+        assert story_asset.status == AssetStatus.READY
+        story_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=story_asset.storage_bucket,
+                key=story_asset.object_path,
+            )
+        )
+        assert "Mira" in story_text
+        assert "The scene landed in visible calm" in story_text
+        assert any(key.endswith("/segments/0001.md") for _, key in fake_gcs.objects)
+    finally:
+        object_storage.close()
+        client.close()
 
 
 def test_eval_prompt_exposes_story_tool_catalog_for_chat_translation() -> None:

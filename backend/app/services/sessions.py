@@ -3015,6 +3015,13 @@ class SessionService:
             row.status = JobStatus.CANCELLED
             row.stop_reason = reason
             row.completed_at = row.completed_at or utc_now()
+            for segment in row.segments:
+                if segment.status in (
+                    JobStatus.QUEUED,
+                    JobStatus.IN_PROGRESS,
+                    JobStatus.PAUSED,
+                ):
+                    segment.status = JobStatus.CANCELLED
 
     def _cancel_active_audio_jobs(self, session_id: str, *, reason: str) -> None:
         stmt = select(AudioJob).where(

@@ -429,6 +429,104 @@ def _seed_catalog_rows() -> None:
         db_session.close()
 
 
+def _create_composition_ready_session_via_api(
+    session_api_client: TestClient,
+) -> dict[str, object]:
+    _seed_catalog_rows()
+
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    ).json()
+    session_id = created["id"]
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/story-brief",
+            json={
+                "raw_brief": (
+                    "A harbor fox follows a drifting bell across moonlit water and brings the "
+                    "night back to calm."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+
+    pitch_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    first_pitch_id = pitch_payload["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/selections/pitch",
+            json={"pitch_id": first_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+
+    character_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/characters/generate",
+        json={"candidate_count": 2, "origin": "workspace"},
+    ).json()
+    first_character_id = character_payload["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/selections/character-sheet",
+            json={"character_sheet_id": first_character_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+
+    beat_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/beats/generate",
+        json={"origin": "workspace"},
+    ).json()
+    first_beat_id = beat_payload["snapshot"]["beat_sheet_revisions"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{session_id}/selections/beat-sheet",
+            json={"beat_sheet_id": first_beat_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+
+    story_setup_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/story-setup",
+        json={
+            "target_word_count": 1800,
+            "target_runtime_minutes": 12,
+            "chapter_count": 3,
+            "approximate_scene_count": 8,
+            "guidance_notes": "Let each chapter land calmer than it began.",
+            "origin": "workspace",
+        },
+    ).json()
+
+    return {
+        "session_id": session_id,
+        "snapshot": story_setup_payload["snapshot"],
+    }
+
+
 def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
     session_api_client: TestClient,
 ) -> None:
@@ -1745,6 +1843,99 @@ def test_save_session_story_outline_endpoint_persists_outline_revision(
     assert payload["snapshot"]["selected_story_outline"]["cards"][0]["summary"].startswith(
         "Open with a calmer harbor image"
     )
+
+
+def test_composition_control_endpoints_manage_durable_job_state(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+
+    start_response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/start",
+        json={"mode": "fresh", "origin": "workspace"},
+    )
+
+    assert start_response.status_code == 200
+    start_payload = start_response.json()
+    composition_job_id = start_payload["job"]["id"]
+    composition_stage = next(
+        stage
+        for stage in start_payload["snapshot"]["stage_states"]
+        if stage["stage"] == "composition"
+    )
+    assert start_payload["job"]["status"] == "queued"
+    assert start_payload["job"]["total_segments"] == 3
+    assert start_payload["event"]["event_type"] == "composition.progress.recorded"
+    assert composition_stage["status"] == "in_progress"
+
+    pause_response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/{composition_job_id}/pause"
+    )
+    assert pause_response.status_code == 200
+    pause_payload = pause_response.json()
+    paused_stage = next(
+        stage
+        for stage in pause_payload["snapshot"]["stage_states"]
+        if stage["stage"] == "composition"
+    )
+    assert pause_payload["job"]["status"] == "paused"
+    assert paused_stage["detail"].startswith("Writing paused at")
+
+    resume_response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/{composition_job_id}/resume"
+    )
+    assert resume_response.status_code == 200
+    resume_payload = resume_response.json()
+    resumed_stage = next(
+        stage
+        for stage in resume_payload["snapshot"]["stage_states"]
+        if stage["stage"] == "composition"
+    )
+    assert resume_payload["job"]["status"] == "queued"
+    assert resumed_stage["detail"].startswith("Queued writing to resume at segment")
+
+    cancel_response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/{composition_job_id}/cancel"
+    )
+    assert cancel_response.status_code == 200
+    cancel_payload = cancel_response.json()
+    cancelled_stage = next(
+        stage
+        for stage in cancel_payload["snapshot"]["stage_states"]
+        if stage["stage"] == "composition"
+    )
+    assert cancel_payload["job"]["status"] == "cancelled"
+    assert cancelled_stage["status"] == "needs_regeneration"
+
+
+def test_redirect_composition_endpoint_queues_rewrite_job(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+
+    start_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/start",
+        json={"mode": "fresh", "origin": "workspace"},
+    ).json()
+    original_job_id = start_payload["job"]["id"]
+
+    redirect_response = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/{original_job_id}/redirect",
+        json={
+            "instructions": "Soften the midpoint and make the helper visible earlier.",
+            "rewrite_from_segment_index": 2,
+            "origin": "workspace",
+        },
+    )
+
+    assert redirect_response.status_code == 200
+    payload = redirect_response.json()
+    assert payload["job"]["id"] != original_job_id
+    assert payload["job"]["job_kind"] == "rewrite"
+    assert payload["job"]["current_segment_index"] == 2
+    assert payload["event"]["payload"]["job_id"] == payload["job"]["id"]
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
