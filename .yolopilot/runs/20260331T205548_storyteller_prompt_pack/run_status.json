@@ -55,9 +55,10 @@
     "52-bedtime-safety-and-content-guidelines.md",
     "53-outline-drill-down.md",
     "54-chapter-scene-card-editor.md",
-    "55-continuity-bible.md"
+    "55-continuity-bible.md",
+    "56-revision-history-and-branches.md"
   ],
-  "current_success_ref": "6ca1fe56ef9a141c8f90ac9a001a4b42d265d0ef",
+  "current_success_ref": "6024a0cbf9d2b0217277330f2e066c41417112b8",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
