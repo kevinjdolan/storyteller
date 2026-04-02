@@ -48,9 +48,10 @@
     "45-pitch-refinement-via-chat.md",
     "46-character-sheet-generation.md",
     "47-character-refinement-via-chat.md",
-    "48-save-the-cat-beat-sheet-generation.md"
+    "48-save-the-cat-beat-sheet-generation.md",
+    "49-beat-sheet-refinement-ui-and-chat.md"
   ],
-  "current_success_ref": "fc3d521d70fdc937c251465b010bcf4e8abf8e92",
+  "current_success_ref": "aa8b7406e80f73b043033440560312fc5b81e6f8",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
