@@ -432,6 +432,13 @@ export type AudioJobView = {
 
 export type AudioRuntimeEstimateView = {
   estimated_word_count: number
+  estimated_chapter_count: number
+  chapter_pause_count: number
+  chapter_pause_seconds: number
+  total_chapter_pause_seconds: number
+  assumed_words_per_minute: number
+  minimum_words_per_minute: number
+  maximum_words_per_minute: number
   target_duration_seconds: number
   minimum_duration_seconds: number
   maximum_duration_seconds: number

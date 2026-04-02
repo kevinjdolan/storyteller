@@ -15,6 +15,11 @@ import {
   SummaryPanel,
   ToggleField,
 } from '../../shared/ui/workflow.tsx'
+import {
+  buildAudioEstimateAssumptionsText,
+  buildAudioEstimateBasisLabel,
+  deriveAudioRuntimeEstimatePreview,
+} from './audioEstimation.ts'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
 
 type AudioSettingsStageProps = {
@@ -136,8 +141,7 @@ function audioSettingsMatch(
   )
 }
 
-function formatMinutesRange(snapshot: SessionSnapshot) {
-  const runtimeEstimate = snapshot.audio_settings?.runtime_estimate
+function formatMinutesRange(runtimeEstimate: AudioSettingsView['runtime_estimate']) {
   if (runtimeEstimate == null) {
     return null
   }
@@ -156,7 +160,7 @@ function formatMinutesRange(snapshot: SessionSnapshot) {
   )
 
   return {
-    label: `About ${targetMinutes} min`,
+    label: `Approx. ${targetMinutes} min`,
     detail: `Usually ${minimumMinutes}-${maximumMinutes} min`,
   }
 }
@@ -186,8 +190,21 @@ export function AudioSettingsStage({
   const savedState = buildFormState(snapshot)
   const isLocked = selectedStage.availability === 'locked'
   const isDirty = !audioSettingsMatch(formState, savedState)
-  const runtimeSummary = formatMinutesRange(snapshot)
-  const runtimeEstimate = snapshot.audio_settings?.runtime_estimate
+  const persistedRuntimeEstimate = snapshot.audio_settings?.runtime_estimate
+  const runtimeEstimate = deriveAudioRuntimeEstimatePreview(
+    persistedRuntimeEstimate,
+    formState.playbackSpeed,
+  )
+  const runtimeSummary = formatMinutesRange(runtimeEstimate)
+  const runtimeBasisLabel =
+    runtimeEstimate != null ? buildAudioEstimateBasisLabel(runtimeEstimate) : null
+  const runtimeAssumptions =
+    runtimeEstimate != null
+      ? buildAudioEstimateAssumptionsText(
+          runtimeEstimate,
+          formState.playbackSpeed,
+        )
+      : null
   const voiceDescription = getSelectedOptionDescription(
     voiceOptions,
     formState.voiceKey,
@@ -287,11 +304,11 @@ export function AudioSettingsStage({
           <SummaryPanel
             description={
               runtimeSummary != null
-                ? `${runtimeSummary.detail}. Final runtime can still vary.`
+                ? `${runtimeSummary.detail}. Approximate preview based on ${runtimeBasisLabel}.`
                 : 'A runtime range will appear once story setup targets or accepted story text are available.'
             }
             label="Runtime estimate"
-            title={runtimeSummary?.label ?? 'Estimate pending'}
+            title={runtimeSummary?.label ?? 'Approximate estimate pending'}
           />
           <SummaryPanel
             description="Route preview keeps this stage addressable without mutating the durable current-step pointer."
@@ -321,10 +338,14 @@ export function AudioSettingsStage({
             />
 
             {runtimeEstimate != null ? (
-              <InlineHelp title="Estimated timing" tone="info">
+              <InlineHelp title="Approximate timing" tone="info">
                 <p>
-                  Based on roughly {runtimeEstimate.estimated_word_count} words and a{' '}
-                  {formState.playbackSpeed.toFixed(2)}x playback speed.
+                  Based on the {runtimeBasisLabel}, roughly{' '}
+                  {runtimeEstimate.estimated_word_count} words, and a live{' '}
+                  {formState.playbackSpeed.toFixed(2)}x playback preview.
+                </p>
+                <p>
+                  {runtimeAssumptions}
                 </p>
                 <p>
                   Expect a {runtimeEstimate.pacing_band} delivery. Actual runtime can

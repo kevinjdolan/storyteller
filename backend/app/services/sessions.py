@@ -684,6 +684,7 @@ class SessionService:
             latest_audio_job=aggregate.latest_audio_job,
             composition_segments=aggregate.composition_segments,
             selected_story_setup=aggregate.selected_story_setup,
+            selected_story_outline=aggregate.selected_story_outline,
         )
         next_settings = current_settings.model_copy(
             update={
@@ -734,6 +735,7 @@ class SessionService:
                 "runtime_estimate": build_audio_runtime_estimate(
                     composition_segments=aggregate.composition_segments,
                     selected_story_setup=aggregate.selected_story_setup,
+                    selected_story_outline=aggregate.selected_story_outline,
                     playback_speed=next_settings.playback_speed,
                 ),
             }

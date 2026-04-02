@@ -42,6 +42,13 @@ class AudioSettingsModel(BaseModel):
 
 class AudioRuntimeEstimateView(AudioSettingsModel):
     estimated_word_count: int = Field(ge=0)
+    estimated_chapter_count: int = Field(ge=0)
+    chapter_pause_count: int = Field(ge=0)
+    chapter_pause_seconds: int = Field(ge=0)
+    total_chapter_pause_seconds: int = Field(ge=0)
+    assumed_words_per_minute: int = Field(ge=1)
+    minimum_words_per_minute: int = Field(ge=1)
+    maximum_words_per_minute: int = Field(ge=1)
     target_duration_seconds: int = Field(ge=0)
     minimum_duration_seconds: int = Field(ge=0)
     maximum_duration_seconds: int = Field(ge=0)

@@ -17,10 +17,9 @@ from app.models.audio_settings import (
     AudioSettingsView,
     AudioVoiceKey,
 )
-from app.services.planning_heuristics import (
-    DEFAULT_BEDTIME_WORDS_PER_MINUTE,
-    classify_narration_pacing,
-    estimate_runtime_from_word_count,
+from app.services.audio_length_estimation import (
+    AudioLengthEstimateInput,
+    estimate_audio_length,
 )
 
 AUDIO_VOICE_LABELS: dict[AudioVoiceKey, str] = {
@@ -48,6 +47,7 @@ def build_audio_settings_view(
     latest_audio_job=None,
     composition_segments: Sequence[CompositionSegment] = (),
     selected_story_setup=None,
+    selected_story_outline=None,
 ) -> AudioSettingsView:
     settings = AudioSettingsView(
         voice_key=_coerce_audio_voice_key(
@@ -93,6 +93,7 @@ def build_audio_settings_view(
             "runtime_estimate": build_audio_runtime_estimate(
                 composition_segments=composition_segments,
                 selected_story_setup=selected_story_setup,
+                selected_story_outline=selected_story_outline,
                 playback_speed=settings.playback_speed,
             )
         }
@@ -103,6 +104,7 @@ def build_audio_runtime_estimate(
     *,
     composition_segments: Sequence[CompositionSegment] = (),
     selected_story_setup=None,
+    selected_story_outline=None,
     playback_speed: float = DEFAULT_AUDIO_PLAYBACK_SPEED,
 ) -> AudioRuntimeEstimateView | None:
     estimated_word_count = _estimate_audio_word_count(
@@ -112,17 +114,30 @@ def build_audio_runtime_estimate(
     if estimated_word_count <= 0:
         return None
 
-    runtime = estimate_runtime_from_word_count(
-        estimated_word_count,
-        playback_speed=playback_speed,
+    estimated_chapter_count = _estimate_audio_chapter_count(
+        selected_story_setup=selected_story_setup,
+        selected_story_outline=selected_story_outline,
     )
-    effective_words_per_minute = round(DEFAULT_BEDTIME_WORDS_PER_MINUTE * playback_speed)
+    runtime = estimate_audio_length(
+        estimate_input=AudioLengthEstimateInput(
+            word_count=estimated_word_count,
+            playback_speed=playback_speed,
+            chapter_count=estimated_chapter_count,
+        )
+    )
 
     return AudioRuntimeEstimateView(
         estimated_word_count=estimated_word_count,
-        target_duration_seconds=runtime.target_minutes * 60,
-        minimum_duration_seconds=runtime.minimum_minutes * 60,
-        maximum_duration_seconds=runtime.maximum_minutes * 60,
+        estimated_chapter_count=runtime.chapter_count,
+        chapter_pause_count=runtime.chapter_pause_count,
+        chapter_pause_seconds=runtime.chapter_pause_seconds,
+        total_chapter_pause_seconds=runtime.total_chapter_pause_seconds,
+        assumed_words_per_minute=runtime.assumed_words_per_minute,
+        minimum_words_per_minute=runtime.minimum_words_per_minute,
+        maximum_words_per_minute=runtime.maximum_words_per_minute,
+        target_duration_seconds=runtime.target_duration_seconds,
+        minimum_duration_seconds=runtime.minimum_duration_seconds,
+        maximum_duration_seconds=runtime.maximum_duration_seconds,
         basis_source=(
             "composition_segments"
             if _has_accepted_segments(composition_segments)
@@ -130,7 +145,7 @@ def build_audio_runtime_estimate(
             if getattr(selected_story_setup, "target_word_count", None) is not None
             else "unknown"
         ),
-        pacing_band=classify_narration_pacing(effective_words_per_minute),
+        pacing_band=runtime.pacing_band,
     )
 
 
@@ -200,6 +215,12 @@ def build_audio_settings_stage_detail(
             f"about {target_minutes} minutes, often {minimum_minutes}-{maximum_minutes}. "
             "Final length can vary with the finished story and narration delivery."
         )
+        if settings.runtime_estimate.chapter_pause_count > 0:
+            detail.append(
+                "Estimate includes "
+                f"{settings.runtime_estimate.chapter_pause_count} short chapter pauses "
+                f"at about {settings.runtime_estimate.chapter_pause_seconds} seconds each."
+            )
     else:
         detail.append(
             "Runtime is still an estimate and will sharpen after story setup "
@@ -279,6 +300,25 @@ def _has_accepted_segments(composition_segments: Sequence[CompositionSegment]) -
         and (row.word_count is not None or row.accepted_text or row.text_content)
         for row in composition_segments
     )
+
+
+def _estimate_audio_chapter_count(
+    *,
+    selected_story_setup=None,
+    selected_story_outline=None,
+) -> int:
+    chapter_count = getattr(selected_story_setup, "chapter_count", None)
+    if chapter_count is not None:
+        return max(int(chapter_count), 0)
+
+    if (
+        selected_story_outline is not None
+        and getattr(selected_story_outline, "outline_kind", None) == "chapter"
+    ):
+        cards = getattr(selected_story_outline, "cards", None) or []
+        return len(cards)
+
+    return 0
 
 
 def _coerce_audio_voice_key(

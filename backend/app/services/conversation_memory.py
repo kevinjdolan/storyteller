@@ -253,6 +253,7 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
             latest_audio_job=audio_job,
             composition_segments=aggregate.composition_segments,
             selected_story_setup=aggregate.selected_story_setup,
+            selected_story_outline=aggregate.selected_story_outline,
         )
         preferences.append(
             "Narration settings: " + build_audio_settings_memory_summary(settings)

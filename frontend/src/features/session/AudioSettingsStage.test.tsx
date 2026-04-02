@@ -58,9 +58,16 @@ const sampleSnapshot: SessionSnapshot = {
     guidance_notes: null,
     runtime_estimate: {
       estimated_word_count: 1800,
-      target_duration_seconds: 780,
-      minimum_duration_seconds: 660,
-      maximum_duration_seconds: 900,
+      estimated_chapter_count: 3,
+      chapter_pause_count: 2,
+      chapter_pause_seconds: 3,
+      total_chapter_pause_seconds: 6,
+      assumed_words_per_minute: 140,
+      minimum_words_per_minute: 120,
+      maximum_words_per_minute: 160,
+      target_duration_seconds: 825,
+      minimum_duration_seconds: 705,
+      maximum_duration_seconds: 960,
       basis_source: 'story_setup_target',
       pacing_band: 'balanced',
     },
@@ -94,12 +101,40 @@ describe('AudioSettingsStage', () => {
     )
 
     expect(screen.getByText('Shape the narration pass before the audio render starts.')).toBeInTheDocument()
-    expect(screen.getByText('About 13 min')).toBeInTheDocument()
+    expect(screen.getByText('Approx. 14 min')).toBeInTheDocument()
     expect(
-      screen.getByText('Usually 11-15 min. Final runtime can still vary.'),
+      screen.getByText(
+        'Usually 12-16 min. Approximate preview based on story setup target.',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Narration voice')).toHaveValue('moonbeam')
     expect(screen.getByLabelText('Narration style')).toHaveValue('calm')
+  })
+
+  it('updates the approximate estimate immediately when playback speed changes', () => {
+    renderWithAppProviders(
+      <AudioSettingsStage
+        onSaveAudioSettings={vi.fn()}
+        selectedStage={selectedStage}
+        snapshot={sampleSnapshot}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Playback speed'), {
+      target: { value: '0.85' },
+    })
+
+    expect(screen.getByText('Approx. 15 min')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Usually 13-18 min. Approximate preview based on story setup target.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Assumes about 140 words per minute at 0.85x, usually 120-160 words per minute, plus 2 short chapter pauses at roughly 3 seconds each\./,
+      ),
+    ).toBeInTheDocument()
   })
 
   it('saves the full audio settings form state through the workspace callback', async () => {

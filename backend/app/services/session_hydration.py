@@ -330,6 +330,7 @@ def build_session_snapshot(
             latest_audio_job=aggregate.latest_audio_job,
             composition_segments=aggregate.composition_segments,
             selected_story_setup=aggregate.selected_story_setup,
+            selected_story_outline=aggregate.selected_story_outline,
         ),
         continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
         usage_summary=usage_summary,

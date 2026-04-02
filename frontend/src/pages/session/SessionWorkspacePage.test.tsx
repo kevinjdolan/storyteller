@@ -773,6 +773,13 @@ function buildAudioSettingsSaveResponse(
     guidance_notes: null,
     runtime_estimate: {
       estimated_word_count: 1800,
+      estimated_chapter_count: 3,
+      chapter_pause_count: 2,
+      chapter_pause_seconds: 3,
+      total_chapter_pause_seconds: 6,
+      assumed_words_per_minute: 140,
+      minimum_words_per_minute: 120,
+      maximum_words_per_minute: 160,
       target_duration_seconds: 780,
       minimum_duration_seconds: 660,
       maximum_duration_seconds: 900,
@@ -822,6 +829,20 @@ function buildAudioSettingsSaveResponse(
     runtime_estimate: {
       estimated_word_count:
         currentAudioSettings.runtime_estimate?.estimated_word_count ?? 1800,
+      estimated_chapter_count:
+        currentAudioSettings.runtime_estimate?.estimated_chapter_count ?? 3,
+      chapter_pause_count:
+        currentAudioSettings.runtime_estimate?.chapter_pause_count ?? 2,
+      chapter_pause_seconds:
+        currentAudioSettings.runtime_estimate?.chapter_pause_seconds ?? 3,
+      total_chapter_pause_seconds:
+        currentAudioSettings.runtime_estimate?.total_chapter_pause_seconds ?? 6,
+      assumed_words_per_minute:
+        currentAudioSettings.runtime_estimate?.assumed_words_per_minute ?? 140,
+      minimum_words_per_minute:
+        currentAudioSettings.runtime_estimate?.minimum_words_per_minute ?? 120,
+      maximum_words_per_minute:
+        currentAudioSettings.runtime_estimate?.maximum_words_per_minute ?? 160,
       target_duration_seconds: Math.round((12 / nextPlaybackSpeed) * 60),
       minimum_duration_seconds: Math.round((10 / nextPlaybackSpeed) * 60),
       maximum_duration_seconds: Math.round((14 / nextPlaybackSpeed) * 60),
@@ -5799,6 +5820,13 @@ describe('SessionWorkspacePage', () => {
           guidance_notes: null,
           runtime_estimate: {
             estimated_word_count: 1800,
+            estimated_chapter_count: 3,
+            chapter_pause_count: 2,
+            chapter_pause_seconds: 3,
+            total_chapter_pause_seconds: 6,
+            assumed_words_per_minute: 140,
+            minimum_words_per_minute: 120,
+            maximum_words_per_minute: 160,
             target_duration_seconds: 780,
             minimum_duration_seconds: 660,
             maximum_duration_seconds: 900,
@@ -5984,6 +6012,13 @@ describe('SessionWorkspacePage', () => {
           guidance_notes: 'Keep the consonants soft and the pauses roomy.',
           runtime_estimate: {
             estimated_word_count: 1800,
+            estimated_chapter_count: 3,
+            chapter_pause_count: 2,
+            chapter_pause_seconds: 3,
+            total_chapter_pause_seconds: 6,
+            assumed_words_per_minute: 140,
+            minimum_words_per_minute: 120,
+            maximum_words_per_minute: 160,
             target_duration_seconds: 840,
             minimum_duration_seconds: 720,
             maximum_duration_seconds: 960,
