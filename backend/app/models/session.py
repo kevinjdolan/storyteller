@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.workflow import WorkflowStage, WorkflowStageState
@@ -168,6 +168,31 @@ class CreateSessionRequest(BaseModel):
     working_title: str | None = None
 
 
+class SelectSessionGenreRequest(BaseModel):
+    genre_id: str | None = Field(default=None, min_length=1)
+    genre_slug: str | None = Field(default=None, min_length=1)
+    genre_label: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectSessionGenreRequest":
+        selectors = [
+            self.genre_id,
+            self.genre_slug,
+            self.genre_label,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count != 1:
+            raise ValueError("exactly one of genre_id, genre_slug, or genre_label is required")
+
+        return self
+
+
+class SessionSelectionResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class RecordSessionUIActionRequest(BaseModel):
     action: str = Field(min_length=1)
     stage: WorkflowStage | None = None
@@ -240,9 +265,7 @@ class SessionSnapshot(BaseModel):
 
 
 class SessionHydrationMetadata(BaseModel):
-    strategy: Literal["materialized_only", "materialized_with_recent_replay"] = (
-        "materialized_only"
-    )
+    strategy: Literal["materialized_only", "materialized_with_recent_replay"] = "materialized_only"
     materialized_through_sequence_number: int | None = Field(default=None, ge=1)
     replay_from_sequence_number: int | None = Field(default=None, ge=1)
     replayed_event_count: int = Field(default=0, ge=0)
@@ -261,4 +284,5 @@ ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionSelectionResponse.model_rebuild()
 SessionHydrationView.model_rebuild()

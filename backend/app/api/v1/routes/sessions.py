@@ -13,6 +13,7 @@ from app.models import (
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    SelectSessionGenreRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
     SessionContextUpdateRequest,
@@ -20,12 +21,14 @@ from app.models import (
     SessionEventView,
     SessionHistoryView,
     SessionHydrationView,
+    SessionSelectionResponse,
     SessionSnapshot,
 )
 from app.services import SessionActionPolicyService, SessionIntentParserService
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
     InvalidStageTransitionError,
+    SessionGenreSelectionError,
     SessionNotFoundError,
     SessionService,
     UnsupportedSessionContextUpdateError,
@@ -123,6 +126,37 @@ def create_session(
     return SessionService(db_session).create_session(
         working_title=payload.working_title if payload is not None else None,
     )
+
+
+@router.post(
+    "/{session_id}/selections/genre",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist the selected genre for a story session",
+)
+def select_session_genre(
+    session_id: str,
+    payload: SelectSessionGenreRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).select_genre(
+            session_id,
+            genre_id=payload.genre_id,
+            genre_slug=payload.genre_slug,
+            genre_label=payload.genre_label,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except SessionGenreSelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(

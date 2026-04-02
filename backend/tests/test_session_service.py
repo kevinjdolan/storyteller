@@ -25,6 +25,7 @@ from app.db import (
     make_engine,
 )
 from app.models import SessionContextUpdateRequest, WorkflowStage, WorkflowStageState
+from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.sessions import (
     InvalidStageTransitionError,
     SessionNotFoundError,
@@ -50,6 +51,10 @@ def db_session():
     finally:
         session.close()
         engine.dispose()
+
+
+def _seed_catalog_rows(db_session) -> None:
+    seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))
 
 
 def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> None:
@@ -326,6 +331,96 @@ def test_update_stage_state_rejects_skipping_prerequisites(db_session) -> None:
             stage=WorkflowStage.TONE,
             status=WorkflowStageState.COMPLETED,
         )
+
+
+def test_select_genre_persists_catalog_choice_and_advances_to_tone(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Genre First")
+
+    result = service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    updated_snapshot = result.snapshot
+    genre_stage = next(
+        stage for stage in updated_snapshot.stage_states if stage.stage == WorkflowStage.GENRE
+    )
+
+    assert result.event.event_type == "selection.recorded"
+    assert result.event.stage == WorkflowStage.GENRE
+    assert result.event.payload is not None
+    assert result.event.payload.selection_kind == "genre"
+    assert result.event.payload.slug == "quest-fantasy"
+    assert updated_snapshot.selected_genre is not None
+    assert updated_snapshot.selected_genre.slug == "quest-fantasy"
+    assert updated_snapshot.current_stage == WorkflowStage.TONE
+    assert updated_snapshot.resume_stage == WorkflowStage.TONE
+    assert updated_snapshot.overall_status == WorkflowStageState.IN_PROGRESS
+    assert genre_stage.status == WorkflowStageState.COMPLETED
+    assert genre_stage.detail == (
+        "Selected genre: Quest Fantasy. Tone choices filter from this lane next."
+    )
+    assert genre_stage.last_event_type == "selection.recorded"
+    assert genre_stage.last_event_summary == "Selected genre: Quest Fantasy."
+
+    history = service.load_session_history(snapshot.id)
+    assert [event.event_type for event in history.events] == [
+        "session.created",
+        "workflow.stage_changed",
+        "selection.recorded",
+    ]
+    assert history.events[-1].summary == "Selected genre: Quest Fantasy."
+
+
+def test_select_genre_clears_tone_and_invalidates_later_stages(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Genre Reset")
+
+    first_selection = service.select_genre(snapshot.id, genre_slug="quest-fantasy").snapshot
+    tone = db_session.query(ToneProfile).filter(ToneProfile.slug == "hushed-wonder").one()
+    story_session = db_session.get(StorySession, snapshot.id)
+    assert story_session is not None
+    story_session.selected_tone_profile = tone
+    db_session.commit()
+
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.TONE,
+        status=WorkflowStageState.COMPLETED,
+        detail="Selected tone: Hushed Wonder.",
+    )
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.BRIEF,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted normalized brief.",
+    )
+
+    result = service.select_genre(snapshot.id, genre_slug="gentle-mystery")
+    updated_snapshot = result.snapshot
+    stage_map = {stage.stage: stage for stage in updated_snapshot.stage_states}
+
+    assert first_selection.selected_genre is not None
+    assert updated_snapshot.selected_genre is not None
+    assert updated_snapshot.selected_genre.slug == "gentle-mystery"
+    assert updated_snapshot.selected_tone_profile is None
+    assert updated_snapshot.current_stage == WorkflowStage.TONE
+    assert updated_snapshot.resume_stage == WorkflowStage.TONE
+    assert stage_map[WorkflowStage.GENRE].last_event_type == "selection.recorded"
+    assert stage_map[WorkflowStage.GENRE].last_event_summary == "Selected genre: Gentle Mystery."
+    assert stage_map[WorkflowStage.TONE].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.TONE].detail == (
+        "Genre changed to Gentle Mystery. Revisit tone and any downstream planning."
+    )
+    assert stage_map[WorkflowStage.BRIEF].status == WorkflowStageState.NEEDS_REGENERATION
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "workflow.stage_changed"
+    assert history.events[-2].payload is not None
+    assert history.events[-2].payload.invalidated_stages == [
+        WorkflowStage.TONE,
+        WorkflowStage.BRIEF,
+    ]
+    assert history.events[-1].summary == "Selected genre: Gentle Mystery."
 
 
 def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:

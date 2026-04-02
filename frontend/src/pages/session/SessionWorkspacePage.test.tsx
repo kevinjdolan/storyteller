@@ -242,6 +242,39 @@ const sampleHydration = {
   },
 } as const
 
+const sampleGenreCatalog = [
+  {
+    id: 'genre-1',
+    slug: 'quest-fantasy',
+    label: 'Quest Fantasy',
+    description:
+      'A bedtime-safe adventure with a clear destination, gentle bravery, and a warm return home.',
+    bedtime_safety_notes:
+      'Keep the journey wondrous rather than perilous; any danger should feel temporary, buffered by helpers, and resolved before sleep.',
+    arc_notes: {
+      core_arc:
+        'Leave a familiar safe place, face one meaningful but gentle challenge, and return more settled and confident.',
+      tension_ceiling: 'Low to moderate',
+    },
+    sort_order: 0,
+  },
+  {
+    id: 'genre-2',
+    slug: 'gentle-mystery',
+    label: 'Gentle Mystery',
+    description:
+      'A puzzle-forward bedtime story driven by clues, curiosity, and a reassuring explanation.',
+    bedtime_safety_notes:
+      'Mystery should never feel menacing; clues can be strange, but the world must stay emotionally safe and readable.',
+    arc_notes: {
+      core_arc:
+        'Notice a small mystery, gather clues, make a calm discovery, and restore ease.',
+      tension_ceiling: 'Low',
+    },
+    sort_order: 1,
+  },
+] as const
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -339,6 +372,91 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
   }
 }
 
+function buildGenreSelectionResponse(body: Record<string, unknown>) {
+  const requestedGenre =
+    sampleGenreCatalog.find((genre) => genre.id === body.genre_id) ??
+    sampleGenreCatalog.find((genre) => genre.slug === body.genre_slug) ??
+    sampleGenreCatalog.find((genre) => genre.label === body.genre_label) ??
+    sampleGenreCatalog[0]
+
+  return {
+    snapshot: {
+      ...sampleSnapshot,
+      current_stage: 'tone',
+      resume_stage: 'tone',
+      furthest_completed_stage: 'genre',
+      overall_status: 'in_progress',
+      updated_at: '2026-04-01T05:16:00Z',
+      selected_genre: {
+        id: requestedGenre.id,
+        slug: requestedGenre.slug,
+        label: requestedGenre.label,
+      },
+      selected_tone_profile: null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 1,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => {
+        if (index === 0) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Selected genre: ${requestedGenre.label}. Tone choices filter from this lane next.`,
+            last_event_summary: `Selected genre: ${requestedGenre.label}.`,
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:16:00Z',
+          }
+        }
+
+        if (index === 1) {
+          return {
+            ...stageState,
+            status: 'draft',
+            detail: null,
+            last_event_summary: null,
+            last_event_type: null,
+            last_event_at: null,
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    },
+    event: {
+      id: 'genre-selection-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 10,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'genre',
+      summary: `Selected genre: ${requestedGenre.label}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'genre',
+        selection_id: requestedGenre.id,
+        slug: requestedGenre.slug,
+        label: requestedGenre.label,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+      },
+      created_at: '2026-04-01T05:16:00Z',
+    },
+  }
+}
+
 function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
   const explicitCommand =
     typeof requestBody.explicit_command === 'object' &&
@@ -414,6 +532,10 @@ function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
 }
 
 function mockWorkspaceApi(options?: {
+  genreCatalog?: unknown
+  genreSelectionResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   history?: unknown
   hydration?: unknown
   hydrationStatus?: number
@@ -422,6 +544,7 @@ function mockWorkspaceApi(options?: {
     | ((requestBody: Record<string, unknown>) => unknown)
 }) {
   const history = options?.history ?? sampleHistory
+  const genreCatalog = options?.genreCatalog ?? sampleGenreCatalog
   const hydration =
     options?.hydration ??
     ({
@@ -430,6 +553,8 @@ function mockWorkspaceApi(options?: {
     } as const)
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
+  const genreSelectionResponse =
+    options?.genreSelectionResponse ?? buildGenreSelectionResponse
   const chatIntentResponse = options?.chatIntentResponse ?? {
     schema_version: 1,
     status: 'parsed',
@@ -483,6 +608,13 @@ function mockWorkspaceApi(options?: {
       }
 
       if (
+        pathname === '/api/v1/catalog/genres' &&
+        (init?.method == null || init.method === 'GET')
+      ) {
+        return Promise.resolve(buildJsonResponse(200, genreCatalog))
+      }
+
+      if (
         pathname === '/api/v1/sessions/moonlit-harbor/chat/intents' &&
         init?.method === 'POST'
       ) {
@@ -529,6 +661,24 @@ function mockWorkspaceApi(options?: {
 
         return Promise.resolve(
           buildJsonResponse(200, buildContextUpdateResponse(requestBody)),
+        )
+      }
+
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/selections/genre' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        const resolvedGenreSelectionResponse =
+          typeof genreSelectionResponse === 'function'
+            ? genreSelectionResponse(requestBody)
+            : genreSelectionResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedGenreSelectionResponse),
         )
       }
 
@@ -605,7 +755,9 @@ describe('SessionWorkspacePage', () => {
       screen.getByRole('heading', { level: 3, name: 'Workflow component kit' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Choice cards')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next stage' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Next stage' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Regenerate pitches' }),
     ).toBeInTheDocument()
@@ -617,6 +769,95 @@ describe('SessionWorkspacePage', () => {
         'Slash commands: /next-stage, /regenerate-pitches, /plan',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('renders genre cards from the catalog and persists a selected genre', async () => {
+    const genreStageSnapshot = {
+      ...sampleSnapshot,
+      current_stage: 'genre',
+      resume_stage: 'genre',
+      furthest_completed_stage: null,
+      overall_status: 'draft',
+      selected_genre: null,
+      selected_tone_profile: null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 0,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => ({
+        ...stageState,
+        status: index === 0 ? 'draft' : 'draft',
+        detail: null,
+        last_event_summary: null,
+        last_event_type: null,
+        last_event_at: null,
+      })),
+    } as const
+    const genreStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 1,
+      events: [sampleHistory.events[0]],
+    } as const
+
+    mockWorkspaceApi({
+      history: genreStageHistory,
+      hydration: {
+        snapshot: genreStageSnapshot,
+        recent_history: genreStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 1,
+          history_event_count: 1,
+          materialized_through_sequence_number: 1,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Choose a bedtime genre lane',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 3,
+        name: 'Quest Fantasy',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 3,
+        name: 'Gentle Mystery',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Tone selection comes next')).toBeInTheDocument()
+
+    const questFantasyCard = screen
+      .getByText('Quest Fantasy')
+      .closest('article')
+    expect(questFantasyCard).not.toBeNull()
+
+    fireEvent.click(
+      within(questFantasyCard as HTMLElement).getByRole('button', {
+        name: 'Choose genre',
+      }),
+    )
+
+    expect(
+      await screen.findByText('Selected genre: Quest Fantasy'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Tune the bedtime mood',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Quest Fantasy / Tone pending')).toBeInTheDocument()
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {

@@ -1,5 +1,6 @@
 import { type MouseEvent, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { selectSessionGenre } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
   parseSessionChatIntent,
@@ -10,6 +11,7 @@ import {
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
+import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import {
   useSessionChatMessages,
   useCurrentSessionHydrationQuery,
@@ -529,7 +531,11 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   }, [hydrationQuery.data, hydrationQuery.isError, runtimeStore])
 
   useEffect(() => {
-    if (snapshot == null || chatMessages.length > 0 || hydrationQuery.isPending) {
+    if (
+      snapshot == null ||
+      chatMessages.length > 0 ||
+      hydrationQuery.isPending
+    ) {
       return
     }
 
@@ -672,6 +678,33 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     appendHistoryEventToChat(event)
   }
 
+  async function applyGenreSelection(options: {
+    genreId?: string | null
+    genreLabel?: string | null
+    genreSlug?: string | null
+    origin: string
+    previewCurrentStage?: boolean
+  }) {
+    const result = await selectSessionGenre<
+      SessionSnapshot,
+      SessionHistoryEvent
+    >(sessionId, {
+      genre_id: options.genreId ?? null,
+      genre_label: options.genreLabel ?? null,
+      genre_slug: options.genreSlug ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -681,6 +714,16 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         controlId: 'chat-intent',
         origin: 'chat',
         valueSummary: getWorkflowStageLabel(action.target_stage),
+      })
+      return
+    }
+
+    if (action.action_type === 'select_genre') {
+      await applyGenreSelection({
+        genreId: action.extracted_values.genre_id ?? null,
+        genreLabel: action.extracted_values.genre_label ?? null,
+        genreSlug: action.extracted_values.genre_slug ?? null,
+        origin: 'chat',
       })
       return
     }
@@ -711,9 +754,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       }),
     )
 
-    const parsedIntent = await parseSessionChatIntent(sessionId, options.message, {
-      explicitCommand: options.explicitCommand ?? null,
-    })
+    const parsedIntent = await parseSessionChatIntent(
+      sessionId,
+      options.message,
+      {
+        explicitCommand: options.explicitCommand ?? null,
+      },
+    )
     const assistantCreatedAt = new Date().toISOString()
 
     runtimeStore.appendChatMessage(
@@ -732,7 +779,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       runtimeStore.appendChatMessage(actionEcho)
     })
 
-    const evaluatedActions = parsedIntent.policy_evaluation?.evaluated_actions ?? []
+    const evaluatedActions =
+      parsedIntent.policy_evaluation?.evaluated_actions ?? []
 
     for (const evaluatedAction of evaluatedActions) {
       if (
@@ -748,6 +796,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       if (
         action == null ||
         (action.action_type !== 'navigate_to_stage' &&
+          action.action_type !== 'select_genre' &&
           action.action_type !== 'open_finalize_view')
       ) {
         continue
@@ -1019,115 +1068,130 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
               <p className="workspace-stage-detail__note">{stageRoutingCopy}</p>
 
-              <CardGrid className="workspace-stage-detail__cards" columns={3}>
-                <SummaryPanel
-                  description="Accepted detail, last-event summaries, and later live job progress can all drop into the same compact summary shell."
-                  label="Current session signal"
-                  title={buildStageDetailSummary(selectedStage)}
+              {selectedStage.stage === 'genre' ? (
+                <GenreSelectionStage
+                  onPreviewStage={setPreviewStage}
+                  onSelectGenre={applyGenreSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
                 />
-
-                <SummaryPanel
-                  description="Navigator links preview a stage through routing instead of mutating the backend-owned session snapshot in the browser."
-                  label="Route mapping"
-                  title={
-                    <span className="workspace-stage-detail__route">
-                      ?stage={selectedStage.stage}
-                    </span>
-                  }
-                />
-
-                <SummaryPanel
-                  description={
-                    selectedStageInvalidations.length > 0
-                      ? selectedStageInvalidations.join(', ')
-                      : 'Finalize sits at the end of the workflow and can remain review-only.'
-                  }
-                  label="Downstream impact"
-                  title={
-                    selectedStageInvalidations.length > 0
-                      ? `Editing this step can refresh ${selectedStageInvalidations.length} later stage${selectedStageInvalidations.length === 1 ? '' : 's'}.`
-                      : 'This terminal review step does not invalidate anything later.'
-                  }
-                />
-              </CardGrid>
-
-              <section className="workspace-stage-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h3>Stage note</h3>
-                    <p>{buildStageNoteEditorDescription(selectedStage)}</p>
-                  </div>
-                  <Badge tone={selectedStageStatus.tone}>
-                    {selectedStageStatus.label}
-                  </Badge>
-                </div>
-
-                <TextArea
-                  description="Saved notes become durable session context, show up in replayable history, and feed the backend agent summary."
-                  disabled={stageNoteEditingDisabled}
-                  error={stageNoteError}
-                  label={`${selectedStage.label} note`}
-                  onChange={(event) => {
-                    setStageNoteDraft(event.currentTarget.value)
-                  }}
-                  rows={5}
-                  value={stageNoteDraft}
-                />
-
-                <div className="cta-row">
-                  <Button
-                    disabled={
-                      stageNoteEditingDisabled ||
-                      !stageNoteDirty ||
-                      isSavingStageNote
-                    }
-                    onClick={() => {
-                      void saveStageNote()
-                    }}
-                    tone="primary"
+              ) : (
+                <>
+                  <CardGrid
+                    className="workspace-stage-detail__cards"
+                    columns={3}
                   >
-                    {isSavingStageNote ? 'Saving note...' : 'Save note'}
-                  </Button>
-                  <Button
-                    disabled={
-                      stageNoteEditingDisabled ||
-                      !stageNoteDirty ||
-                      isSavingStageNote
-                    }
-                    onClick={() => {
-                      setStageNoteDraft(savedStageDetail)
-                      setStageNoteError(null)
-                    }}
-                    tone="ghost"
-                  >
-                    Reset
-                  </Button>
-                </div>
-              </section>
+                    <SummaryPanel
+                      description="Accepted detail, last-event summaries, and later live job progress can all drop into the same compact summary shell."
+                      label="Current session signal"
+                      title={buildStageDetailSummary(selectedStage)}
+                    />
 
-              <SessionStageEditorPreview
-                invalidationLabels={selectedStageInvalidations}
-                selectedStage={selectedStage}
-                snapshot={snapshot}
-              />
+                    <SummaryPanel
+                      description="Navigator links preview a stage through routing instead of mutating the backend-owned session snapshot in the browser."
+                      label="Route mapping"
+                      title={
+                        <span className="workspace-stage-detail__route">
+                          ?stage={selectedStage.stage}
+                        </span>
+                      }
+                    />
 
-              <section className="workspace-stage-detail__list">
-                <div className="panel-heading">
-                  <div>
-                    <h3>Planned controls</h3>
-                    <p>
-                      These placeholder bullets mark the extension points for
-                      the real business logic that will arrive in later prompts.
-                    </p>
-                  </div>
-                </div>
+                    <SummaryPanel
+                      description={
+                        selectedStageInvalidations.length > 0
+                          ? selectedStageInvalidations.join(', ')
+                          : 'Finalize sits at the end of the workflow and can remain review-only.'
+                      }
+                      label="Downstream impact"
+                      title={
+                        selectedStageInvalidations.length > 0
+                          ? `Editing this step can refresh ${selectedStageInvalidations.length} later stage${selectedStageInvalidations.length === 1 ? '' : 's'}.`
+                          : 'This terminal review step does not invalidate anything later.'
+                      }
+                    />
+                  </CardGrid>
 
-                <ul>
-                  {selectedStage.scaffoldBullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-              </section>
+                  <section className="workspace-stage-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Stage note</h3>
+                        <p>{buildStageNoteEditorDescription(selectedStage)}</p>
+                      </div>
+                      <Badge tone={selectedStageStatus.tone}>
+                        {selectedStageStatus.label}
+                      </Badge>
+                    </div>
+
+                    <TextArea
+                      description="Saved notes become durable session context, show up in replayable history, and feed the backend agent summary."
+                      disabled={stageNoteEditingDisabled}
+                      error={stageNoteError}
+                      label={`${selectedStage.label} note`}
+                      onChange={(event) => {
+                        setStageNoteDraft(event.currentTarget.value)
+                      }}
+                      rows={5}
+                      value={stageNoteDraft}
+                    />
+
+                    <div className="cta-row">
+                      <Button
+                        disabled={
+                          stageNoteEditingDisabled ||
+                          !stageNoteDirty ||
+                          isSavingStageNote
+                        }
+                        onClick={() => {
+                          void saveStageNote()
+                        }}
+                        tone="primary"
+                      >
+                        {isSavingStageNote ? 'Saving note...' : 'Save note'}
+                      </Button>
+                      <Button
+                        disabled={
+                          stageNoteEditingDisabled ||
+                          !stageNoteDirty ||
+                          isSavingStageNote
+                        }
+                        onClick={() => {
+                          setStageNoteDraft(savedStageDetail)
+                          setStageNoteError(null)
+                        }}
+                        tone="ghost"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  </section>
+
+                  <SessionStageEditorPreview
+                    invalidationLabels={selectedStageInvalidations}
+                    selectedStage={selectedStage}
+                    snapshot={snapshot}
+                  />
+
+                  <section className="workspace-stage-detail__list">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Planned controls</h3>
+                        <p>
+                          These placeholder bullets mark the extension points
+                          for the real business logic that will arrive in later
+                          prompts.
+                        </p>
+                      </div>
+                    </div>
+
+                    <ul>
+                      {selectedStage.scaffoldBullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                  </section>
+                </>
+              )}
             </article>
           </section>
 

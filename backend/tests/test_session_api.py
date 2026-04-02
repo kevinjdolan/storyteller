@@ -9,6 +9,7 @@ from app.db import Base, StorySession
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.models import WorkflowStage, WorkflowStageState
+from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.sessions import SessionService
 from app.settings import get_settings
 from fastapi.testclient import TestClient
@@ -32,6 +33,14 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
+
+
+def _seed_catalog_rows() -> None:
+    db_session = get_session_factory()()
+    try:
+        seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))
+    finally:
+        db_session.close()
 
 
 def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
@@ -98,6 +107,28 @@ def test_get_session_snapshot_endpoint_returns_full_snapshot(
     assert payload["stage_states"][0]["stage"] == "genre"
     assert payload["stage_states"][0]["status"] == "draft"
     assert payload["agent_context_summary"].startswith("Session title: Moonlit Harbor")
+
+
+def test_get_genre_catalog_endpoint_returns_seeded_genres(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+
+    response = session_api_client.get("/api/v1/catalog/genres")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert [genre["slug"] for genre in payload] == [
+        "quest-fantasy",
+        "gentle-mystery",
+        "cozy-animal-adventure",
+        "magical-friendship",
+        "dreamworld-voyage",
+        "soft-science-wonder",
+    ]
+    assert payload[0]["bedtime_safety_notes"].startswith("Keep the journey wondrous")
+    assert payload[0]["arc_notes"]["core_arc"].startswith("Leave a familiar safe place")
 
 
 def test_hydrate_session_endpoint_returns_snapshot_history_and_metadata(
@@ -170,6 +201,39 @@ def test_record_session_ui_action_endpoint_returns_recorded_event(
     assert payload["payload"]["control_id"] == "stage-navigator"
     assert payload["payload"]["value_summary"] == "Audio"
     assert payload["payload"]["origin"] == "workspace"
+
+
+def test_select_session_genre_endpoint_persists_choice_and_returns_snapshot(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Genre API"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/genre",
+        json={
+            "genre_slug": "quest-fantasy",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["stage"] == "genre"
+    assert payload["event"]["payload"]["selection_kind"] == "genre"
+    assert payload["snapshot"]["selected_genre"]["slug"] == "quest-fantasy"
+    assert payload["snapshot"]["current_stage"] == "tone"
+    assert payload["snapshot"]["resume_stage"] == "tone"
+    assert payload["snapshot"]["stage_states"][0]["status"] == "completed"
+    assert payload["snapshot"]["stage_states"][0]["last_event_summary"] == (
+        "Selected genre: Quest Fantasy."
+    )
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
@@ -463,8 +527,9 @@ def test_apply_session_context_update_endpoint_returns_409_for_invalid_transitio
     )
 
     assert response.status_code == 409
-    assert "cannot set 'story_setup' to 'in_progress' before prerequisites are completed" in (
-        response.json()["detail"]
+    assert (
+        "cannot set 'story_setup' to 'in_progress' before prerequisites are completed"
+        in (response.json()["detail"])
     )
 
 
