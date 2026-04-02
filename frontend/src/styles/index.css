@@ -1064,6 +1064,73 @@ h4 {
   flex-wrap: wrap;
 }
 
+.plan-revision-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.plan-revision-panel__badges,
+.plan-revision-panel__history-meta {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.plan-revision-panel__composition-note,
+.plan-revision-panel__empty {
+  margin: 0;
+}
+
+.plan-revision-panel__artifact-list {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.plan-revision-panel__artifact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2rem;
+  padding: 0.4rem 0.72rem;
+  border-radius: var(--radius-pill);
+  background: rgba(39, 69, 99, 0.08);
+  color: var(--color-brand);
+}
+
+.plan-revision-panel__history {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-revision-panel__history-item {
+  display: grid;
+  gap: var(--space-3);
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(39, 69, 99, 0.08);
+}
+
+.plan-revision-panel__history-item h4,
+.plan-revision-panel__history-item p {
+  margin: 0;
+}
+
+.plan-revision-panel__history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 .genre-selection-card__facts dd,
 .tone-selection-card__facts dd {
   margin: 0;

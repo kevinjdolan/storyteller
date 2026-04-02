@@ -241,11 +241,43 @@ class StoryOutlineView(BaseModel):
     updated_at: datetime | None = None
 
 
+class PlanArtifactRefView(BaseModel):
+    id: str
+    label: str
+    revision_number: int | None = None
+
+
+class PlanRevisionView(BaseModel):
+    id: str
+    revision_number: int
+    source_stage: WorkflowStage | None = None
+    change_summary: str | None = None
+    comparison_summary: str | None = None
+    restored_from_revision_number: int | None = None
+    changed_artifacts: list[str] = Field(default_factory=list)
+    pitch: PlanArtifactRefView | None = None
+    character_sheet: PlanArtifactRefView | None = None
+    beat_sheet: PlanArtifactRefView | None = None
+    story_setup: PlanArtifactRefView | None = None
+    story_outline: PlanArtifactRefView | None = None
+    is_current: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
 class CompositionJobView(BaseModel):
     id: str
     job_kind: str
     status: str
     progress_percent: float
+    plan_revision_id: str | None = None
+    plan_revision_number: int | None = None
+    beat_sheet_id: str | None = None
+    beat_sheet_revision_number: int | None = None
+    story_setup_id: str | None = None
+    story_setup_revision_number: int | None = None
+    story_outline_id: str | None = None
+    story_outline_revision_number: int | None = None
     current_segment_index: int | None = None
     attempt_count: int
     stop_reason: str | None = None
@@ -691,6 +723,10 @@ class SessionBeatSheetUpdateResponse(BaseModel):
     event: SessionEventView
 
 
+class RestoreSessionPlanRevisionRequest(BaseModel):
+    origin: str = Field(default="workspace", min_length=1)
+
+
 class RecentSessionSummary(BaseModel):
     id: str
     display_title: str
@@ -732,6 +768,8 @@ class SessionSnapshot(BaseModel):
     selected_story_setup: StorySetupView | None = None
     story_outline_revisions: list[StoryOutlineView] = Field(default_factory=list)
     selected_story_outline: StoryOutlineView | None = None
+    plan_revisions: list[PlanRevisionView] = Field(default_factory=list)
+    current_plan_revision: PlanRevisionView | None = None
     latest_composition_job: CompositionJobView | None = None
     latest_audio_job: AudioJobView | None = None
     active_composition_job: CompositionJobView | None = None

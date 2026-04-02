@@ -224,6 +224,7 @@ describe('StorySetupStage', () => {
     renderWithAppProviders(
       <StorySetupStage
         onPreviewStage={vi.fn()}
+        onRestorePlanRevision={vi.fn()}
         onSaveStorySetup={onSaveStorySetup}
         onSaveStoryOutline={vi.fn().mockResolvedValue({
           event: {
@@ -281,6 +282,7 @@ describe('StorySetupStage', () => {
     renderWithAppProviders(
       <StorySetupStage
         onPreviewStage={vi.fn()}
+        onRestorePlanRevision={vi.fn()}
         onSaveStorySetup={vi.fn().mockResolvedValue({
           event: {
             id: 'event-1',
@@ -353,6 +355,7 @@ describe('StorySetupStage', () => {
     renderWithAppProviders(
       <StorySetupStage
         onPreviewStage={vi.fn()}
+        onRestorePlanRevision={vi.fn()}
         onSaveStorySetup={vi.fn().mockResolvedValue({
           event: {
             id: 'event-setup-1',
@@ -425,6 +428,7 @@ describe('StorySetupStage', () => {
     renderWithAppProviders(
       <StorySetupStage
         onPreviewStage={vi.fn()}
+        onRestorePlanRevision={vi.fn()}
         onSaveStorySetup={vi.fn().mockResolvedValue({
           event: {
             id: 'event-setup-1',
@@ -496,6 +500,7 @@ describe('StorySetupStage', () => {
     renderWithAppProviders(
       <StorySetupStage
         onPreviewStage={vi.fn()}
+        onRestorePlanRevision={vi.fn()}
         onSaveStorySetup={vi.fn().mockResolvedValue({
           event: {
             id: 'event-setup-1',
@@ -526,6 +531,224 @@ describe('StorySetupStage', () => {
           regenerateCardKeys: ['chapter-1'],
         }),
       )
+    })
+  })
+
+  it('shows saved plan history and restores an earlier revision', async () => {
+    const outlineSnapshot = buildOutlineSnapshot()
+    const onRestorePlanRevision = vi.fn().mockResolvedValue({
+      event: {
+        id: 'event-plan-restore-1',
+        session_id: 'moonlit-harbor',
+        sequence_number: 5,
+        actor: { actor_type: 'user' },
+        event_type: 'selection.recorded',
+        stage: 'story_setup',
+        summary: 'Restored saved plan: Revision 1.',
+        payload: null,
+        created_at: '2026-04-02T05:50:00Z',
+      },
+      snapshot: outlineSnapshot,
+    })
+
+    renderWithAppProviders(
+      <StorySetupStage
+        onPreviewStage={vi.fn()}
+        onRestorePlanRevision={onRestorePlanRevision}
+        onSaveStorySetup={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-setup-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 1,
+            actor: { actor_type: 'user' },
+            event_type: 'selection.recorded',
+            stage: 'story_setup',
+            summary: 'Accepted story setup.',
+            payload: null,
+            created_at: '2026-04-02T05:20:00Z',
+          },
+          snapshot: outlineSnapshot,
+        })}
+        onSaveStoryOutline={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-outline-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 2,
+            actor: { actor_type: 'user' },
+            event_type: 'content.user_edit.recorded',
+            stage: 'story_setup',
+            summary: 'Updated story outline cards.',
+            payload: null,
+            created_at: '2026-04-02T05:25:00Z',
+          },
+          snapshot: {
+            ...outlineSnapshot,
+            current_plan_revision: {
+              id: 'plan-revision-2',
+              revision_number: 2,
+              change_summary: 'Saved a structural outline revision.',
+              comparison_summary: 'Changed story outline.',
+              changed_artifacts: ['story_outline'],
+              story_setup: {
+                id: 'setup-1',
+                label: '~13 min, 3 chapters',
+                revision_number: 1,
+              },
+              story_outline: {
+                id: 'outline-1',
+                label: 'Chapter outline revision 1',
+                revision_number: 1,
+              },
+              beat_sheet: {
+                id: 'beat-1',
+                label: 'Beat sheet revision 2',
+                revision_number: 2,
+              },
+              is_current: true,
+              created_at: '2026-04-02T05:25:00Z',
+              updated_at: '2026-04-02T05:25:00Z',
+            },
+            plan_revisions: [
+              {
+                id: 'plan-revision-2',
+                revision_number: 2,
+                change_summary: 'Saved a structural outline revision.',
+                comparison_summary: 'Changed story outline.',
+                changed_artifacts: ['story_outline'],
+                story_setup: {
+                  id: 'setup-1',
+                  label: '~13 min, 3 chapters',
+                  revision_number: 1,
+                },
+                story_outline: {
+                  id: 'outline-1',
+                  label: 'Chapter outline revision 1',
+                  revision_number: 1,
+                },
+                beat_sheet: {
+                  id: 'beat-1',
+                  label: 'Beat sheet revision 2',
+                  revision_number: 2,
+                },
+                is_current: true,
+                created_at: '2026-04-02T05:25:00Z',
+                updated_at: '2026-04-02T05:25:00Z',
+              },
+              {
+                id: 'plan-revision-1',
+                revision_number: 1,
+                change_summary: 'Accepted beat sheet: Beat sheet revision 2.',
+                comparison_summary: 'Changed beat sheet.',
+                changed_artifacts: ['beat_sheet'],
+                beat_sheet: {
+                  id: 'beat-1',
+                  label: 'Beat sheet revision 2',
+                  revision_number: 2,
+                },
+                is_current: false,
+                created_at: '2026-04-02T05:15:00Z',
+                updated_at: '2026-04-02T05:15:00Z',
+              },
+            ],
+            latest_composition_job: {
+              id: 'composition-1',
+              status: 'in_progress',
+              progress_percent: 42,
+              plan_revision_number: 2,
+            },
+          },
+        })}
+        selectedStage={selectedStage}
+        snapshot={{
+          ...outlineSnapshot,
+          current_plan_revision: {
+            id: 'plan-revision-2',
+            revision_number: 2,
+            change_summary: 'Saved a structural outline revision.',
+            comparison_summary: 'Changed story outline.',
+            changed_artifacts: ['story_outline'],
+            story_setup: {
+              id: 'setup-1',
+              label: '~13 min, 3 chapters',
+              revision_number: 1,
+            },
+            story_outline: {
+              id: 'outline-1',
+              label: 'Chapter outline revision 1',
+              revision_number: 1,
+            },
+            beat_sheet: {
+              id: 'beat-1',
+              label: 'Beat sheet revision 2',
+              revision_number: 2,
+            },
+            is_current: true,
+            created_at: '2026-04-02T05:25:00Z',
+            updated_at: '2026-04-02T05:25:00Z',
+          },
+          plan_revisions: [
+            {
+              id: 'plan-revision-2',
+              revision_number: 2,
+              change_summary: 'Saved a structural outline revision.',
+              comparison_summary: 'Changed story outline.',
+              changed_artifacts: ['story_outline'],
+              story_setup: {
+                id: 'setup-1',
+                label: '~13 min, 3 chapters',
+                revision_number: 1,
+              },
+              story_outline: {
+                id: 'outline-1',
+                label: 'Chapter outline revision 1',
+                revision_number: 1,
+              },
+              beat_sheet: {
+                id: 'beat-1',
+                label: 'Beat sheet revision 2',
+                revision_number: 2,
+              },
+              is_current: true,
+              created_at: '2026-04-02T05:25:00Z',
+              updated_at: '2026-04-02T05:25:00Z',
+            },
+            {
+              id: 'plan-revision-1',
+              revision_number: 1,
+              change_summary: 'Accepted beat sheet: Beat sheet revision 2.',
+              comparison_summary: 'Changed beat sheet.',
+              changed_artifacts: ['beat_sheet'],
+              beat_sheet: {
+                id: 'beat-1',
+                label: 'Beat sheet revision 2',
+                revision_number: 2,
+              },
+              is_current: false,
+              created_at: '2026-04-02T05:15:00Z',
+              updated_at: '2026-04-02T05:15:00Z',
+            },
+          ],
+          latest_composition_job: {
+            id: 'composition-1',
+            status: 'in_progress',
+            progress_percent: 42,
+            plan_revision_number: 2,
+          },
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText('Composition is using plan revision 2.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => {
+      expect(onRestorePlanRevision).toHaveBeenCalledWith({
+        origin: 'workspace',
+        revisionNumber: 1,
+      })
     })
   })
 })

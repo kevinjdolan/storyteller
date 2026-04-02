@@ -13,6 +13,7 @@ import {
   SelectionCard,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
+import { PlanRevisionHistoryPanel } from './PlanRevisionHistoryPanel.tsx'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
 
 type CharacterSelectionStageProps = {
@@ -40,6 +41,13 @@ type CharacterSelectionStageProps = {
     characterSheetId?: string | null
     revisionNumber?: number | null
     title?: string | null
+  }) => Promise<{
+    event: SessionHistoryEvent
+    snapshot: SessionSnapshot
+  }>
+  onRestorePlanRevision: (selection: {
+    origin: string
+    revisionNumber: number
   }) => Promise<{
     event: SessionHistoryEvent
     snapshot: SessionSnapshot
@@ -201,6 +209,7 @@ export function CharacterSelectionStage({
   onGenerateCharacterSheets,
   onPreviewStage,
   onRefineCharacterSheet,
+  onRestorePlanRevision,
   onSelectCharacterSheet,
   selectedStage,
   snapshot,
@@ -796,6 +805,12 @@ export function CharacterSelectionStage({
           </div>
         </section>
       ) : null}
+
+      <PlanRevisionHistoryPanel
+        disabled={isGenerating || isRefining}
+        onRestorePlanRevision={onRestorePlanRevision}
+        snapshot={snapshot}
+      />
     </section>
   )
 }

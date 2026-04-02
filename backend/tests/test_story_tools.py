@@ -203,8 +203,7 @@ def test_story_workflow_tool_service_updates_setup_and_cancels_invalidated_jobs(
     assert audio_job is not None and audio_job.status == JobStatus.CANCELLED
     assert _stage_status(snapshot, WorkflowStage.STORY_SETUP) == WorkflowStageState.COMPLETED
     assert (
-        _stage_status(snapshot, WorkflowStage.COMPOSITION)
-        == WorkflowStageState.NEEDS_REGENERATION
+        _stage_status(snapshot, WorkflowStage.COMPOSITION) == WorkflowStageState.NEEDS_REGENERATION
     )
     assert _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.NEEDS_REGENERATION
 
@@ -281,8 +280,7 @@ def test_story_workflow_tool_service_marks_reordered_outline_as_structural(
     assert snapshot.selected_story_outline is not None
 
     reversed_cards = [
-        card.model_dump(mode="json")
-        for card in reversed(snapshot.selected_story_outline.cards)
+        card.model_dump(mode="json") for card in reversed(snapshot.selected_story_outline.cards)
     ]
 
     result = StoryWorkflowToolService(db_session).execute(
@@ -401,11 +399,43 @@ def test_story_workflow_tool_service_seeds_composition_segments_from_outline_car
     assert job.metadata_json["continuity_bible_id"]
     assert job.metadata_json["continuity_summary"]
     assert segment.payload["continuity_bible_id"] == job.metadata_json["continuity_bible_id"]
-    assert any(
-        fact["category"] == "promise" for fact in segment.payload["continuity_facts"]
-    )
+    assert any(fact["category"] == "promise" for fact in segment.payload["continuity_facts"])
     assert segment.planned_summary is not None
     assert "Chapter 1" in job.metadata_json["outline_card_title"]
+
+
+def test_story_workflow_tool_service_tracks_plan_revision_lineage_for_composition(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(db_session)
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    job = db_session.get(CompositionJob, result.composition_job_id)
+
+    assert job is not None
+    assert job.plan_revision_id is not None
+    assert snapshot.current_plan_revision is not None
+    assert snapshot.current_plan_revision.revision_number == 1
+    assert snapshot.current_plan_revision.beat_sheet is not None
+    assert snapshot.current_plan_revision.beat_sheet.revision_number == 1
+    assert snapshot.current_plan_revision.story_setup is not None
+    assert snapshot.current_plan_revision.story_setup.revision_number == 1
+    assert snapshot.current_plan_revision.story_outline is not None
+    assert snapshot.current_plan_revision.story_outline.revision_number == 1
+    assert len(snapshot.plan_revisions) == 1
+    assert snapshot.latest_composition_job is not None
+    assert snapshot.latest_composition_job.id == result.composition_job_id
+    assert snapshot.latest_composition_job.plan_revision_id == job.plan_revision_id
+    assert snapshot.latest_composition_job.plan_revision_number == 1
+    assert snapshot.latest_composition_job.beat_sheet_revision_number == 1
+    assert snapshot.latest_composition_job.story_setup_revision_number == 1
+    assert snapshot.latest_composition_job.story_outline_revision_number == 1
 
 
 def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
@@ -434,8 +464,7 @@ def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
     assert job.metadata_json["continuity_revision_number"] == 1
     assert segment.payload["continuity_revision_number"] == 1
     assert any(
-        fact["category"] == "voice_constraint"
-        for fact in segment.payload["continuity_facts"]
+        fact["category"] == "voice_constraint" for fact in segment.payload["continuity_facts"]
     )
     assert (
         segment.planned_summary
@@ -503,14 +532,20 @@ def test_eval_outline_edit_revisions_keep_locked_structure_and_refresh_downstrea
     assert edited_card.beat_keys == original_card.beat_keys
     assert edited_card.target_word_count == original_card.target_word_count
     assert edited_card.target_scene_count == original_card.target_scene_count
-    assert _stage_status(
-        refreshed,
-        WorkflowStage.COMPOSITION,
-    ) == WorkflowStageState.NEEDS_REGENERATION
-    assert _stage_status(
-        refreshed,
-        WorkflowStage.AUDIO,
-    ) == WorkflowStageState.NEEDS_REGENERATION
+    assert (
+        _stage_status(
+            refreshed,
+            WorkflowStage.COMPOSITION,
+        )
+        == WorkflowStageState.NEEDS_REGENERATION
+    )
+    assert (
+        _stage_status(
+            refreshed,
+            WorkflowStage.AUDIO,
+        )
+        == WorkflowStageState.NEEDS_REGENERATION
+    )
 
 
 def test_worker_processes_story_tool_job_via_default_registry(tmp_path: Path) -> None:

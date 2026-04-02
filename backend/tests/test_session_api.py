@@ -18,10 +18,10 @@ from app.models import (
     CharacterGenerationInvocation,
     CharacterGenerationInvocationResult,
     CharacterGenerationStructuredOutput,
-    GeneratedCharacterProfile,
-    GeneratedCharacterSheetCandidate,
     GeneratedBeatSheetBeat,
     GeneratedBeatSheetCandidate,
+    GeneratedCharacterProfile,
+    GeneratedCharacterSheetCandidate,
     GeneratedPitchCandidate,
     NormalizedBriefPreferences,
     PitchGenerationInvocation,
@@ -261,8 +261,7 @@ class StubCharacterGenerationAdapter:
                             goal="lead one lingering lantern back toward a safe ending",
                             flaw="overplans each step and worries when the route changes",
                             comfort_trait=(
-                                "returns to familiar rituals whenever the story needs "
-                                "grounding"
+                                "returns to familiar rituals whenever the story needs grounding"
                             ),
                             bedtime_safety_notes=(
                                 "Tavi's planning worries stay manageable because the support cast "
@@ -278,8 +277,7 @@ class StubCharacterGenerationAdapter:
                                 name="Ember",
                                 role="warmhearted mentor",
                                 goal=(
-                                    "keep the quest readable and calm without flattening "
-                                    "the wonder"
+                                    "keep the quest readable and calm without flattening the wonder"
                                 ),
                                 flaw="tries to solve problems too early",
                                 comfort_trait="grounds scenes with a steady ritual phrase",
@@ -1226,16 +1224,18 @@ def test_refine_session_character_sheet_endpoint_creates_a_selected_refined_shee
     assert "Refined from" in payload["event"]["payload"]["rationale"]
     assert payload["snapshot"]["current_stage"] == "beats"
     assert payload["snapshot"]["selected_character_sheet"]["generation_kind"] == "refinement"
-    assert payload["snapshot"]["selected_character_sheet"]["source_character_sheet_id"] == (
-        source_character_sheet["id"]
+    assert (
+        payload["snapshot"]["selected_character_sheet"]["source_character_sheet_id"]
+        == (source_character_sheet["id"])
     )
     assert payload["snapshot"]["selected_character_sheet"]["refinement_instructions"] == (
         "Make the lead and guardian feel more sibling-like."
     )
     assert payload["snapshot"]["character_sheet_batches"][0]["generation_kind"] == "refinement"
-    assert payload["snapshot"]["character_sheet_batches"][0][
-        "source_character_sheet_title"
-    ] == source_character_sheet["title"]
+    assert (
+        payload["snapshot"]["character_sheet_batches"][0]["source_character_sheet_title"]
+        == source_character_sheet["title"]
+    )
 
 
 def test_generate_session_beat_sheet_endpoint_persists_a_revisioned_candidate(

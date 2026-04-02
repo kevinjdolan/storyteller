@@ -33,11 +33,12 @@ from app.models import (
     RefineSessionBeatSheetRequest,
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
+    RestoreSessionPlanRevisionRequest,
     SaveSessionStoryBriefRequest,
     SaveSessionStoryOutlineRequest,
     SaveSessionStorySetupRequest,
-    SelectSessionCharacterSheetRequest,
     SelectSessionBeatSheetRequest,
+    SelectSessionCharacterSheetRequest,
     SelectSessionGenreRequest,
     SelectSessionPitchRequest,
     SelectSessionToneRequest,
@@ -72,15 +73,16 @@ from app.services import (
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
     InvalidStageTransitionError,
+    SessionBeatSheetEditError,
+    SessionBeatSheetGenerationError,
+    SessionBeatSheetSelectionError,
     SessionCharacterSheetGenerationError,
     SessionCharacterSheetSelectionError,
-    SessionBeatSheetGenerationError,
-    SessionBeatSheetEditError,
-    SessionBeatSheetSelectionError,
     SessionGenreSelectionError,
     SessionNotFoundError,
     SessionPitchGenerationError,
     SessionPitchSelectionError,
+    SessionPlanRevisionError,
     SessionService,
     SessionStoryBriefSaveError,
     SessionToneSelectionError,
@@ -376,6 +378,36 @@ def save_session_story_outline(
             detail=str(exc),
         ) from exc
     except StoryWorkflowToolServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/plan-revisions/{revision_number}/restore",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Restore a previously captured planning snapshot",
+)
+def restore_session_plan_revision(
+    session_id: str,
+    revision_number: int,
+    payload: RestoreSessionPlanRevisionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).restore_plan_revision(
+            session_id,
+            revision_number=revision_number,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except SessionPlanRevisionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

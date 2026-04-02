@@ -12,6 +12,7 @@ import {
   refineSessionCharacterSheet,
   refineSessionPitch,
   recordSessionUiAction,
+  restoreSessionPlanRevision,
   saveSessionStoryBrief,
   saveSessionStoryOutline,
   saveSessionStorySetup,
@@ -1246,6 +1247,29 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyPlanRevisionRestore(options: {
+    origin: string
+    revisionNumber: number
+    previewCurrentStage?: boolean
+  }) {
+    const result = await restoreSessionPlanRevision(
+      sessionId,
+      options.revisionNumber,
+      {
+        origin: options.origin,
+      },
+    )
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1803,6 +1827,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onGeneratePitches={applyPitchGeneration}
                   onPreviewStage={setPreviewStage}
                   onRefinePitch={applyPitchRefinement}
+                  onRestorePlanRevision={applyPlanRevisionRestore}
                   onSelectPitch={applyPitchSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
@@ -1812,6 +1837,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onGenerateCharacterSheets={applyCharacterSheetGeneration}
                   onPreviewStage={setPreviewStage}
                   onRefineCharacterSheet={applyCharacterSheetRefinement}
+                  onRestorePlanRevision={applyPlanRevisionRestore}
                   onSelectCharacterSheet={applyCharacterSheetSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
@@ -1822,6 +1848,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onGenerateBeatSheet={applyBeatSheetGeneration}
                   onPreviewStage={setPreviewStage}
                   onRefineBeatSheet={applyBeatSheetRefinement}
+                  onRestorePlanRevision={applyPlanRevisionRestore}
                   onSelectBeatSheet={applyBeatSheetSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
@@ -1829,6 +1856,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               ) : selectedStage.stage === 'story_setup' ? (
                 <StorySetupStage
                   onPreviewStage={setPreviewStage}
+                  onRestorePlanRevision={applyPlanRevisionRestore}
                   onSaveStoryOutline={applyStoryOutlineSave}
                   onSaveStorySetup={applyStorySetupSave}
                   selectedStage={selectedStage}

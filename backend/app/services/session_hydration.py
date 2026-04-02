@@ -28,6 +28,8 @@ from app.models import (
     NormalizedBriefPreferences,
     PitchBatchView,
     PitchView,
+    PlanArtifactRefView,
+    PlanRevisionView,
     RecentSessionSummary,
     SessionAssetView,
     SessionCatalogSelection,
@@ -177,6 +179,11 @@ def build_session_snapshot(
     conversation_memory: ConversationMemorySnapshotView | None,
 ) -> SessionSnapshot:
     story_session = aggregate.session
+    plan_revision_views = build_plan_revision_views(aggregate.plan_revisions)
+    current_plan_revision_view = next(
+        (revision for revision in plan_revision_views if revision.is_current),
+        None,
+    )
     snapshot = SessionSnapshot(
         id=story_session.id,
         display_title=resolve_display_title(
@@ -216,6 +223,8 @@ def build_session_snapshot(
         selected_story_setup=build_story_setup_view(aggregate.selected_story_setup),
         story_outline_revisions=build_story_outline_views(aggregate.story_outlines),
         selected_story_outline=build_story_outline_view(aggregate.selected_story_outline),
+        plan_revisions=plan_revision_views,
+        current_plan_revision=current_plan_revision_view,
         latest_composition_job=build_composition_job_view(aggregate.latest_composition_job),
         latest_audio_job=build_audio_job_view(aggregate.latest_audio_job),
         active_composition_job=build_composition_job_view(aggregate.active_composition_job),
@@ -811,15 +820,15 @@ def build_pitch_batch_views(rows) -> list[PitchBatchView]:
             source_pitch_id=_read_pitch_refinement_metadata(batches[generation_key][0]).get(
                 "source_pitch_id"
             ),
-            source_pitch_title=_read_pitch_refinement_metadata(
-                batches[generation_key][0]
-            ).get("source_pitch_title"),
-            source_generation_key=_read_pitch_refinement_metadata(
-                batches[generation_key][0]
-            ).get("source_generation_key"),
-            refinement_instructions=_read_pitch_refinement_metadata(
-                batches[generation_key][0]
-            ).get("refinement_instructions"),
+            source_pitch_title=_read_pitch_refinement_metadata(batches[generation_key][0]).get(
+                "source_pitch_title"
+            ),
+            source_generation_key=_read_pitch_refinement_metadata(batches[generation_key][0]).get(
+                "source_generation_key"
+            ),
+            refinement_instructions=_read_pitch_refinement_metadata(batches[generation_key][0]).get(
+                "refinement_instructions"
+            ),
             pitches=[
                 build_pitch_view(row)
                 for row in sorted(
@@ -983,9 +992,7 @@ def _build_story_outline_edit_history(
                 origin=_read_optional_mapping_text(raw_entry, "origin") or "workspace",
                 changed_fields=_read_string_list(raw_entry.get("changed_fields")),
                 changed_card_keys=_read_string_list(raw_entry.get("changed_card_keys")),
-                regenerated_card_keys=_read_string_list(
-                    raw_entry.get("regenerated_card_keys")
-                ),
+                regenerated_card_keys=_read_string_list(raw_entry.get("regenerated_card_keys")),
                 change_impact=_read_optional_mapping_text(raw_entry, "change_impact"),
                 reordered=_read_optional_mapping_bool(raw_entry, "reordered") or False,
                 refreshes_downstream=_read_optional_mapping_bool(
@@ -1029,9 +1036,7 @@ def _build_beat_entries_from_list(value: list[Any]) -> list[BeatSheetBeatView]:
             else SAVE_THE_CAT_BEAT_LABELS.get(key, key.replace("_", " ").title())
         )
         order = (
-            raw_entry.get("order")
-            if isinstance(raw_entry.get("order"), int)
-            else fallback_order
+            raw_entry.get("order") if isinstance(raw_entry.get("order"), int) else fallback_order
         )
         summary = raw_entry.get("summary") if isinstance(raw_entry.get("summary"), str) else ""
         if not summary:
@@ -1114,9 +1119,7 @@ def build_character_profile_view(
             goal=value.get("goal") if isinstance(value.get("goal"), str) else None,
             flaw=value.get("flaw") if isinstance(value.get("flaw"), str) else None,
             comfort_trait=(
-                value.get("comfort_trait")
-                if isinstance(value.get("comfort_trait"), str)
-                else None
+                value.get("comfort_trait") if isinstance(value.get("comfort_trait"), str) else None
             ),
             bedtime_safety_notes=(
                 value.get("bedtime_safety_notes")
@@ -1124,16 +1127,12 @@ def build_character_profile_view(
                 else None
             ),
             relationships=[
-                entry
-                for entry in value.get("relationships", [])
-                if isinstance(entry, str)
+                entry for entry in value.get("relationships", []) if isinstance(entry, str)
             ]
             if isinstance(value.get("relationships"), list)
             else [],
             visual_anchors=[
-                entry
-                for entry in value.get("visual_anchors", [])
-                if isinstance(entry, str)
+                entry for entry in value.get("visual_anchors", []) if isinstance(entry, str)
             ]
             if isinstance(value.get("visual_anchors"), list)
             else [],
@@ -1253,9 +1252,9 @@ def build_character_sheet_batch_views(rows) -> list[CharacterSheetBatchView]:
             source_pitch_id=_read_character_refinement_metadata(batches[generation_key][0]).get(
                 "source_pitch_id"
             ),
-            source_pitch_title=_read_character_refinement_metadata(
-                batches[generation_key][0]
-            ).get("source_pitch_title"),
+            source_pitch_title=_read_character_refinement_metadata(batches[generation_key][0]).get(
+                "source_pitch_title"
+            ),
             source_character_sheet_id=_read_character_refinement_metadata(
                 batches[generation_key][0]
             ).get("source_character_sheet_id"),
@@ -1282,9 +1281,7 @@ def build_character_sheet_batch_views(rows) -> list[CharacterSheetBatchView]:
                 build_character_sheet_view(row)
                 for row in sorted(
                     batches[generation_key],
-                    key=lambda character_sheet: _resolve_character_candidate_index(
-                        character_sheet
-                    ),
+                    key=lambda character_sheet: _resolve_character_candidate_index(character_sheet),
                 )
             ],
         )
@@ -1343,9 +1340,7 @@ def build_beat_sheet_views(rows) -> list[BeatSheetView]:
             build_beat_sheet_view(row)
             for row in sorted(
                 rows,
-                key=lambda beat_sheet: (
-                    getattr(beat_sheet, "revision_number", 0),
-                ),
+                key=lambda beat_sheet: (getattr(beat_sheet, "revision_number", 0),),
                 reverse=True,
             )
         )
@@ -1377,11 +1372,7 @@ def build_story_outline_view(row) -> StoryOutlineView | None:
 
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
     raw_cards = row.cards if isinstance(row.cards, list) else []
-    cards = [
-        StoryOutlineCard.model_validate(card)
-        for card in raw_cards
-        if isinstance(card, dict)
-    ]
+    cards = [StoryOutlineCard.model_validate(card) for card in raw_cards if isinstance(card, dict)]
     edit_history = _build_story_outline_edit_history(metadata)
 
     return StoryOutlineView(
@@ -1425,14 +1416,157 @@ def build_story_outline_views(rows) -> list[StoryOutlineView]:
             build_story_outline_view(row)
             for row in sorted(
                 rows,
-                key=lambda story_outline: (
-                    getattr(story_outline, "revision_number", 0),
-                ),
+                key=lambda story_outline: (getattr(story_outline, "revision_number", 0),),
                 reverse=True,
             )
         )
         if view is not None
     ]
+
+
+def build_plan_revision_views(rows) -> list[PlanRevisionView]:
+    if rows is None:
+        return []
+
+    ordered_rows = sorted(
+        rows,
+        key=lambda plan_revision: getattr(plan_revision, "revision_number", 0),
+    )
+    previous_revision = None
+    views: list[PlanRevisionView] = []
+
+    for row in ordered_rows:
+        view = build_plan_revision_view(row, previous_revision=previous_revision)
+        if view is not None:
+            views.append(view)
+        previous_revision = row
+
+    return list(reversed(views))
+
+
+def build_plan_revision_view(
+    row,
+    *,
+    previous_revision,
+) -> PlanRevisionView | None:
+    if row is None:
+        return None
+
+    changed_artifacts = _resolve_plan_revision_changed_artifacts(row, previous_revision)
+    restored_from_revision = getattr(row, "restored_from_plan_revision", None)
+
+    return PlanRevisionView(
+        id=row.id,
+        revision_number=row.revision_number,
+        source_stage=row.source_stage,
+        change_summary=row.change_summary,
+        comparison_summary=_build_plan_revision_comparison_summary(
+            row,
+            changed_artifacts=changed_artifacts,
+            previous_revision=previous_revision,
+        ),
+        restored_from_revision_number=(
+            restored_from_revision.revision_number if restored_from_revision is not None else None
+        ),
+        changed_artifacts=changed_artifacts,
+        pitch=_build_plan_artifact_ref_view("pitch", getattr(row, "pitch", None)),
+        character_sheet=_build_plan_artifact_ref_view(
+            "character_sheet",
+            getattr(row, "character_sheet", None),
+        ),
+        beat_sheet=_build_plan_artifact_ref_view("beat_sheet", getattr(row, "beat_sheet", None)),
+        story_setup=_build_plan_artifact_ref_view("story_setup", getattr(row, "story_setup", None)),
+        story_outline=_build_plan_artifact_ref_view(
+            "story_outline",
+            getattr(row, "story_outline", None),
+        ),
+        is_current=row.is_current,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _build_plan_artifact_ref_view(kind: str, row) -> PlanArtifactRefView | None:
+    if row is None:
+        return None
+
+    if kind == "pitch":
+        label = getattr(row, "title", None) or "Selected pitch"
+        revision_number = None
+    elif kind == "character_sheet":
+        label = (
+            getattr(row, "title", None)
+            or getattr(row, "protagonist_name", None)
+            or f"Character revision {getattr(row, 'revision_number', '?')}"
+        )
+        revision_number = getattr(row, "revision_number", None)
+    elif kind == "beat_sheet":
+        label = f"Beat sheet revision {getattr(row, 'revision_number', '?')}"
+        revision_number = getattr(row, "revision_number", None)
+    elif kind == "story_setup":
+        revision_number = getattr(row, "revision_number", None)
+        label = _build_story_setup_artifact_label(row)
+    else:
+        revision_number = getattr(row, "revision_number", None)
+        outline_kind = getattr(row, "outline_kind", "story")
+        label = f"{outline_kind.capitalize()} outline revision {revision_number or '?'}"
+
+    return PlanArtifactRefView(
+        id=row.id,
+        label=label,
+        revision_number=revision_number,
+    )
+
+
+def _build_story_setup_artifact_label(row) -> str:
+    parts: list[str] = []
+    runtime = getattr(row, "target_runtime_minutes", None)
+    if runtime is not None:
+        parts.append(f"~{runtime} min")
+    chapters = getattr(row, "chapter_count", None)
+    if chapters is not None:
+        parts.append(f"{chapters} chapters")
+    scenes = getattr(row, "approximate_scene_count", None)
+    if scenes is not None:
+        parts.append(f"{scenes} scenes")
+    return ", ".join(parts) if parts else "Story setup preferences"
+
+
+def _resolve_plan_revision_changed_artifacts(row, previous_revision) -> list[str]:
+    artifact_ids = {
+        "pitch": getattr(row, "pitch_id", None),
+        "character_sheet": getattr(row, "character_sheet_id", None),
+        "beat_sheet": getattr(row, "beat_sheet_id", None),
+        "story_setup": getattr(row, "story_setup_id", None),
+        "story_outline": getattr(row, "story_outline_id", None),
+    }
+    if previous_revision is None:
+        return [artifact_kind for artifact_kind, artifact_id in artifact_ids.items() if artifact_id]
+
+    changed_artifacts: list[str] = []
+    for artifact_kind, artifact_id in artifact_ids.items():
+        if artifact_id != getattr(previous_revision, f"{artifact_kind}_id", None):
+            changed_artifacts.append(artifact_kind)
+    return changed_artifacts
+
+
+def _build_plan_revision_comparison_summary(
+    row,
+    *,
+    changed_artifacts: list[str],
+    previous_revision,
+) -> str:
+    restored_from_revision = getattr(row, "restored_from_plan_revision", None)
+    if restored_from_revision is not None:
+        return f"Restored from plan revision {restored_from_revision.revision_number}."
+
+    if previous_revision is None:
+        return "Captured the first durable plan snapshot."
+
+    if not changed_artifacts:
+        return "Re-saved the same selected plan snapshot."
+
+    return f"Changed {humanize_joined_tokens(changed_artifacts)}."
 
 
 def build_continuity_bible_view(row) -> ContinuityBibleView | None:
@@ -1452,10 +1586,7 @@ def build_continuity_bible_view(row) -> ContinuityBibleView | None:
         source_stage=row.source_stage,
         source_summary=row.source_summary,
         summary_text=row.summary_text,
-        facts=[
-            ContinuityFact.model_validate(fact)
-            for fact in data.facts
-        ],
+        facts=[ContinuityFact.model_validate(fact) for fact in data.facts],
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -1465,11 +1596,36 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
     if row is None:
         return None
 
+    metadata = row.metadata_json if isinstance(row.metadata_json, Mapping) else {}
+    story_outline_id = _read_optional_mapping_text(metadata, "story_outline_id")
+    story_outline_revision_number = _read_optional_mapping_int(
+        metadata,
+        "story_outline_revision_number",
+    )
+
     return CompositionJobView(
         id=row.id,
         job_kind=row.job_kind,
         status=row.status,
         progress_percent=row.progress_percent,
+        plan_revision_id=row.plan_revision_id,
+        plan_revision_number=(
+            row.plan_revision.revision_number
+            if getattr(row, "plan_revision", None) is not None
+            else None
+        ),
+        beat_sheet_id=row.beat_sheet_id,
+        beat_sheet_revision_number=(
+            row.beat_sheet.revision_number if getattr(row, "beat_sheet", None) is not None else None
+        ),
+        story_setup_id=row.story_setup_id,
+        story_setup_revision_number=(
+            row.story_setup.revision_number
+            if getattr(row, "story_setup", None) is not None
+            else None
+        ),
+        story_outline_id=story_outline_id,
+        story_outline_revision_number=story_outline_revision_number,
         current_segment_index=row.current_segment_index,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
@@ -1479,6 +1635,16 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def humanize_joined_tokens(values: list[str]) -> str:
+    labels = [value.replace("_", " ") for value in values]
+
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return f"{', '.join(labels[:-1])}, and {labels[-1]}"
 
 
 def build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:

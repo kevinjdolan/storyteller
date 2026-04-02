@@ -4,9 +4,20 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import BeatSheet, CharacterSheet, Pitch, StoryBrief
+from app.db import (
+    AudioJob,
+    BeatSheet,
+    CharacterSheet,
+    CompositionJob,
+    JobStatus,
+    Pitch,
+    StoryBrief,
+    StoryOutline,
+    StorySetup,
+)
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
@@ -59,6 +70,7 @@ from app.services.character_sheet_changes import infer_character_change_impact
 from app.services.continuity import SessionContinuityService
 from app.services.event_log import SessionEventLogService
 from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
+from app.services.plan_revisions import PlanRevisionService
 from app.services.session_hydration import (
     SessionHydrationNotFoundError,
     SessionHydrationService,
@@ -124,6 +136,10 @@ class SessionBeatSheetEditError(SessionServiceError):
     """Raised when a beat-sheet edit request cannot be fulfilled."""
 
 
+class SessionPlanRevisionError(SessionServiceError):
+    """Raised when a plan-revision restore request cannot be fulfilled."""
+
+
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
     WorkflowStage.BRIEF: UserEditTargetKind.STORY_BRIEF,
     WorkflowStage.PITCHES: UserEditTargetKind.PITCH,
@@ -147,6 +163,7 @@ class SessionService:
         self._stage_states = WorkflowStageStateRepository(session)
         self._event_log = SessionEventLogService(session)
         self._continuity = SessionContinuityService(session)
+        self._plan_revisions = PlanRevisionService(session)
         self._brief_normalizer = brief_normalization_service or BriefNormalizationService()
 
     def create_session(
@@ -979,6 +996,11 @@ class SessionService:
             source_stage=WorkflowStage.PITCHES,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.PITCHES,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1079,6 +1101,11 @@ class SessionService:
             source_stage=WorkflowStage.PITCHES,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.PITCHES,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1107,17 +1134,9 @@ class SessionService:
             )
 
         active_brief = self._sessions.get_active_story_brief(session_id)
-        current_selected_character_sheet = self._sessions.get_selected_character_sheet(
-            session_id
-        )
-        raw_brief = (
-            active_brief.raw_brief
-            if active_brief is not None
-            else selected_pitch.logline
-        )
-        normalized_summary = (
-            active_brief.normalized_summary if active_brief is not None else None
-        )
+        current_selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
+        normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = character_generation_service or CharacterGenerationService()
         generation_result = generator.generate_character_sheets(
             candidate_count=candidate_count,
@@ -1344,17 +1363,9 @@ class SessionService:
             )
 
         active_brief = self._sessions.get_active_story_brief(session_id)
-        previous_selected_character_sheet = self._sessions.get_selected_character_sheet(
-            session_id
-        )
-        raw_brief = (
-            active_brief.raw_brief
-            if active_brief is not None
-            else selected_pitch.logline
-        )
-        normalized_summary = (
-            active_brief.normalized_summary if active_brief is not None else None
-        )
+        previous_selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
+        normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = character_generation_service or CharacterGenerationService()
         generation_result = generator.generate_character_sheets(
             candidate_count=1,
@@ -1558,6 +1569,11 @@ class SessionService:
             source_stage=WorkflowStage.CHARACTERS,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.CHARACTERS,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1680,6 +1696,11 @@ class SessionService:
             source_stage=WorkflowStage.CHARACTERS,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.CHARACTERS,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1716,14 +1737,8 @@ class SessionService:
 
         active_brief = self._sessions.get_active_story_brief(session_id)
         current_selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
-        raw_brief = (
-            active_brief.raw_brief
-            if active_brief is not None
-            else selected_pitch.logline
-        )
-        normalized_summary = (
-            active_brief.normalized_summary if active_brief is not None else None
-        )
+        raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
+        normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         generator = beat_sheet_generation_service or BeatSheetGenerationService()
         generation_result = generator.generate_beat_sheet(
             generation_goal="initial",
@@ -1865,9 +1880,7 @@ class SessionService:
             resource_id=beat_sheet.id,
             candidate_count=1,
             model_id=generation_result.model_id,
-            summary_text=_build_beat_sheet_generation_summary_text(
-                generation_result.beat_sheet
-            ),
+            summary_text=_build_beat_sheet_generation_summary_text(generation_result.beat_sheet),
             actor=actor,
         )
         stage_snapshot.last_event = ai_event
@@ -1930,14 +1943,8 @@ class SessionService:
 
         active_brief = self._sessions.get_active_story_brief(session_id)
         previous_selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
-        raw_brief = (
-            active_brief.raw_brief
-            if active_brief is not None
-            else selected_pitch.logline
-        )
-        normalized_summary = (
-            active_brief.normalized_summary if active_brief is not None else None
-        )
+        raw_brief = active_brief.raw_brief if active_brief is not None else selected_pitch.logline
+        normalized_summary = active_brief.normalized_summary if active_brief is not None else None
         normalized_beat_names = _normalize_beat_name_list(beat_names)
         normalized_bedtime_goal = _normalize_optional_text(bedtime_goal)
         generator = beat_sheet_generation_service or BeatSheetGenerationService()
@@ -2112,6 +2119,11 @@ class SessionService:
             source_stage=WorkflowStage.BEATS,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.BEATS,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -2165,9 +2177,11 @@ class SessionService:
 
         changed_fields: list[str] = []
         event_field_values: dict[str, Any] = {}
+        next_summary = target_beat_sheet.summary
+        next_bedtime_notes = target_beat_sheet.bedtime_notes
 
         if normalized_summary is not None and normalized_summary != target_beat_sheet.summary:
-            target_beat_sheet.summary = normalized_summary
+            next_summary = normalized_summary
             changed_fields.append("summary")
             event_field_values["summary"] = normalized_summary
 
@@ -2175,7 +2189,7 @@ class SessionService:
             normalized_bedtime_notes is not None
             and normalized_bedtime_notes != target_beat_sheet.bedtime_notes
         ):
-            target_beat_sheet.bedtime_notes = normalized_bedtime_notes
+            next_bedtime_notes = normalized_bedtime_notes
             changed_fields.append("bedtime_notes")
             event_field_values["bedtime_notes"] = normalized_bedtime_notes
 
@@ -2192,9 +2206,7 @@ class SessionService:
         if beat_changed_fields:
             next_payload["beats"] = updated_beats
             changed_fields.extend(beat_changed_fields)
-            event_field_values["beat_updates"] = [
-                dict(update) for update in normalized_updates
-            ]
+            event_field_values["beat_updates"] = [dict(update) for update in normalized_updates]
 
         if not changed_fields:
             raise SessionBeatSheetEditError("beat-sheet edit did not change any saved fields")
@@ -2219,7 +2231,31 @@ class SessionService:
             ),
             *_read_beat_sheet_edit_history_payload(existing_payload),
         ]
-        target_beat_sheet.beats = next_payload
+        next_payload["generation_kind"] = "edited"
+        next_payload["refinement"] = {
+            **_read_beat_sheet_refinement_payload(existing_payload),
+            "source_beat_sheet_id": target_beat_sheet.id,
+            "source_beat_sheet_revision_number": target_beat_sheet.revision_number,
+        }
+
+        if refreshes_downstream:
+            for beat_sheet in self._sessions.list_beat_sheets(session_id):
+                beat_sheet.is_selected = False
+
+        edited_beat_sheet = BeatSheet(
+            session_id=story_session.id,
+            character_sheet_id=target_beat_sheet.character_sheet_id,
+            revision_number=_next_beat_sheet_revision_number(
+                self._sessions.list_beat_sheets(session_id)
+            ),
+            summary=next_summary,
+            beats=next_payload,
+            bedtime_notes=next_bedtime_notes,
+            is_selected=refreshes_downstream,
+            accepted_at=now if refreshes_downstream else None,
+        )
+        self._session.add(edited_beat_sheet)
+        self._session.flush()
 
         stage_map = self._stage_states.ensure_for_session(story_session)
         stage_snapshot = stage_map[WorkflowStage.BEATS]
@@ -2228,7 +2264,7 @@ class SessionService:
         invalidated_stages: list[WorkflowStage] = []
         touches_stage_state = False
 
-        if target_beat_sheet.is_selected:
+        if refreshes_downstream:
             if stage_snapshot.status != WorkflowStageState.COMPLETED:
                 self._validate_stage_transition(
                     stage_map,
@@ -2236,14 +2272,14 @@ class SessionService:
                     status=WorkflowStageState.COMPLETED,
                 )
                 stage_snapshot.status = WorkflowStageState.COMPLETED
-            stage_snapshot.detail = _build_beat_sheet_selection_detail(target_beat_sheet)
+            stage_snapshot.detail = _build_beat_sheet_selection_detail(edited_beat_sheet)
             stage_snapshot.started_at = stage_snapshot.started_at or now
             stage_snapshot.completed_at = stage_snapshot.completed_at or now
             invalidated_stages = self._invalidate_dependent_stages(
                 stage_map,
                 stage=WorkflowStage.BEATS,
                 detail=_build_beat_sheet_edit_invalidation_detail(
-                    target_beat_sheet,
+                    edited_beat_sheet,
                     summary_text=summary_text,
                 ),
             )
@@ -2256,7 +2292,7 @@ class SessionService:
                     status=WorkflowStageState.IN_PROGRESS,
                 )
             stage_snapshot.status = WorkflowStageState.IN_PROGRESS
-            stage_snapshot.detail = _build_beat_sheet_edit_stage_detail(target_beat_sheet)
+            stage_snapshot.detail = _build_beat_sheet_edit_stage_detail(edited_beat_sheet)
             stage_snapshot.started_at = stage_snapshot.started_at or now
             stage_snapshot.completed_at = None
             touches_stage_state = True
@@ -2293,18 +2329,23 @@ class SessionService:
             target_kind=UserEditTargetKind.BEAT_SHEET,
             stage=WorkflowStage.BEATS,
             changed_fields=changed_fields,
-            target_id=target_beat_sheet.id,
-            revision_number=target_beat_sheet.revision_number,
+            target_id=edited_beat_sheet.id,
+            revision_number=edited_beat_sheet.revision_number,
             source=payload.origin,
             field_values=event_field_values,
             summary_text=summary_text,
             actor=actor,
         )
-        if target_beat_sheet.is_selected:
+        if refreshes_downstream:
             self._refresh_continuity(
                 story_session.id,
                 source_stage=WorkflowStage.BEATS,
                 source_summary=edit_event.summary,
+            )
+            self._capture_plan_revision(
+                story_session.id,
+                source_stage=WorkflowStage.BEATS,
+                change_summary=summary_text,
             )
         stage_snapshot.last_event = edit_event
         self._session.commit()
@@ -2426,7 +2467,234 @@ class SessionService:
             source_stage=WorkflowStage.BEATS,
             source_summary=selection_event.summary,
         )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=WorkflowStage.BEATS,
+            change_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
+    def restore_plan_revision(
+        self,
+        session_id: str,
+        *,
+        revision_number: int,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        target_plan_revision = self._plan_revisions.get_revision_by_number(
+            session_id,
+            revision_number,
+        )
+        if target_plan_revision is None:
+            raise SessionPlanRevisionError(
+                f"plan revision {revision_number} was not found for session {session_id!r}"
+            )
+
+        current_plan_revision = self._plan_revisions.get_current_revision(session_id)
+        if (
+            current_plan_revision is not None
+            and current_plan_revision.id == target_plan_revision.id
+        ):
+            raise SessionPlanRevisionError(f"plan revision {revision_number} is already current")
+        if current_plan_revision is not None and _plan_revisions_match(
+            current_plan_revision, target_plan_revision
+        ):
+            raise SessionPlanRevisionError(
+                f"plan revision {revision_number} already matches the current selected plan"
+            )
+
+        target_pitch = _require_session_scoped_row(
+            row=target_plan_revision.pitch,
+            session_id=session_id,
+            label="pitch",
+        )
+        target_character_sheet = _require_session_scoped_row(
+            row=target_plan_revision.character_sheet,
+            session_id=session_id,
+            label="character sheet",
+        )
+        target_beat_sheet = _require_session_scoped_row(
+            row=target_plan_revision.beat_sheet,
+            session_id=session_id,
+            label="beat sheet",
+        )
+        target_story_setup = _require_session_scoped_row(
+            row=target_plan_revision.story_setup,
+            session_id=session_id,
+            label="story setup",
+        )
+        target_story_outline = _require_session_scoped_row(
+            row=target_plan_revision.story_outline,
+            session_id=session_id,
+            label="story outline",
+        )
+
+        _apply_selected_state(
+            self._sessions.list_pitches(session_id),
+            target_plan_revision.pitch_id,
+        )
+        _apply_selected_state(
+            self._sessions.list_character_sheets(session_id),
+            target_plan_revision.character_sheet_id,
+        )
+        _apply_selected_state(
+            self._sessions.list_beat_sheets(session_id),
+            target_plan_revision.beat_sheet_id,
+        )
+        _apply_selected_state(
+            self._list_story_setups(session_id),
+            target_plan_revision.story_setup_id,
+        )
+        _apply_selected_state(
+            self._sessions.list_story_outlines(session_id),
+            target_plan_revision.story_outline_id,
+        )
+
+        restored_stage = _resolve_restored_plan_stage(
+            pitch=target_pitch,
+            character_sheet=target_character_sheet,
+            beat_sheet=target_beat_sheet,
+            story_setup=target_story_setup,
+        )
+        if restored_stage is None:
+            raise SessionPlanRevisionError(
+                f"plan revision {revision_number} does not contain a restorable selection"
+            )
+
+        restore_reason = f"Restored plan revision {target_plan_revision.revision_number}."
+        self._cancel_active_composition_jobs(
+            session_id,
+            reason=f"{restore_reason} Active composition was cancelled.",
+        )
+        self._cancel_active_audio_jobs(
+            session_id,
+            reason=f"{restore_reason} Active audio generation was cancelled.",
+        )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        now = utc_now()
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=restored_stage,
+            detail=restore_reason,
+        )
+
+        stage_updates = {
+            WorkflowStage.PITCHES: (
+                target_pitch is not None,
+                (
+                    _build_pitch_selection_detail(target_pitch)
+                    if target_pitch is not None
+                    else restore_reason
+                ),
+            ),
+            WorkflowStage.CHARACTERS: (
+                target_character_sheet is not None,
+                _build_character_sheet_selection_detail(target_character_sheet)
+                if target_character_sheet is not None
+                else restore_reason,
+            ),
+            WorkflowStage.BEATS: (
+                target_beat_sheet is not None,
+                _build_beat_sheet_selection_detail(target_beat_sheet)
+                if target_beat_sheet is not None
+                else restore_reason,
+            ),
+            WorkflowStage.STORY_SETUP: (
+                target_story_setup is not None,
+                _build_story_setup_restore_detail(
+                    target_story_setup,
+                    target_story_outline,
+                    restore_reason=restore_reason,
+                )
+                if target_story_setup is not None
+                else restore_reason,
+            ),
+        }
+
+        changed_stages: list[tuple[WorkflowStage, WorkflowStageState]] = []
+        for stage, (is_completed, detail) in stage_updates.items():
+            snapshot = stage_map[stage]
+            previous_status = snapshot.status
+            previous_detail = snapshot.detail
+            if is_completed:
+                snapshot.status = WorkflowStageState.COMPLETED
+                snapshot.detail = detail
+                snapshot.started_at = snapshot.started_at or now
+                snapshot.completed_at = now
+            elif stage.value in {item.value for item in invalidated_stages}:
+                snapshot.status = WorkflowStageState.NEEDS_REGENERATION
+                snapshot.detail = restore_reason
+                snapshot.completed_at = None
+            elif snapshot.status != WorkflowStageState.DRAFT:
+                snapshot.status = WorkflowStageState.NEEDS_REGENERATION
+                snapshot.detail = restore_reason
+                snapshot.completed_at = None
+
+            if previous_status != snapshot.status or previous_detail != snapshot.detail:
+                changed_stages.append((stage, previous_status))
+
+        self._apply_rollups(story_session, stage_map)
+
+        deepest_stage_event = None
+        for stage, previous_status in changed_stages:
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=stage,
+                previous_status=previous_status,
+                status=stage_map[stage].status,
+                detail=stage_map[stage].detail,
+                invalidated_stages=invalidated_stages if stage == restored_stage else [],
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            stage_map[stage].last_event = stage_event
+            if stage == restored_stage:
+                deepest_stage_event = stage_event
+
+        if deepest_stage_event is not None:
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = deepest_stage_event
+
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.PLAN_REVISION,
+            stage=restored_stage,
+            label=f"Revision {target_plan_revision.revision_number}",
+            selection_id=target_plan_revision.id,
+            rationale=target_plan_revision.change_summary,
+            previous_selection_id=(
+                current_plan_revision.id if current_plan_revision is not None else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=restored_stage,
+            source_summary=selection_event.summary,
+        )
+        self._capture_plan_revision(
+            story_session.id,
+            source_stage=restored_stage,
+            change_summary=selection_event.summary,
+            restored_from_revision=target_plan_revision,
+        )
+        stage_map[restored_stage].last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
             snapshot=self.load_session_snapshot(story_session.id),
@@ -2599,6 +2867,49 @@ class SessionService:
             source_summary=source_summary,
         )
 
+    def _capture_plan_revision(
+        self,
+        session_id: str,
+        *,
+        source_stage: WorkflowStage | None,
+        change_summary: str | None,
+        restored_from_revision=None,
+    ) -> None:
+        self._plan_revisions.capture_current_state(
+            session_id,
+            source_stage=source_stage,
+            change_summary=change_summary,
+            restored_from_revision=restored_from_revision,
+        )
+
+    def _list_story_setups(self, session_id: str) -> list[StorySetup]:
+        stmt = (
+            select(StorySetup)
+            .where(StorySetup.session_id == session_id)
+            .order_by(StorySetup.created_at.asc(), StorySetup.revision_number.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def _cancel_active_composition_jobs(self, session_id: str, *, reason: str) -> None:
+        stmt = select(CompositionJob).where(
+            CompositionJob.session_id == session_id,
+            CompositionJob.status.in_((JobStatus.QUEUED, JobStatus.IN_PROGRESS, JobStatus.PAUSED)),
+        )
+        for row in self._session.execute(stmt).scalars().all():
+            row.status = JobStatus.CANCELLED
+            row.stop_reason = reason
+            row.completed_at = row.completed_at or utc_now()
+
+    def _cancel_active_audio_jobs(self, session_id: str, *, reason: str) -> None:
+        stmt = select(AudioJob).where(
+            AudioJob.session_id == session_id,
+            AudioJob.status.in_((JobStatus.QUEUED, JobStatus.IN_PROGRESS, JobStatus.PAUSED)),
+        )
+        for row in self._session.execute(stmt).scalars().all():
+            row.status = JobStatus.CANCELLED
+            row.stop_reason = reason
+            row.completed_at = row.completed_at or utc_now()
+
     def _validate_stage_transition(
         self,
         stage_map: Mapping[WorkflowStage, object],
@@ -2703,6 +3014,85 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
+def _apply_selected_state(rows: list[Any], selected_id: str | None) -> None:
+    for row in rows:
+        row.is_selected = row.id == selected_id
+
+
+def _require_session_scoped_row(*, row, session_id: str, label: str):
+    if row is None:
+        return None
+
+    if getattr(row, "session_id", None) != session_id:
+        raise SessionPlanRevisionError(
+            f"the restored {label} does not belong to session {session_id!r}"
+        )
+
+    return row
+
+
+def _resolve_restored_plan_stage(
+    *,
+    pitch,
+    character_sheet,
+    beat_sheet,
+    story_setup,
+) -> WorkflowStage | None:
+    if story_setup is not None:
+        return WorkflowStage.STORY_SETUP
+    if beat_sheet is not None:
+        return WorkflowStage.BEATS
+    if character_sheet is not None:
+        return WorkflowStage.CHARACTERS
+    if pitch is not None:
+        return WorkflowStage.PITCHES
+    return None
+
+
+def _build_story_setup_restore_detail(
+    story_setup: StorySetup,
+    story_outline: StoryOutline | None,
+    *,
+    restore_reason: str,
+) -> str:
+    parts: list[str] = []
+    setup_label = _build_story_setup_label(story_setup)
+    if setup_label:
+        parts.append(setup_label)
+    if story_outline is not None:
+        card_count = len(story_outline.cards) if isinstance(story_outline.cards, list) else 0
+        parts.append(f"Outline ready: {story_outline.outline_kind} plan with {card_count} cards.")
+    parts.append(restore_reason)
+    return " ".join(parts)
+
+
+def _build_story_setup_label(story_setup: StorySetup) -> str:
+    parts: list[str] = []
+    if story_setup.target_runtime_minutes is not None:
+        parts.append(f"~{story_setup.target_runtime_minutes} minutes")
+    if story_setup.target_word_count is not None:
+        parts.append(f"{story_setup.target_word_count} words")
+    if story_setup.chapter_count is not None:
+        parts.append(f"{story_setup.chapter_count} chapters")
+    if story_setup.approximate_scene_count is not None:
+        parts.append(f"about {story_setup.approximate_scene_count} scenes")
+    if story_setup.chapter_style:
+        parts.append(story_setup.chapter_style)
+    if story_setup.guidance_notes:
+        parts.append(story_setup.guidance_notes)
+    return ", ".join(parts) if parts else "Story setup preferences"
+
+
+def _plan_revisions_match(left, right) -> bool:
+    return (
+        getattr(left, "pitch_id", None) == getattr(right, "pitch_id", None)
+        and getattr(left, "character_sheet_id", None) == getattr(right, "character_sheet_id", None)
+        and getattr(left, "beat_sheet_id", None) == getattr(right, "beat_sheet_id", None)
+        and getattr(left, "story_setup_id", None) == getattr(right, "story_setup_id", None)
+        and getattr(left, "story_outline_id", None) == getattr(right, "story_outline_id", None)
+    )
+
+
 def _read_optional_mapping_text(data: Mapping[str, Any], key: str) -> str | None:
     value = data.get(key)
     return value if isinstance(value, str) else None
@@ -2800,10 +3190,7 @@ def _build_character_sheet_refinement_rationale(
     impact_tail = f" Change impact: {change_impact.value}."
 
     label = _read_character_sheet_label(character_sheet)
-    return (
-        f'Refined from "{label}" with: {instructions}.'
-        f"{change_tail}{focus_tail}{impact_tail}"
-    )
+    return f'Refined from "{label}" with: {instructions}.{change_tail}{focus_tail}{impact_tail}'
 
 
 def _build_pitch_refinement_summary_text(refined_pitch: Pitch, *, source_pitch: Pitch) -> str:
@@ -3056,9 +3443,7 @@ def _build_existing_character_sheet_context(
         bedtime_safety_notes=character_sheet.bedtime_notes,
         protagonist=protagonist_payload,
         supporting_cast=(
-            supporting_cast_payload
-            if isinstance(supporting_cast_payload, list)
-            else []
+            supporting_cast_payload if isinstance(supporting_cast_payload, list) else []
         ),
     )
 
@@ -3281,6 +3666,14 @@ def _read_beat_sheet_edit_history_payload(payload: Mapping[str, Any]) -> list[di
     return [dict(entry) for entry in raw_history if isinstance(entry, Mapping)]
 
 
+def _read_beat_sheet_refinement_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    raw_refinement = payload.get("refinement")
+    if not isinstance(raw_refinement, Mapping):
+        return {}
+
+    return dict(raw_refinement)
+
+
 def _build_beat_sheet_edit_history_entry(
     *,
     summary_text: str,
@@ -3360,8 +3753,7 @@ def _build_beat_sheet_selection_detail(beat_sheet: BeatSheet) -> str:
 
 def _build_beat_sheet_edit_stage_detail(beat_sheet: BeatSheet) -> str:
     return (
-        f"Edited beat sheet revision {beat_sheet.revision_number}. "
-        "Accept a revision to continue."
+        f"Edited beat sheet revision {beat_sheet.revision_number}. Accept a revision to continue."
     )
 
 
@@ -3478,9 +3870,7 @@ def _build_beat_sheet_edit_summary_text(
             targets.append(label)
 
     target_summary = _format_humanized_list(targets) or "the beat sheet"
-    message = (
-        f"Updated beat sheet revision {beat_sheet.revision_number}: {target_summary}."
-    )
+    message = f"Updated beat sheet revision {beat_sheet.revision_number}: {target_summary}."
     if refreshes_downstream:
         return message + " Story setup and composition need refresh."
     return message

@@ -14,6 +14,7 @@ import {
   SelectionCard,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
+import { PlanRevisionHistoryPanel } from './PlanRevisionHistoryPanel.tsx'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
 import { getWorkflowStageLabel } from './workflowStages.ts'
 
@@ -58,6 +59,13 @@ type BeatSheetStageProps = {
     beatSheetId?: string | null
     revisionNumber?: number | null
     origin: string
+  }) => Promise<{
+    event: SessionHistoryEvent
+    snapshot: SessionSnapshot
+  }>
+  onRestorePlanRevision: (selection: {
+    origin: string
+    revisionNumber: number
   }) => Promise<{
     event: SessionHistoryEvent
     snapshot: SessionSnapshot
@@ -437,6 +445,7 @@ export function BeatSheetStage({
   onGenerateBeatSheet,
   onPreviewStage,
   onRefineBeatSheet,
+  onRestorePlanRevision,
   onSelectBeatSheet,
   selectedStage,
   snapshot,
@@ -1434,6 +1443,12 @@ export function BeatSheetStage({
           )}
         </section>
       ) : null}
+
+      <PlanRevisionHistoryPanel
+        disabled={isGenerating || isRefining || isSavingEditor}
+        onRestorePlanRevision={onRestorePlanRevision}
+        snapshot={snapshot}
+      />
     </section>
   )
 }

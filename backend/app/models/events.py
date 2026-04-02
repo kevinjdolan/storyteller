@@ -32,6 +32,7 @@ class SelectionKind(str, Enum):
     CHARACTER_SHEET = "character_sheet"
     BEAT_SHEET = "beat_sheet"
     STORY_SETUP = "story_setup"
+    PLAN_REVISION = "plan_revision"
 
 
 class AIOutputKind(str, Enum):

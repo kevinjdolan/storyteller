@@ -751,12 +751,9 @@ def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) 
     assert updated_snapshot.current_stage == WorkflowStage.PITCHES
     assert updated_snapshot.resume_stage == WorkflowStage.PITCHES
     assert updated_snapshot.story_brief is not None
-    assert (
-        updated_snapshot.story_brief.story_idea
-        == (
-            "A child follows floating lanterns across a harbor and helps a shy "
-            "otter guardian bring every light home."
-        )
+    assert updated_snapshot.story_brief.story_idea == (
+        "A child follows floating lanterns across a harbor and helps a shy "
+        "otter guardian bring every light home."
     )
     assert updated_snapshot.story_brief.desired_themes == (
         "gentle bravery, belonging, helping others rest"
@@ -950,8 +947,7 @@ def test_refine_pitch_creates_a_linked_selected_revision_without_overwriting_his
     service.save_story_brief(
         snapshot.id,
         story_idea=(
-            "A child and an otter guardian follow floating lanterns across a harbor "
-            "before bed."
+            "A child and an otter guardian follow floating lanterns across a harbor before bed."
         ),
     )
     generated = service.generate_pitches(
@@ -990,6 +986,45 @@ def test_refine_pitch_creates_a_linked_selected_revision_without_overwriting_his
     history = service.load_session_history(snapshot.id)
     assert history.events[-2].event_type == "ai.output.recorded"
     assert history.events[-1].event_type == "selection.recorded"
+
+
+def test_restore_plan_revision_reselects_an_earlier_pitch_snapshot(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Pitch Restore")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child and an otter guardian follow floating lanterns across a harbor before bed."
+        ),
+    )
+    generated = service.generate_pitches(snapshot.id, candidate_count=3)
+    first_pitch = generated.snapshot.pitch_batches[0].pitches[0]
+    second_pitch = generated.snapshot.pitch_batches[0].pitches[1]
+
+    first_selection = service.select_pitch(snapshot.id, pitch_id=first_pitch.id)
+    second_selection = service.select_pitch(snapshot.id, pitch_id=second_pitch.id)
+
+    assert first_selection.snapshot.current_plan_revision is not None
+    assert first_selection.snapshot.current_plan_revision.revision_number == 1
+    assert second_selection.snapshot.current_plan_revision is not None
+    assert second_selection.snapshot.current_plan_revision.revision_number == 2
+
+    restored = service.restore_plan_revision(snapshot.id, revision_number=1)
+
+    assert restored.snapshot.selected_pitch is not None
+    assert restored.snapshot.selected_pitch.id == first_pitch.id
+    assert restored.snapshot.current_plan_revision is not None
+    assert restored.snapshot.current_plan_revision.revision_number == 3
+    assert restored.snapshot.current_plan_revision.restored_from_revision_number == 1
+    assert [revision.revision_number for revision in restored.snapshot.plan_revisions] == [3, 2, 1]
+    assert restored.event.payload is not None
+    assert restored.event.payload.selection_kind == "plan_revision"
 
 
 def test_generate_character_sheets_persists_durable_candidate_batches(db_session) -> None:
@@ -1072,9 +1107,9 @@ def test_select_character_sheet_marks_choice_and_advances_to_beats(db_session) -
         candidate_count=3,
         character_generation_service=StubCharacterGenerationService(),
     )
-    first_character_sheet = (
-        generated_characters.snapshot.character_sheet_batches[0].character_sheets[0]
-    )
+    first_character_sheet = generated_characters.snapshot.character_sheet_batches[
+        0
+    ].character_sheets[0]
 
     result = service.select_character_sheet(
         snapshot.id,
@@ -1127,9 +1162,9 @@ def test_refine_character_sheet_creates_a_selected_revision_without_overwriting_
         candidate_count=3,
         character_generation_service=StubCharacterGenerationService(),
     )
-    source_character_sheet = (
-        generated_characters.snapshot.character_sheet_batches[0].character_sheets[1]
-    )
+    source_character_sheet = generated_characters.snapshot.character_sheet_batches[
+        0
+    ].character_sheets[1]
     service.select_character_sheet(
         snapshot.id,
         character_sheet_id=source_character_sheet.id,
@@ -1155,9 +1190,7 @@ def test_refine_character_sheet_creates_a_selected_revision_without_overwriting_
     assert result.snapshot.selected_character_sheet.refinement_instructions == (
         "Make the lead and guardian feel more sibling-like."
     )
-    assert "Refined from" in (
-        result.snapshot.selected_character_sheet.selection_rationale or ""
-    )
+    assert "Refined from" in (result.snapshot.selected_character_sheet.selection_rationale or "")
     assert result.snapshot.character_sheet_batches[0].generation_kind == "refinement"
     assert result.snapshot.character_sheet_batches[0].candidate_count == 1
     assert (
@@ -1199,9 +1232,9 @@ def test_minor_character_sheet_refinement_preserves_completed_beats_and_relinks_
         candidate_count=3,
         character_generation_service=StubCharacterGenerationService(),
     )
-    source_character_sheet = (
-        generated_characters.snapshot.character_sheet_batches[0].character_sheets[0]
-    )
+    source_character_sheet = generated_characters.snapshot.character_sheet_batches[
+        0
+    ].character_sheets[0]
     service.select_character_sheet(
         snapshot.id,
         character_sheet_id=source_character_sheet.id,

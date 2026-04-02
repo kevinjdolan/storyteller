@@ -73,6 +73,7 @@ from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
 from app.services.outline_generation import StoryOutlineGenerationService
 from app.services.pitch_generation import PitchGenerationService
+from app.services.plan_revisions import PlanRevisionService
 from app.services.planning_heuristics import estimate_narration_duration_seconds
 from app.services.sessions import SessionNotFoundError, SessionService
 from app.services.story_outline_editor import (
@@ -652,16 +653,11 @@ class StoryWorkflowToolService:
         self._sessions = SessionService(session)
         self._continuity = SessionContinuityService(session)
         self._events = SessionEventLogService(session)
+        self._plan_revisions = PlanRevisionService(session)
         self._jobs = BackgroundJobService(session)
-        self._beat_sheet_generation = (
-            beat_sheet_generation_service or BeatSheetGenerationService()
-        )
-        self._character_generation = (
-            character_generation_service or CharacterGenerationService()
-        )
-        self._outline_generation = (
-            outline_generation_service or StoryOutlineGenerationService()
-        )
+        self._beat_sheet_generation = beat_sheet_generation_service or BeatSheetGenerationService()
+        self._character_generation = character_generation_service or CharacterGenerationService()
+        self._outline_generation = outline_generation_service or StoryOutlineGenerationService()
         self._pitch_generation = pitch_generation_service or PitchGenerationService()
 
     def enqueue(
@@ -854,9 +850,7 @@ class StoryWorkflowToolService:
             beat_sheet_generation_service=self._beat_sheet_generation,
         )
         snapshot = response.snapshot
-        detail = snapshot.stage_states[
-            WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.BEATS)
-        ].detail
+        detail = snapshot.stage_states[WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.BEATS)].detail
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.GENERATE_BEAT_SHEET,
             stage=WorkflowStage.BEATS,
@@ -914,6 +908,11 @@ class StoryWorkflowToolService:
                     beat_sheet_id=snapshot.selected_beat_sheet.id,
                     setup=current_setup,
                 )
+                self._plan_revisions.capture_current_state(
+                    session_id,
+                    source_stage=WorkflowStage.STORY_SETUP,
+                    change_summary="Created a fresh outline from the current story setup.",
+                )
                 self._session.commit()
             return UpdateSetupHeuristicsToolResult(
                 tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,
@@ -960,11 +959,7 @@ class StoryWorkflowToolService:
             setup=setup,
         )
 
-        changed_fields = sorted(
-            field
-            for field in provided_fields
-            if field != "origin"
-        )
+        changed_fields = sorted(field for field in provided_fields if field != "origin")
         self._events.record_user_edit(
             session_id,
             target_kind=UserEditTargetKind.STORY_SETUP,
@@ -977,7 +972,7 @@ class StoryWorkflowToolService:
             summary_text="Updated story setup preferences.",
             actor=actor,
         )
-        self._events.record_selection(
+        selection_event = self._events.record_selection(
             session_id,
             selection_kind=SelectionKind.STORY_SETUP,
             stage=WorkflowStage.STORY_SETUP,
@@ -991,6 +986,11 @@ class StoryWorkflowToolService:
             session_id,
             source_stage=WorkflowStage.STORY_SETUP,
             source_summary="Updated story setup preferences.",
+        )
+        self._plan_revisions.capture_current_state(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            change_summary=selection_event.summary,
         )
         stage_snapshot = self._sessions.update_stage_state(
             session_id,
@@ -1121,6 +1121,11 @@ class StoryWorkflowToolService:
             source_stage=WorkflowStage.STORY_SETUP,
             source_summary=assessment.summary_text,
         )
+        self._plan_revisions.capture_current_state(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            change_summary=assessment.summary_text,
+        )
         stage_snapshot = self._sessions.update_stage_state(
             session_id,
             stage=WorkflowStage.STORY_SETUP,
@@ -1173,10 +1178,16 @@ class StoryWorkflowToolService:
         selected_outline = self._get_selected_story_outline_row(session_id)
         outline_card_metadata = _resolve_outline_card_metadata(selected_outline, next_segment_index)
         continuity_payload = build_continuity_payload(continuity_bible)
+        plan_revision = self._plan_revisions.ensure_current_revision(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            change_summary="Captured the current plan for composition.",
+        )
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
             story_setup_id=snapshot.selected_story_setup.id,
+            plan_revision_id=plan_revision.id if plan_revision is not None else None,
             job_kind=CompositionJobKind.DRAFT,
             status=JobStatus.IN_PROGRESS,
             progress_percent=0,
@@ -1275,10 +1286,16 @@ class StoryWorkflowToolService:
             request.rewrite_from_segment_index,
         )
         continuity_payload = build_continuity_payload(continuity_bible)
+        plan_revision = self._plan_revisions.ensure_current_revision(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            change_summary="Captured the current plan for a rewrite pass.",
+        )
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
             story_setup_id=snapshot.selected_story_setup.id,
+            plan_revision_id=plan_revision.id if plan_revision is not None else None,
             job_kind=CompositionJobKind.REWRITE,
             status=JobStatus.IN_PROGRESS,
             progress_percent=0,
@@ -1805,9 +1822,7 @@ def _build_outline_beat_inputs(beat_sheet) -> list[StoryOutlineBeatInput]:
                 order=int(raw_beat.get("order") or index),
                 summary=str(raw_beat.get("summary") or "").strip() or f"Beat {index}",
                 emotional_intent=_read_optional_text(raw_beat.get("emotional_intent")),
-                bedtime_softening_note=_read_optional_text(
-                    raw_beat.get("bedtime_softening_note")
-                ),
+                bedtime_softening_note=_read_optional_text(raw_beat.get("bedtime_softening_note")),
             )
         )
     return beats
@@ -1829,9 +1844,7 @@ def _story_outline_matches(
     normalized_requested_cards = normalize_story_outline_cards(
         requested_cards if requested_cards is not None else request.cards
     )
-    requested_payload = [
-        card.model_dump(mode="json") for card in normalized_requested_cards
-    ]
+    requested_payload = [card.model_dump(mode="json") for card in normalized_requested_cards]
     current_summary = _read_optional_text(current.summary)
     requested_summary = _read_optional_text(request.summary) or current_summary
     return current_summary == requested_summary and current_cards == requested_payload
@@ -1839,11 +1852,7 @@ def _story_outline_matches(
 
 def _read_story_outline_cards(current: StoryOutline) -> list[StoryOutlineCard]:
     raw_cards = current.cards if isinstance(current.cards, list) else []
-    return [
-        StoryOutlineCard.model_validate(card)
-        for card in raw_cards
-        if isinstance(card, dict)
-    ]
+    return [StoryOutlineCard.model_validate(card) for card in raw_cards if isinstance(card, dict)]
 
 
 def _merge_story_outline_metadata(
@@ -1883,9 +1892,7 @@ def _merge_story_outline_metadata(
                 "change_impact": assessment.change_impact,
                 "reordered": assessment.reordered,
                 "refreshes_downstream": assessment.refreshes_downstream,
-                "invalidated_stages": [
-                    stage.value for stage in assessment.invalidated_stages
-                ],
+                "invalidated_stages": [stage.value for stage in assessment.invalidated_stages],
                 "created_at": created_at.isoformat(),
             }
         )
@@ -1893,9 +1900,7 @@ def _merge_story_outline_metadata(
         metadata["last_change_summary"] = assessment.summary_text
         metadata["change_impact"] = assessment.change_impact
         metadata["refreshes_downstream"] = assessment.refreshes_downstream
-        metadata["invalidated_stages"] = [
-            stage.value for stage in assessment.invalidated_stages
-        ]
+        metadata["invalidated_stages"] = [stage.value for stage in assessment.invalidated_stages]
     return metadata
 
 

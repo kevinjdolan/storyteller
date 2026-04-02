@@ -302,11 +302,43 @@ export type StoryOutlineView = {
   updated_at?: string | null
 }
 
+export type PlanArtifactRefView = {
+  id: string
+  label: string
+  revision_number?: number | null
+}
+
+export type PlanRevisionView = {
+  id: string
+  revision_number: number
+  source_stage?: WorkflowStageId | null
+  change_summary?: string | null
+  comparison_summary?: string | null
+  restored_from_revision_number?: number | null
+  changed_artifacts: string[]
+  pitch?: PlanArtifactRefView | null
+  character_sheet?: PlanArtifactRefView | null
+  beat_sheet?: PlanArtifactRefView | null
+  story_setup?: PlanArtifactRefView | null
+  story_outline?: PlanArtifactRefView | null
+  is_current?: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type CompositionJobView = {
   id: string
   job_kind?: string
   status: string
   progress_percent: number
+  plan_revision_id?: string | null
+  plan_revision_number?: number | null
+  beat_sheet_id?: string | null
+  beat_sheet_revision_number?: number | null
+  story_setup_id?: string | null
+  story_setup_revision_number?: number | null
+  story_outline_id?: string | null
+  story_outline_revision_number?: number | null
   current_segment_index?: number | null
   attempt_count?: number
   stop_reason?: string | null
@@ -487,6 +519,8 @@ export type SessionSnapshot = RecentSessionSummary & {
   selected_story_setup?: StorySetupView | null
   story_outline_revisions?: StoryOutlineView[] | null
   selected_story_outline?: StoryOutlineView | null
+  plan_revisions?: PlanRevisionView[] | null
+  current_plan_revision?: PlanRevisionView | null
   latest_composition_job?: CompositionJobView | null
   latest_audio_job?: AudioJobView | null
   active_composition_job?: CompositionJobView | null
@@ -629,6 +663,10 @@ export type RefineSessionBeatSheetRequest = {
   origin?: string
 }
 
+export type RestoreSessionPlanRevisionRequest = {
+  origin?: string
+}
+
 export type SessionPitchGenerationResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
@@ -718,6 +756,17 @@ export function saveSessionStoryOutline(
 ) {
   return postJson<SessionStoryOutlineResponse>(
     `/api/v1/sessions/${sessionId}/story-outline`,
+    body,
+  )
+}
+
+export function restoreSessionPlanRevision(
+  sessionId: string,
+  revisionNumber: number,
+  body: RestoreSessionPlanRevisionRequest,
+) {
+  return postJson<SessionPitchGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/plan-revisions/${revisionNumber}/restore`,
     body,
   )
 }

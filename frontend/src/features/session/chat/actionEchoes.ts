@@ -130,6 +130,12 @@ function buildSelectionEcho(event: SessionHistoryEvent) {
     return `Accepted story setup: ${label}`
   }
 
+  if (selectionKind === 'plan_revision') {
+    return rationale != null
+      ? `Restored saved plan: ${label}. ${rationale}`
+      : `Restored saved plan: ${label}`
+  }
+
   return event.summary
 }
 

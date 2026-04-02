@@ -190,6 +190,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    plan_revisions: Mapped[list["PlanRevision"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
     composition_jobs: Mapped[list["CompositionJob"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
@@ -626,6 +630,66 @@ class StoryOutline(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class PlanRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "plan_revisions"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    source_stage: Mapped[WorkflowStage | None] = mapped_column(WORKFLOW_STAGE_ENUM)
+    change_summary: Mapped[str | None] = mapped_column(Text)
+    restored_from_plan_revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("plan_revisions.id", ondelete="SET NULL"),
+    )
+    pitch_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("pitches.id", ondelete="SET NULL"),
+    )
+    character_sheet_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("character_sheets.id", ondelete="SET NULL"),
+    )
+    beat_sheet_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("beat_sheets.id", ondelete="SET NULL"),
+    )
+    story_setup_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("story_setups.id", ondelete="SET NULL"),
+    )
+    story_outline_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("story_outlines.id", ondelete="SET NULL"),
+    )
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    session: Mapped["StorySession"] = relationship(back_populates="plan_revisions")
+    restored_from_plan_revision: Mapped["PlanRevision | None"] = relationship(
+        remote_side="PlanRevision.id"
+    )
+    pitch: Mapped["Pitch | None"] = relationship(foreign_keys=[pitch_id])
+    character_sheet: Mapped["CharacterSheet | None"] = relationship(
+        foreign_keys=[character_sheet_id]
+    )
+    beat_sheet: Mapped["BeatSheet | None"] = relationship(foreign_keys=[beat_sheet_id])
+    story_setup: Mapped["StorySetup | None"] = relationship(foreign_keys=[story_setup_id])
+    story_outline: Mapped["StoryOutline | None"] = relationship(foreign_keys=[story_outline_id])
+    composition_jobs: Mapped[list["CompositionJob"]] = relationship(back_populates="plan_revision")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_plan_revisions_session_id_revision_number",
+        ),
+        Index("ix_plan_revisions_session_id_is_current", "session_id", "is_current"),
+    )
+
+
 class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "composition_jobs"
 
@@ -641,6 +705,10 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     story_setup_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("story_setups.id", ondelete="SET NULL"),
+    )
+    plan_revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("plan_revisions.id", ondelete="SET NULL"),
     )
     job_kind: Mapped[CompositionJobKind] = mapped_column(
         COMPOSITION_JOB_KIND_ENUM,
@@ -668,6 +736,7 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     session: Mapped["StorySession"] = relationship(back_populates="composition_jobs")
     beat_sheet: Mapped["BeatSheet | None"] = relationship(back_populates="composition_jobs")
     story_setup: Mapped["StorySetup | None"] = relationship(back_populates="composition_jobs")
+    plan_revision: Mapped["PlanRevision | None"] = relationship(back_populates="composition_jobs")
     segments: Mapped[list["CompositionSegment"]] = relationship(
         back_populates="composition_job",
         cascade="all, delete-orphan",
@@ -679,6 +748,7 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "ix_composition_jobs_session_id_status_created_at", "session_id", "status", "created_at"
         ),
         Index("ix_composition_jobs_session_id_job_kind", "session_id", "job_kind"),
+        Index("ix_composition_jobs_plan_revision_id", "plan_revision_id"),
     )
 
 

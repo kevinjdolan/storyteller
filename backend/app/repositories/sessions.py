@@ -15,6 +15,7 @@ from app.db import (
     ContinuityBible,
     JobStatus,
     Pitch,
+    PlanRevision,
     SessionAsset,
     StoryBrief,
     StoryOutline,
@@ -48,6 +49,8 @@ class SessionAggregate:
     selected_story_setup: StorySetup | None
     story_outlines: list[StoryOutline]
     selected_story_outline: StoryOutline | None
+    plan_revisions: list[PlanRevision]
+    current_plan_revision: PlanRevision | None
     latest_composition_job: CompositionJob | None
     latest_audio_job: AudioJob | None
     active_composition_job: CompositionJob | None
@@ -110,6 +113,8 @@ class StorySessionRepository:
             selected_story_setup=self._get_selected_story_setup(session_id),
             story_outlines=self._list_story_outlines(session_id),
             selected_story_outline=self._get_selected_story_outline(session_id),
+            plan_revisions=self._list_plan_revisions(session_id),
+            current_plan_revision=self._get_current_plan_revision(session_id),
             latest_composition_job=self._get_latest_composition_job(session_id),
             latest_audio_job=self._get_latest_audio_job(session_id),
             active_composition_job=self._get_active_composition_job(session_id),
@@ -145,6 +150,12 @@ class StorySessionRepository:
 
     def list_story_outlines(self, session_id: str) -> list[StoryOutline]:
         return self._list_story_outlines(session_id)
+
+    def get_current_plan_revision(self, session_id: str) -> PlanRevision | None:
+        return self._get_current_plan_revision(session_id)
+
+    def list_plan_revisions(self, session_id: str) -> list[PlanRevision]:
+        return self._list_plan_revisions(session_id)
 
     def get_selected_continuity_bible(self, session_id: str) -> ContinuityBible | None:
         return self._get_selected_continuity_bible(session_id)
@@ -245,6 +256,39 @@ class StorySessionRepository:
             select(StoryOutline)
             .where(StoryOutline.session_id == session_id)
             .order_by(StoryOutline.created_at.asc(), StoryOutline.revision_number.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def _get_current_plan_revision(self, session_id: str) -> PlanRevision | None:
+        stmt: Select[tuple[PlanRevision]] = (
+            select(PlanRevision)
+            .options(
+                selectinload(PlanRevision.pitch),
+                selectinload(PlanRevision.character_sheet),
+                selectinload(PlanRevision.beat_sheet),
+                selectinload(PlanRevision.story_setup),
+                selectinload(PlanRevision.story_outline),
+                selectinload(PlanRevision.restored_from_plan_revision),
+            )
+            .where(PlanRevision.session_id == session_id, PlanRevision.is_current.is_(True))
+            .order_by(PlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _list_plan_revisions(self, session_id: str) -> list[PlanRevision]:
+        stmt: Select[tuple[PlanRevision]] = (
+            select(PlanRevision)
+            .options(
+                selectinload(PlanRevision.pitch),
+                selectinload(PlanRevision.character_sheet),
+                selectinload(PlanRevision.beat_sheet),
+                selectinload(PlanRevision.story_setup),
+                selectinload(PlanRevision.story_outline),
+                selectinload(PlanRevision.restored_from_plan_revision),
+            )
+            .where(PlanRevision.session_id == session_id)
+            .order_by(PlanRevision.revision_number.asc())
         )
         return list(self._session.execute(stmt).scalars().all())
 

@@ -19,6 +19,7 @@ import {
   StickySummaryLayout,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
+import { PlanRevisionHistoryPanel } from './PlanRevisionHistoryPanel.tsx'
 import {
   buildPlanningAssumptionsText,
   buildRuntimeHeuristicSummary,
@@ -52,6 +53,13 @@ type StorySetupStageProps = {
     cards: StoryOutlineCard[]
     regenerateCardKeys?: string[]
     origin: string
+  }) => Promise<{
+    event: SessionHistoryEvent
+    snapshot: SessionSnapshot
+  }>
+  onRestorePlanRevision: (input: {
+    origin: string
+    revisionNumber: number
   }) => Promise<{
     event: SessionHistoryEvent
     snapshot: SessionSnapshot
@@ -575,6 +583,7 @@ function HeuristicSuggestionCallout({
 
 export function StorySetupStage({
   onPreviewStage,
+  onRestorePlanRevision,
   onSaveStorySetup,
   onSaveStoryOutline,
   selectedStage,
@@ -1549,6 +1558,12 @@ export function StorySetupStage({
             />
           )}
         </section>
+
+        <PlanRevisionHistoryPanel
+          disabled={isSaving || outlineAction != null}
+          onRestorePlanRevision={onRestorePlanRevision}
+          snapshot={snapshot}
+        />
       </StickySummaryLayout>
     </section>
   )
