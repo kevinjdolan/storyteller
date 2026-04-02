@@ -21,6 +21,9 @@ from app.models import (
     CharacterSheetView,
     CompositionJobView,
     CompositionProgressEventPayload,
+    ContinuityBibleData,
+    ContinuityBibleView,
+    ContinuityFact,
     ConversationMemorySnapshotView,
     NormalizedBriefPreferences,
     PitchBatchView,
@@ -219,6 +222,7 @@ def build_session_snapshot(
         active_audio_job=build_audio_job_view(aggregate.active_audio_job),
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
+        continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
         conversation_memory=conversation_memory,
     )
     snapshot.agent_context_summary = build_session_agent_context_summary(
@@ -1429,6 +1433,32 @@ def build_story_outline_views(rows) -> list[StoryOutlineView]:
         )
         if view is not None
     ]
+
+
+def build_continuity_bible_view(row) -> ContinuityBibleView | None:
+    if row is None:
+        return None
+
+    raw_summary_data = getattr(row, "summary_data", None)
+    data = (
+        ContinuityBibleData.model_validate(raw_summary_data)
+        if isinstance(raw_summary_data, Mapping)
+        else ContinuityBibleData()
+    )
+
+    return ContinuityBibleView(
+        id=row.id,
+        revision_number=row.revision_number,
+        source_stage=row.source_stage,
+        source_summary=row.source_summary,
+        summary_text=row.summary_text,
+        facts=[
+            ContinuityFact.model_validate(fact)
+            for fact in data.facts
+        ],
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView | None:

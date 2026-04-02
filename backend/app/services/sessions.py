@@ -11,12 +11,11 @@ from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     AIOutputKind,
-    BeatSheetGenerationResult,
     CharacterChangeImpact,
-    ExistingCharacterSheetContext,
-    ExistingBeatSheetContext,
-    ExistingSelectedPitchContext,
     EditSessionBeatSheetRequest,
+    ExistingBeatSheetContext,
+    ExistingCharacterSheetContext,
+    ExistingSelectedPitchContext,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
@@ -41,6 +40,10 @@ from app.models import (
     resolve_resume_stage,
 )
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
+from app.services.beat_sheet_generation import (
+    BeatSheetGenerationService,
+    build_beat_sheet_model_output,
+)
 from app.services.brief_normalization import (
     BriefNormalizationService,
     apply_brief_normalization_overrides,
@@ -48,15 +51,12 @@ from app.services.brief_normalization import (
     build_brief_normalization_result_from_existing,
 )
 from app.services.catalog import find_active_genre, find_active_tone_for_genre
-from app.services.beat_sheet_generation import (
-    BeatSheetGenerationService,
-    build_beat_sheet_model_output,
-)
 from app.services.character_generation import (
     CharacterGenerationService,
     build_character_model_output,
 )
 from app.services.character_sheet_changes import infer_character_change_impact
+from app.services.continuity import SessionContinuityService
 from app.services.event_log import SessionEventLogService
 from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
 from app.services.session_hydration import (
@@ -146,6 +146,7 @@ class SessionService:
         self._sessions = StorySessionRepository(session)
         self._stage_states = WorkflowStageStateRepository(session)
         self._event_log = SessionEventLogService(session)
+        self._continuity = SessionContinuityService(session)
         self._brief_normalizer = brief_normalization_service or BriefNormalizationService()
 
     def create_session(
@@ -304,6 +305,11 @@ class SessionService:
             accepted=True,
             actor=actor,
         )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.GENRE,
+            source_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -395,6 +401,11 @@ class SessionService:
             source=origin,
             accepted=True,
             actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.TONE,
+            source_summary=selection_event.summary,
         )
         stage_snapshot.last_event = selection_event
         self._session.commit()
@@ -571,6 +582,11 @@ class SessionService:
                 origin=origin,
             ),
             actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.BRIEF,
+            source_summary=edit_event.summary,
         )
         stage_snapshot.last_event = edit_event
         self._session.commit()
@@ -958,6 +974,11 @@ class SessionService:
             accepted=True,
             actor=actor,
         )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.PITCHES,
+            source_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1052,6 +1073,11 @@ class SessionService:
             source=origin,
             accepted=True,
             actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.PITCHES,
+            source_summary=selection_event.summary,
         )
         stage_snapshot.last_event = selection_event
         self._session.commit()
@@ -1527,6 +1553,11 @@ class SessionService:
             accepted=True,
             actor=actor,
         )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.CHARACTERS,
+            source_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -1643,6 +1674,11 @@ class SessionService:
             source=origin,
             accepted=True,
             actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.CHARACTERS,
+            source_summary=selection_event.summary,
         )
         stage_snapshot.last_event = selection_event
         self._session.commit()
@@ -2071,6 +2107,11 @@ class SessionService:
             accepted=True,
             actor=actor,
         )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.BEATS,
+            source_summary=selection_event.summary,
+        )
         stage_snapshot.last_event = selection_event
         self._session.commit()
         return SessionSelectionResponse(
@@ -2091,7 +2132,9 @@ class SessionService:
 
         selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
         if selected_character_sheet is None:
-            raise SessionBeatSheetEditError("select a character sheet before editing the beat sheet")
+            raise SessionBeatSheetEditError(
+                "select a character sheet before editing the beat sheet"
+            )
 
         selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
         target_beat_sheet = _resolve_source_beat_sheet(
@@ -2137,9 +2180,10 @@ class SessionService:
             event_field_values["bedtime_notes"] = normalized_bedtime_notes
 
         next_payload = dict(existing_payload)
-        if normalized_bedtime_goal is not None and normalized_bedtime_goal != _read_optional_mapping_text(
-            existing_payload,
-            "bedtime_goal",
+        if (
+            normalized_bedtime_goal is not None
+            and normalized_bedtime_goal
+            != _read_optional_mapping_text(existing_payload, "bedtime_goal")
         ):
             next_payload["bedtime_goal"] = normalized_bedtime_goal
             changed_fields.append("bedtime_goal")
@@ -2256,6 +2300,12 @@ class SessionService:
             summary_text=summary_text,
             actor=actor,
         )
+        if target_beat_sheet.is_selected:
+            self._refresh_continuity(
+                story_session.id,
+                source_stage=WorkflowStage.BEATS,
+                source_summary=edit_event.summary,
+            )
         stage_snapshot.last_event = edit_event
         self._session.commit()
         return SessionBeatSheetUpdateResponse(
@@ -2370,6 +2420,11 @@ class SessionService:
             source=origin,
             accepted=True,
             actor=actor,
+        )
+        self._refresh_continuity(
+            story_session.id,
+            source_stage=WorkflowStage.BEATS,
+            source_summary=selection_event.summary,
         )
         stage_snapshot.last_event = selection_event
         self._session.commit()
@@ -2530,6 +2585,19 @@ class SessionService:
             stage_map[invalidated_stage].last_event = stage_event
         self._session.commit()
         return self.load_session_snapshot(story_session.id)
+
+    def _refresh_continuity(
+        self,
+        session_id: str,
+        *,
+        source_stage: WorkflowStage | None,
+        source_summary: str | None = None,
+    ) -> None:
+        self._continuity.refresh_for_session(
+            session_id,
+            source_stage=source_stage,
+            source_summary=source_summary,
+        )
 
     def _validate_stage_transition(
         self,
@@ -2792,10 +2860,8 @@ def _build_character_sheet_invalidation_detail(
     change_impact: CharacterChangeImpact = CharacterChangeImpact.MAJOR,
 ) -> str:
     label = _read_character_sheet_label(character_sheet)
-    return (
-        f"{change_impact.value.capitalize()} character change accepted in {label}. Refresh beats and any downstream "
-        "planning."
-    )
+    prefix = f"{change_impact.value.capitalize()} character change accepted in {label}."
+    return prefix + " Refresh beats and any downstream planning."
 
 
 def _find_matching_pitches(
@@ -3175,7 +3241,9 @@ def _apply_beat_sheet_edit_updates(
 
     updated_beats = [dict(beat) for beat in serialized_beats]
     beat_positions = {
-        beat.get("key"): index for index, beat in enumerate(updated_beats) if isinstance(beat.get("key"), str)
+        beat.get("key"): index
+        for index, beat in enumerate(updated_beats)
+        if isinstance(beat.get("key"), str)
     }
     changed_fields: list[str] = []
     changed_beat_keys: list[str] = []

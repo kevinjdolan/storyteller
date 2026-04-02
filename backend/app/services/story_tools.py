@@ -68,6 +68,7 @@ from app.models.story_tools import (
 )
 from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
+from app.services.continuity import SessionContinuityService, build_continuity_payload
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
 from app.services.outline_generation import StoryOutlineGenerationService
@@ -649,6 +650,7 @@ class StoryWorkflowToolService:
         self._session = session
         self._registry = registry or get_story_workflow_tool_registry()
         self._sessions = SessionService(session)
+        self._continuity = SessionContinuityService(session)
         self._events = SessionEventLogService(session)
         self._jobs = BackgroundJobService(session)
         self._beat_sheet_generation = (
@@ -985,6 +987,11 @@ class StoryWorkflowToolService:
             source=request.origin,
             actor=actor,
         )
+        self._continuity.refresh_for_session(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            source_summary="Updated story setup preferences.",
+        )
         stage_snapshot = self._sessions.update_stage_state(
             session_id,
             stage=WorkflowStage.STORY_SETUP,
@@ -1109,6 +1116,11 @@ class StoryWorkflowToolService:
             summary_text=assessment.summary_text,
             actor=actor,
         )
+        self._continuity.refresh_for_session(
+            session_id,
+            source_stage=WorkflowStage.STORY_SETUP,
+            source_summary=assessment.summary_text,
+        )
         stage_snapshot = self._sessions.update_stage_state(
             session_id,
             stage=WorkflowStage.STORY_SETUP,
@@ -1150,11 +1162,17 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a new composition pass started.",
         )
+        continuity_bible = self._continuity.refresh_for_session(
+            session_id,
+            source_stage=WorkflowStage.COMPOSITION,
+            source_summary="Prepared composition context from the current continuity bible.",
+        )
         next_segment_index = request.restart_from_segment_index or self._next_segment_index(
             session_id
         )
         selected_outline = self._get_selected_story_outline_row(session_id)
         outline_card_metadata = _resolve_outline_card_metadata(selected_outline, next_segment_index)
+        continuity_payload = build_continuity_payload(continuity_bible)
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
@@ -1166,6 +1184,7 @@ class StoryWorkflowToolService:
             metadata_json={
                 **request.model_dump(mode="json", exclude_none=True),
                 **outline_card_metadata,
+                **continuity_payload,
             },
             started_at=utc_now(),
         )
@@ -1186,6 +1205,7 @@ class StoryWorkflowToolService:
             payload={
                 **request.model_dump(mode="json", exclude_none=True),
                 **outline_card_metadata,
+                **continuity_payload,
             },
         )
         self._session.add(segment)
@@ -1244,11 +1264,17 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a rewrite pass started.",
         )
+        continuity_bible = self._continuity.refresh_for_session(
+            session_id,
+            source_stage=WorkflowStage.COMPOSITION,
+            source_summary="Prepared rewrite context from the current continuity bible.",
+        )
         selected_outline = self._get_selected_story_outline_row(session_id)
         outline_card_metadata = _resolve_outline_card_metadata(
             selected_outline,
             request.rewrite_from_segment_index,
         )
+        continuity_payload = build_continuity_payload(continuity_bible)
         job = CompositionJob(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
@@ -1260,6 +1286,7 @@ class StoryWorkflowToolService:
             metadata_json={
                 **request.model_dump(mode="json", exclude_none=True),
                 **outline_card_metadata,
+                **continuity_payload,
             },
             started_at=utc_now(),
         )
@@ -1281,6 +1308,7 @@ class StoryWorkflowToolService:
             payload={
                 **request.model_dump(mode="json", exclude_none=True),
                 **outline_card_metadata,
+                **continuity_payload,
             },
         )
         self._session.add(segment)

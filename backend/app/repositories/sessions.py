@@ -12,6 +12,7 @@ from app.db import (
     BeatSheet,
     CharacterSheet,
     CompositionJob,
+    ContinuityBible,
     JobStatus,
     Pitch,
     SessionAsset,
@@ -53,6 +54,7 @@ class SessionAggregate:
     active_audio_job: AudioJob | None
     latest_story_asset: SessionAsset | None
     latest_audio_asset: SessionAsset | None
+    selected_continuity_bible: ContinuityBible | None
 
 
 class StorySessionRepository:
@@ -114,6 +116,7 @@ class StorySessionRepository:
             active_audio_job=self._get_active_audio_job(session_id),
             latest_story_asset=self._get_latest_story_asset(session_id),
             latest_audio_asset=self._get_latest_audio_asset(session_id),
+            selected_continuity_bible=self._get_selected_continuity_bible(session_id),
         )
 
     def get_active_story_brief(self, session_id: str) -> StoryBrief | None:
@@ -142,6 +145,9 @@ class StorySessionRepository:
 
     def list_story_outlines(self, session_id: str) -> list[StoryOutline]:
         return self._list_story_outlines(session_id)
+
+    def get_selected_continuity_bible(self, session_id: str) -> ContinuityBible | None:
+        return self._get_selected_continuity_bible(session_id)
 
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
@@ -306,6 +312,18 @@ class StorySessionRepository:
                 SessionAsset.status == AssetStatus.READY,
             )
             .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_selected_continuity_bible(self, session_id: str) -> ContinuityBible | None:
+        stmt: Select[tuple[ContinuityBible]] = (
+            select(ContinuityBible)
+            .where(
+                ContinuityBible.session_id == session_id,
+                ContinuityBible.is_selected.is_(True),
+            )
+            .order_by(ContinuityBible.revision_number.desc())
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()

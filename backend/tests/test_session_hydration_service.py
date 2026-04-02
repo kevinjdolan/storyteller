@@ -9,6 +9,7 @@ from app.db import (
     Base,
     CompositionJob,
     CompositionJobKind,
+    ContinuityBible,
     JobStatus,
     SessionAsset,
     make_engine,
@@ -166,6 +167,45 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
     assert hydrated.snapshot.latest_audio_asset.object_path.endswith("story.mp3")
     assert hydrated.hydration.strategy == "materialized_only"
     assert hydrated.hydration.replayed_event_count == 0
+
+
+def test_hydrate_session_includes_selected_continuity_bible(db_session) -> None:
+    session_service = SessionService(db_session)
+    snapshot = session_service.create_session(working_title="Hydration Continuity")
+
+    continuity_bible = ContinuityBible(
+        session_id=snapshot.id,
+        revision_number=2,
+        source_stage=WorkflowStage.STORY_SETUP,
+        source_summary="Accepted story setup.",
+        summary_text="Mira anchors the harbor story and still needs to resolve the drifting bell.",
+        summary_data={
+            "schema_version": 1,
+            "facts": [
+                {
+                    "key": "thread:drifting-bell:1",
+                    "category": "unresolved_thread",
+                    "title": "Drifting bell",
+                    "detail": "The bell still needs a gentle explanation before the finale.",
+                    "source_stage": "beats",
+                    "source_label": "Revision 2",
+                }
+            ],
+        },
+        is_selected=True,
+    )
+    db_session.add(continuity_bible)
+    db_session.commit()
+
+    hydrated = SessionHydrationService(db_session).hydrate_session(snapshot.id)
+
+    assert hydrated.snapshot.continuity_bible is not None
+    assert hydrated.snapshot.continuity_bible.revision_number == 2
+    assert hydrated.snapshot.continuity_bible.summary_text.startswith("Mira anchors")
+    assert hydrated.snapshot.continuity_bible.facts[0].title == "Drifting bell"
+    assert "Continuity: Mira anchors the harbor story" in (
+        hydrated.snapshot.agent_context_summary or ""
+    )
 
 
 def test_hydrate_session_limits_recent_history_window(db_session) -> None:

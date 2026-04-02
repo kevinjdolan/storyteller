@@ -14,6 +14,7 @@ EXPECTED_TABLES = {
     "character_sheets",
     "composition_jobs",
     "composition_segments",
+    "continuity_bibles",
     "event_log_entries",
     "genres",
     "pitches",
@@ -69,6 +70,18 @@ EXPECTED_SESSION_MEMORY_COLUMNS = {
     "summary_text",
     "summary_data",
     "created_at",
+}
+EXPECTED_CONTINUITY_BIBLE_COLUMNS = {
+    "id",
+    "session_id",
+    "revision_number",
+    "source_stage",
+    "source_summary",
+    "summary_text",
+    "summary_data",
+    "is_selected",
+    "created_at",
+    "updated_at",
 }
 EXPECTED_STORY_BRIEF_COLUMNS = {
     "id",
@@ -164,6 +177,10 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
         database_url,
         "session_memory_snapshots",
     )
+    assert EXPECTED_CONTINUITY_BIBLE_COLUMNS <= _get_column_names(
+        database_url,
+        "continuity_bibles",
+    )
 
     command.downgrade(config, "base")
     assert not (EXPECTED_TABLES & _get_table_names(database_url))
@@ -178,4 +195,8 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _get_column_names(
         database_url,
         "session_memory_snapshots",
+    )
+    assert EXPECTED_CONTINUITY_BIBLE_COLUMNS <= _get_column_names(
+        database_url,
+        "continuity_bibles",
     )

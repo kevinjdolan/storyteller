@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.chat_actions import CharacterChangeImpact, StoryBriefEditMode
+from app.models.continuity import ContinuityBibleView
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.story_outline import StoryOutlineCard, StoryOutlineChangeImpact
 from app.models.workflow import WorkflowStage, WorkflowStageState
@@ -737,6 +738,7 @@ class SessionSnapshot(BaseModel):
     active_audio_job: AudioJobView | None = None
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
+    continuity_bible: ContinuityBibleView | None = None
     conversation_memory: ConversationMemorySnapshotView | None = None
     agent_context_summary: str | None = None
 

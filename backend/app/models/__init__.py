@@ -121,6 +121,12 @@ from app.models.chat_actions import (
     get_chat_to_ui_action_default_policy,
     get_chat_to_ui_action_schema_bundle,
 )
+from app.models.continuity import (
+    ContinuityBibleData,
+    ContinuityBibleView,
+    ContinuityFact,
+    ContinuityFactCategory,
+)
 from app.models.events import (
     AIOutputKind,
     AIOutputRecordedEventPayload,
@@ -371,6 +377,10 @@ __all__ = [
     "CharacterSheetBatchView",
     "CharacterSheetView",
     "CharacterChangeImpact",
+    "ContinuityBibleData",
+    "ContinuityBibleView",
+    "ContinuityFact",
+    "ContinuityFactCategory",
     "ConversationMemorySnapshotView",
     "ConversationMemorySummaryData",
     "ConversationMemoryWorkflow",

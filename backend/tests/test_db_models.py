@@ -13,6 +13,7 @@ from app.db import (
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
+    ContinuityBible,
     EventActorType,
     EventLogEntry,
     Genre,
@@ -217,6 +218,27 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             is_selected=True,
             accepted_at=now,
         )
+        continuity_bible = ContinuityBible(
+            session=draft_session,
+            revision_number=1,
+            source_stage=WorkflowStage.BEATS,
+            source_summary="Accepted beat sheet.",
+            summary_text="Pip anchors the current story in a moonlit lake.",
+            summary_data={
+                "schema_version": 1,
+                "facts": [
+                    {
+                        "key": "character:pip:1",
+                        "category": "character",
+                        "title": "Pip",
+                        "detail": "Cautious lead who feels safer by the end of the lake crossing.",
+                        "source_stage": "characters",
+                        "source_label": "Lead character",
+                    }
+                ],
+            },
+            is_selected=True,
+        )
         composition_job = CompositionJob(
             session=draft_session,
             beat_sheet=beat_sheet,
@@ -279,6 +301,7 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
                 beat_sheet,
                 story_setup,
                 story_outline,
+                continuity_bible,
                 composition_job,
                 composition_segment,
                 completed_session,
@@ -313,6 +336,9 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             .planned_summary.startswith("Pip reaches")
         )
         assert session_rows[0].story_outlines[0].outline_kind == "chapter"
+        assert session_rows[0].continuity_bibles[0].summary_text == (
+            "Pip anchors the current story in a moonlit lake."
+        )
         assert session_rows[1].overall_status == WorkflowStageState.COMPLETED
         assert session_rows[1].audio_jobs[0].status == JobStatus.COMPLETED
         assert session_rows[1].assets[0].asset_kind == AssetKind.FINAL_AUDIO
@@ -336,6 +362,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "character_sheets",
             "composition_jobs",
             "composition_segments",
+            "continuity_bibles",
             "event_log_entries",
             "genres",
             "pitches",
@@ -352,6 +379,9 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         workflow_indexes = {
             index["name"] for index in inspector.get_indexes("workflow_stage_states")
         }
+        continuity_indexes = {
+            index["name"] for index in inspector.get_indexes("continuity_bibles")
+        }
         asset_indexes = {index["name"] for index in inspector.get_indexes("session_assets")}
         story_brief_columns = {
             column["name"] for column in inspector.get_columns("story_briefs")
@@ -363,6 +393,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "ix_story_sessions_resume_stage",
         } <= story_session_indexes
         assert {"ix_workflow_stage_states_session_id_status"} <= workflow_indexes
+        assert {"ix_continuity_bibles_session_id_is_selected"} <= continuity_indexes
         assert {
             "ix_session_assets_audio_job_id_asset_kind_segment_index",
             "ix_session_assets_composition_job_id_asset_kind_segment_index",
@@ -389,6 +420,10 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             tuple(fk["constrained_columns"]): fk["referred_table"]
             for fk in inspector.get_foreign_keys("story_outlines")
         }
+        continuity_foreign_keys = {
+            tuple(fk["constrained_columns"]): fk["referred_table"]
+            for fk in inspector.get_foreign_keys("continuity_bibles")
+        }
         asset_foreign_keys = {
             tuple(fk["constrained_columns"]): fk["referred_table"]
             for fk in inspector.get_foreign_keys("session_assets")
@@ -400,6 +435,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
         assert outline_foreign_keys[("session_id",)] == "story_sessions"
         assert outline_foreign_keys[("beat_sheet_id",)] == "beat_sheets"
         assert outline_foreign_keys[("story_setup_id",)] == "story_setups"
+        assert continuity_foreign_keys[("session_id",)] == "story_sessions"
         assert asset_foreign_keys[("session_id",)] == "story_sessions"
         assert asset_foreign_keys[("audio_job_id",)] == "audio_jobs"
         assert asset_foreign_keys[("composition_job_id",)] == "composition_jobs"

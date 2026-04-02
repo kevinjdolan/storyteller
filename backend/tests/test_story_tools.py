@@ -398,6 +398,12 @@ def test_story_workflow_tool_service_seeds_composition_segments_from_outline_car
     assert segment is not None
     assert job.metadata_json["story_outline_id"]
     assert job.metadata_json["outline_card_title"].startswith("Chapter 1:")
+    assert job.metadata_json["continuity_bible_id"]
+    assert job.metadata_json["continuity_summary"]
+    assert segment.payload["continuity_bible_id"] == job.metadata_json["continuity_bible_id"]
+    assert any(
+        fact["category"] == "promise" for fact in segment.payload["continuity_facts"]
+    )
     assert segment.planned_summary is not None
     assert "Chapter 1" in job.metadata_json["outline_card_title"]
 
@@ -425,6 +431,12 @@ def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
         "opening_image",
         "catalyst",
     ]
+    assert job.metadata_json["continuity_revision_number"] == 1
+    assert segment.payload["continuity_revision_number"] == 1
+    assert any(
+        fact["category"] == "voice_constraint"
+        for fact in segment.payload["continuity_facts"]
+    )
     assert (
         segment.planned_summary
         == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."

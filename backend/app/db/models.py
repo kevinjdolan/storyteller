@@ -218,6 +218,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    continuity_bibles: Mapped[list["ContinuityBible"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_story_sessions_overall_status_updated_at", "overall_status", "updated_at"),
@@ -345,6 +349,33 @@ class SessionMemorySnapshot(UUIDPrimaryKeyMixin, Base):
             "session_id",
             "created_at",
         ),
+    )
+
+
+class ContinuityBible(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "continuity_bibles"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    source_stage: Mapped[WorkflowStage | None] = mapped_column(WORKFLOW_STAGE_ENUM)
+    source_summary: Mapped[str | None] = mapped_column(Text)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    is_selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    session: Mapped["StorySession"] = relationship(back_populates="continuity_bibles")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "revision_number",
+            name="uq_continuity_bibles_session_id_revision_number",
+        ),
+        Index("ix_continuity_bibles_session_id_is_selected", "session_id", "is_selected"),
     )
 
 

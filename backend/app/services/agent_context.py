@@ -68,6 +68,19 @@ def build_session_agent_context_summary(
                 outline_line += f" - {_truncate(snapshot.selected_story_outline.summary)}"
             lines.append(outline_line)
 
+        if snapshot.continuity_bible is not None:
+            lines.append("Continuity: " + _truncate(snapshot.continuity_bible.summary_text))
+            open_threads = [
+                fact.title
+                for fact in snapshot.continuity_bible.facts
+                if fact.category == "unresolved_thread"
+            ]
+            if open_threads:
+                lines.append(
+                    "Open continuity threads: "
+                    + "; ".join(_truncate(thread, limit=80) for thread in open_threads[:3])
+                )
+
     lines.extend(_build_character_context_lines(snapshot))
 
     current_stage_detail = _find_stage_state(snapshot, snapshot.current_stage).detail

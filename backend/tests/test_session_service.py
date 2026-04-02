@@ -778,6 +778,18 @@ def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) 
     assert brief_stage.detail is not None
     assert brief_stage.detail.startswith("Saved story brief:")
     assert brief_stage.last_event_type == "content.user_edit.recorded"
+    assert updated_snapshot.continuity_bible is not None
+    assert any(
+        fact.category == "location" and fact.title == "a moonlit harbor"
+        for fact in updated_snapshot.continuity_bible.facts
+    )
+    assert any(
+        fact.category == "voice_constraint"
+        and fact.title == "Story constraint"
+        and "End with the harbor settled" in fact.detail
+        for fact in updated_snapshot.continuity_bible.facts
+    )
+    assert "Continuity: " in (updated_snapshot.agent_context_summary or "")
 
     stored_briefs = (
         db_session.query(StoryBrief)
@@ -1078,6 +1090,14 @@ def test_select_character_sheet_marks_choice_and_advances_to_beats(db_session) -
     assert result.snapshot.selected_character_sheet.id == first_character_sheet.id
     assert result.snapshot.selected_character_sheet.is_selected is True
     assert result.snapshot.stage_states[4].status == WorkflowStageState.COMPLETED
+    assert result.snapshot.continuity_bible is not None
+    assert any(
+        fact.category == "character"
+        and fact.title == "Mira 1"
+        and "sleepy lantern-keeper in training" in fact.detail
+        for fact in result.snapshot.continuity_bible.facts
+    )
+    assert "Continuity: " in (result.snapshot.agent_context_summary or "")
 
 
 def test_refine_character_sheet_creates_a_selected_revision_without_overwriting_history(

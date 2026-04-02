@@ -28,6 +28,7 @@ from app.services.character_generation import (
     build_character_model_output,
     evaluate_character_sheet_batch,
 )
+from app.services.continuity import SessionContinuityService, build_continuity_payload
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 from app.services.intent_parser import SessionIntentParserService
@@ -85,6 +86,7 @@ __all__ = [
     "BriefNormalizationService",
     "CharacterGenerationService",
     "ClaimedBackgroundJob",
+    "SessionContinuityService",
     "InvalidStageTransitionError",
     "PitchGenerationService",
     "StoryOutlineGenerationService",
@@ -111,6 +113,7 @@ __all__ = [
     "build_beat_sheet_model_output",
     "build_brief_model_output",
     "build_character_model_output",
+    "build_continuity_payload",
     "build_brief_normalization_result_from_existing",
     "build_pitch_model_output",
     "evaluate_character_sheet_batch",
