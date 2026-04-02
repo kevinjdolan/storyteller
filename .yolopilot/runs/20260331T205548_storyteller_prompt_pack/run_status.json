@@ -51,9 +51,10 @@
     "48-save-the-cat-beat-sheet-generation.md",
     "49-beat-sheet-refinement-ui-and-chat.md",
     "50-story-length-duration-and-chapter-setup.md",
-    "51-correlation-heuristics.md"
+    "51-correlation-heuristics.md",
+    "52-bedtime-safety-and-content-guidelines.md"
   ],
-  "current_success_ref": "57a789dbe6f76468368d3cbfc75ecc772ce2c197",
+  "current_success_ref": "bc455078f42f174a64f2be49ea326e0e4da1f9f7",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
