@@ -58,9 +58,10 @@
     "55-continuity-bible.md",
     "56-revision-history-and-branches.md",
     "57-composition-prompt-assembly.md",
-    "58-usage-cost-and-latency-metrics.md"
+    "58-usage-cost-and-latency-metrics.md",
+    "59-planning-funnel-e2e-test.md"
   ],
-  "current_success_ref": "eb2f81a33d37be0e6d5107c3d03e353c2758bf81",
+  "current_success_ref": "e5839ce1f5d514c3e12a26095fd855f53730e545",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
