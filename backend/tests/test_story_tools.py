@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import wave
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread
@@ -9,7 +11,11 @@ from urllib.parse import unquote
 
 import httpx
 import pytest
-from app.ai import render_intent_parser_prompt
+from app.ai import (
+    NarrationSynthesisResult,
+    TextToSpeechTransportError,
+    render_intent_parser_prompt,
+)
 from app.db import (
     AssetKind,
     AssetStatus,
@@ -50,7 +56,9 @@ from app.models import (
     WorkflowStageState,
 )
 from app.services import (
+    AUDIO_RUNTIME_JOB_TYPE,
     COMPOSITION_RUNTIME_JOB_TYPE,
+    AudioJobService,
     BackgroundJobService,
     CompositionJobService,
     SessionService,
@@ -411,6 +419,40 @@ def _build_recorded_segment_text(
     )
 
 
+class RecordingTextToSpeechAdapter:
+    def __init__(self, *, fail_on_call: int | None = None, sample_frames: int = 2400) -> None:
+        self.fail_on_call = fail_on_call
+        self.sample_frames = sample_frames
+        self.model_id = "test-gemini-tts"
+        self.calls = []
+
+    def synthesize(self, request):
+        self.calls.append(request)
+        if self.fail_on_call is not None and len(self.calls) == self.fail_on_call:
+            raise TextToSpeechTransportError("Simulated Gemini TTS failure")
+
+        sample_value = len(self.calls)
+        pcm_audio = bytes([sample_value, 0]) * self.sample_frames
+        return NarrationSynthesisResult(
+            pcm_audio_bytes=pcm_audio,
+            provider="gemini",
+            model_id=self.model_id,
+            prompt_version="test-gemini-tts.v1",
+            rendered_prompt=f"Prompt for segment {len(self.calls)}",
+            voice_name="TestVoice",
+            provider_mime_type="audio/L16;rate=24000",
+            sample_rate_hz=24_000,
+            channel_count=1,
+            sample_width_bytes=2,
+            attempts_used=1,
+            raw_response={"usageMetadata": {"totalTokenCount": 7}},
+            response_metadata={"attempts_used": 1},
+        )
+
+    def close(self) -> None:
+        return None
+
+
 def _build_test_object_storage() -> tuple[FakeGCSJsonAPI, httpx.Client, ObjectStorageService]:
     fake_gcs = FakeGCSJsonAPI()
     settings = load_settings(
@@ -708,6 +750,13 @@ def test_story_workflow_tool_service_creates_durable_narration_segments(db_sessi
     )
 
     audio_job = db_session.get(AudioJob, result.audio_job_id)
+    queued_runtime_jobs = list(
+        db_session.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.job_type == AUDIO_RUNTIME_JOB_TYPE)
+            .order_by(BackgroundJob.created_at.asc())
+        ).scalars()
+    )
     narration_segments = list(
         db_session.execute(
             select(NarrationSegment)
@@ -718,9 +767,13 @@ def test_story_workflow_tool_service_creates_durable_narration_segments(db_sessi
     snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
 
     assert audio_job is not None
+    assert audio_job.status == JobStatus.QUEUED
     assert audio_job.current_segment_index == 1
     assert audio_job.config_json["total_segments"] == 3
     assert audio_job.config_json["narration_plan_version"] == "narration_segments.v1"
+    assert audio_job.config_json["tts_model_id"] == "gemini-2.5-flash-preview-tts"
+    assert len(queued_runtime_jobs) == 1
+    assert queued_runtime_jobs[0].payload["audio_job_id"] == result.audio_job_id
     assert len(narration_segments) == 3
     assert [segment.segment_index for segment in narration_segments] == [1, 2, 3]
     assert narration_segments[0].source_boundary_kind == NarrationSourceBoundaryKind.CHAPTER
@@ -730,8 +783,158 @@ def test_story_workflow_tool_service_creates_durable_narration_segments(db_sessi
         NarrationMusicTransitionHint.END_STORY
     )
     assert snapshot.active_audio_job is not None
+    assert snapshot.active_audio_job.status == JobStatus.QUEUED.value
     assert snapshot.active_audio_job.total_segments == 3
     assert snapshot.active_audio_job.current_segment_index == 1
+
+
+def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    adapter = RecordingTextToSpeechAdapter()
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[240, 160, 180],
+            )
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            run_result = AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=adapter,
+            ).run_job(result.audio_job_id)
+
+        with session_factory() as session:
+            audio_job = session.get(AudioJob, result.audio_job_id)
+            final_audio_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.audio_job_id == result.audio_job_id,
+                    SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                    SessionAsset.status == AssetStatus.READY,
+                )
+            ).scalar_one()
+            audio_segment_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.audio_job_id == result.audio_job_id,
+                        SessionAsset.asset_kind == AssetKind.AUDIO_SEGMENT,
+                        SessionAsset.status == AssetStatus.READY,
+                    )
+                ).scalars()
+            )
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+
+        final_audio_bytes = object_storage.download_bytes(
+            StorageObjectLocation(
+                bucket=final_audio_asset.storage_bucket,
+                key=final_audio_asset.object_path,
+            )
+        )
+        with wave.open(io.BytesIO(final_audio_bytes), "rb") as wav_file:
+            frame_count = wav_file.getnframes()
+            channel_count = wav_file.getnchannels()
+            sample_rate_hz = wav_file.getframerate()
+
+        assert audio_job is not None
+        criteria = {
+            "worker_result_marks_completion": run_result["status"] == "completed",
+            "job_completed": audio_job.status == JobStatus.COMPLETED,
+            "all_segments_rendered": len(adapter.calls) == 3 and len(audio_segment_assets) == 3,
+            "final_asset_ready": final_audio_asset.mime_type == "audio/wav",
+            "snapshot_exposes_latest_audio_asset": snapshot.latest_audio_asset is not None,
+            "snapshot_marks_audio_stage_completed": (
+                _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.COMPLETED
+            ),
+            "final_wav_uses_expected_sample_rate": sample_rate_hz == 24_000,
+            "final_wav_mono": channel_count == 1,
+            "final_wav_has_pause_frames": frame_count > adapter.sample_frames * len(adapter.calls),
+        }
+
+        assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_audio_runtime_worker_marks_failures_durably(tmp_path: Path) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    adapter = RecordingTextToSpeechAdapter(fail_on_call=1)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[240, 160],
+            )
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        worker = JobWorker(
+            session_factory=session_factory,
+            registry=build_default_job_handler_registry(
+                object_storage=object_storage,
+                tts_adapter=adapter,
+            ),
+            worker_id="audio-runtime-worker",
+            lease_duration=timedelta(seconds=30),
+            poll_interval_seconds=0.01,
+        )
+
+        assert worker.run_once() is True
+
+        with session_factory() as session:
+            background_job = session.execute(
+                select(BackgroundJob).where(
+                    BackgroundJob.job_type == AUDIO_RUNTIME_JOB_TYPE,
+                )
+            ).scalar_one()
+            audio_job = session.get(AudioJob, result.audio_job_id)
+            failed_segment = session.execute(
+                select(NarrationSegment)
+                .where(
+                    NarrationSegment.audio_job_id == result.audio_job_id,
+                    NarrationSegment.segment_index == 1,
+                )
+                .limit(1)
+            ).scalar_one()
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+
+        assert audio_job is not None
+        criteria = {
+            "background_job_failed": background_job.status == JobStatus.FAILED,
+            "audio_job_failed": audio_job.status == JobStatus.FAILED,
+            "segment_failed": failed_segment.status == JobStatus.FAILED,
+            "failure_message_persisted": "Simulated Gemini TTS failure" in (
+                audio_job.error_message or ""
+            ),
+            "snapshot_stage_needs_regeneration": (
+                _stage_status(snapshot, WorkflowStage.AUDIO)
+                == WorkflowStageState.NEEDS_REGENERATION
+            ),
+            "snapshot_exposes_failed_audio_job": (
+                snapshot.latest_audio_job is not None
+                and snapshot.latest_audio_job.status == JobStatus.FAILED.value
+            ),
+        }
+
+        assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
 
 
 def test_story_workflow_tool_service_updates_story_outline_and_tracks_revision(

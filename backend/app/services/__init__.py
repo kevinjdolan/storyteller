@@ -11,6 +11,17 @@ from app.services.assets import (
     AssetSessionNotFoundError,
     SessionAssetService,
 )
+from app.services.audio_jobs import (
+    AUDIO_RUNTIME_JOB_TYPE,
+    AudioJobNotFoundError,
+    AudioJobService,
+    AudioJobServiceError,
+    AudioJobStartResult,
+    AudioJobStateError,
+    build_silence_pcm,
+    build_wav_bytes,
+    read_wav_bytes,
+)
 from app.services.beat_sheet_generation import (
     BeatSheetGenerationService,
     build_beat_sheet_model_output,
@@ -97,6 +108,12 @@ __all__ = [
     "AssetOwnershipError",
     "AssetServiceError",
     "AssetSessionNotFoundError",
+    "AUDIO_RUNTIME_JOB_TYPE",
+    "AudioJobNotFoundError",
+    "AudioJobService",
+    "AudioJobServiceError",
+    "AudioJobStartResult",
+    "AudioJobStateError",
     "BackgroundJobLeaseLostError",
     "BackgroundJobNotFoundError",
     "BackgroundJobRecord",
@@ -144,6 +161,8 @@ __all__ = [
     "apply_brief_normalization_overrides",
     "build_beat_sheet_model_output",
     "build_brief_model_output",
+    "build_silence_pcm",
+    "build_wav_bytes",
     "build_character_model_output",
     "build_continuity_payload",
     "build_brief_normalization_result_from_existing",
@@ -155,6 +174,7 @@ __all__ = [
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
     "get_story_workflow_tool_schema_bundle",
+    "read_wav_bytes",
     "synthesize_normalized_summary",
     "HeuristicCompositionSegmentWriter",
 ]

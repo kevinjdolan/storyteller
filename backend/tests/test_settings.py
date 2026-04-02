@@ -44,6 +44,7 @@ def test_settings_read_required_runtime_values_from_environment(
         "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
     )
     assert settings.gemini_api_key == "env-api-key"
+    assert settings.gemini.tts_model == "gemini-2.5-flash-preview-tts"
     assert (
         settings.gemini.approximate_pricing.planning.input_cost_per_million_tokens_usd == 0.30
     )
@@ -147,6 +148,7 @@ def test_environment_values_override_secrets_file(tmp_path: Path) -> None:
                 "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
             ),
             "STORYTELLER_GEMINI_API_KEY": "env-api-key",
+            "STORYTELLER_GEMINI_TTS_MODEL": "gemini-2.5-pro-preview-tts",
             "STORYTELLER_CORS_ALLOWED_ORIGINS": (
                 "http://localhost:8566,http://127.0.0.1:8566,http://frontend:8566"
             ),
@@ -159,6 +161,7 @@ def test_environment_values_override_secrets_file(tmp_path: Path) -> None:
         "postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller"
     )
     assert settings.gemini_api_key == "env-api-key"
+    assert settings.gemini.tts_model == "gemini-2.5-pro-preview-tts"
     assert settings.cors_allowed_origins == (
         "http://localhost:8566",
         "http://127.0.0.1:8566",

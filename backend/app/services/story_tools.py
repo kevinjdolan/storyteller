@@ -36,6 +36,7 @@ from app.models import (
     WorkflowStage,
     WorkflowStageState,
 )
+from app.models.audio_settings import AudioSettingsView
 from app.models.chat_actions import (
     RedirectCompositionAction,
     StartAudioGenerationAction,
@@ -68,16 +69,13 @@ from app.models.story_tools import (
     UpdateStoryOutlineToolInput,
     UpdateStoryOutlineToolResult,
 )
+from app.services.audio_jobs import AudioJobService
 from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
 from app.services.composition_jobs import CompositionJobService
 from app.services.continuity import SessionContinuityService
-from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
+from app.services.event_log import SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
-from app.services.narration_segmentation import (
-    NarrationSegmentationError,
-    NarrationSegmentationService,
-)
 from app.services.outline_generation import StoryOutlineGenerationService
 from app.services.pitch_generation import PitchGenerationService
 from app.services.plan_revisions import PlanRevisionService
@@ -1314,6 +1312,10 @@ class StoryWorkflowToolService:
     ) -> StartAudioGenerationToolResult:
         snapshot = self._sessions.load_session_snapshot(session_id)
         resolved_settings = snapshot.audio_settings
+        if resolved_settings is None:
+            raise StoryWorkflowToolServiceError(
+                "save audio settings before starting audio generation",
+            )
         voice_key = (
             request.voice_key
             if "voice_key" in request.model_fields_set
@@ -1346,70 +1348,30 @@ class StoryWorkflowToolService:
             ),
             actor=actor,
         )
-        job = AudioJob(
-            session_id=session_id,
-            source_composition_job_id=self._latest_composition_job_id(session_id),
-            status=JobStatus.IN_PROGRESS,
-            voice_key=voice_key,
-            playback_speed=playback_speed,
-            include_background_music=include_background_music,
-            music_profile=music_profile,
-            estimated_duration_seconds=estimate.estimated_duration_seconds,
-            current_segment_index=1,
-            config_json={
-                **request.model_dump(mode="json", exclude_none=True),
-                "voice_key": voice_key,
-                "playback_speed": playback_speed,
-                "include_background_music": include_background_music,
-                "music_profile": music_profile,
-                "narration_style": resolved_settings.narration_style.value,
-                "narration_volume": resolved_settings.narration_volume,
-                "music_volume": resolved_settings.music_volume,
-                "guidance_notes": resolved_settings.guidance_notes,
-            },
-            started_at=utc_now(),
-        )
-        self._session.add(job)
-        self._session.flush()
-        try:
-            narration_plan = NarrationSegmentationService(self._session).create_plan(
-                session_id=session_id,
-                audio_job_id=job.id,
-            )
-        except NarrationSegmentationError as exc:
-            raise StoryWorkflowToolServiceError(str(exc)) from exc
-        job.current_segment_index = narration_plan.segments[0].segment_index
-        job.config_json = {
-            **(job.config_json if isinstance(job.config_json, dict) else {}),
-            "total_segments": narration_plan.total_segments,
-            "planned_word_count": narration_plan.total_words,
-            "compiled_text_length": narration_plan.compiled_text_length,
-            "narration_plan_version": "narration_segments.v1",
-        }
-
-        self._events.record_audio_progress(
+        start_result = AudioJobService(self._session).start_job(
             session_id,
-            job_id=job.id,
-            status=job.status,
-            progress_percent=0,
-            current_segment_index=job.current_segment_index,
-            total_segments=narration_plan.total_segments,
-            estimated_duration_seconds=job.estimated_duration_seconds,
-            voice_key=job.voice_key,
-            actor=actor or DEFAULT_SYSTEM_ACTOR,
+            settings=_merge_audio_generation_settings(
+                resolved_settings,
+                voice_key=voice_key,
+                playback_speed=playback_speed,
+                include_background_music=include_background_music,
+                music_profile=music_profile,
+            ),
+            estimated_duration_seconds=estimate.estimated_duration_seconds,
+            source_composition_job_id=self._latest_composition_job_id(session_id),
         )
         stage_snapshot = self._transition_stage_to_in_progress(
             session_id,
             stage=WorkflowStage.AUDIO,
             detail=_join_detail_parts(
                 [
-                    "Starting audio generation.",
+                    "Queued audio generation.",
                     _optional_detail("Voice", voice_key),
                     f"Playback speed {playback_speed:g}x.",
                     (
                         "Prepared "
-                        f"{narration_plan.total_segments} narration segment"
-                        f"{'' if narration_plan.total_segments == 1 else 's'}."
+                        f"{start_result.total_segments} narration segment"
+                        f"{'' if start_result.total_segments == 1 else 's'}."
                     ),
                     "Background music enabled." if include_background_music else None,
                 ]
@@ -1419,9 +1381,9 @@ class StoryWorkflowToolService:
         return StartAudioGenerationToolResult(
             tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
             stage=WorkflowStage.AUDIO,
-            summary="Created a new audio job from the current story draft.",
+            summary="Created a new audio job and queued its durable narration run.",
             stage_status=_stage_status(stage_snapshot, WorkflowStage.AUDIO),
-            audio_job_id=job.id,
+            audio_job_id=start_result.job.id,
             estimated_duration_seconds=estimate.estimated_duration_seconds,
         )
 
@@ -1721,6 +1683,25 @@ def _join_detail_parts(parts: list[str | None]) -> str | None:
     if not normalized:
         return None
     return " ".join(normalized)
+
+
+def _merge_audio_generation_settings(
+    base: AudioSettingsView,
+    *,
+    voice_key: str,
+    playback_speed: float,
+    include_background_music: bool,
+    music_profile: str,
+) -> AudioSettingsView:
+    return AudioSettingsView.model_validate(
+        {
+            **base.model_dump(mode="json"),
+            "voice_key": voice_key,
+            "playback_speed": playback_speed,
+            "include_background_music": include_background_music,
+            "music_profile": music_profile,
+        }
+    )
 
 
 def _optional_detail(label: str, value: str | None) -> str | None:

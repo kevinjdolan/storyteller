@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.ai import NarrationTextToSpeechAdapter
+from app.services.audio_jobs import AUDIO_RUNTIME_JOB_TYPE, AudioJobService, AudioJobServiceError
 from app.services.composition_jobs import (
     COMPOSITION_RUNTIME_JOB_TYPE,
     CompositionJobService,
@@ -23,6 +25,7 @@ def build_default_job_handler_registry(
     composition_chunk_delay_seconds: float = 0.0,
     object_storage: ObjectStorageService | None = None,
     composition_writer: CompositionSegmentWriter | None = None,
+    tts_adapter: NarrationTextToSpeechAdapter | None = None,
 ) -> JobHandlerRegistry:
     registry = JobHandlerRegistry()
     registry.register("demo.echo", demo_echo_handler)
@@ -38,6 +41,13 @@ def build_default_job_handler_registry(
             chunk_delay_seconds=composition_chunk_delay_seconds,
             object_storage=object_storage,
             composition_writer=composition_writer,
+        ),
+    )
+    registry.register(
+        AUDIO_RUNTIME_JOB_TYPE,
+        build_audio_runtime_handler(
+            object_storage=object_storage,
+            tts_adapter=tts_adapter,
         ),
     )
     return registry
@@ -118,16 +128,87 @@ def build_composition_runtime_handler(
         except Exception as exc:
             error_message = str(exc).strip() or exc.__class__.__name__
             context.with_session(
-                lambda session: CompositionJobService(
+                lambda session: _mark_composition_job_failed(
                     session,
+                    composition_job_id=composition_job_id.strip(),
+                    error_message=error_message,
                     chunk_delay_seconds=chunk_delay_seconds,
                     object_storage=object_storage,
-                    writer=composition_writer,
-                ).mark_job_failed(
-                    composition_job_id.strip(),
-                    error_message=error_message,
+                    composition_writer=composition_writer,
                 )
             )
             raise
 
     return handler
+
+
+def build_audio_runtime_handler(
+    *,
+    object_storage: ObjectStorageService | None = None,
+    tts_adapter: NarrationTextToSpeechAdapter | None = None,
+):
+    def handler(
+        payload: dict[str, Any] | list[Any] | None,
+        context: JobExecutionContext,
+    ) -> dict[str, Any]:
+        payload_dict = payload if isinstance(payload, dict) else {}
+        audio_job_id = payload_dict.get("audio_job_id")
+        if not isinstance(audio_job_id, str) or not audio_job_id.strip():
+            raise AudioJobServiceError("audio runtime jobs require an audio_job_id payload")
+
+        try:
+            return context.with_session(
+                lambda session: AudioJobService(
+                    session,
+                    object_storage=object_storage,
+                    tts_adapter=tts_adapter,
+                ).run_job(audio_job_id.strip())
+            )
+        except Exception as exc:
+            error_message = str(exc).strip() or exc.__class__.__name__
+            context.with_session(
+                lambda session: _mark_audio_job_failed(
+                    session,
+                    audio_job_id=audio_job_id.strip(),
+                    error_message=error_message,
+                    object_storage=object_storage,
+                    tts_adapter=tts_adapter,
+                )
+            )
+            raise
+
+    return handler
+
+
+def _mark_composition_job_failed(
+    session,
+    *,
+    composition_job_id: str,
+    error_message: str,
+    chunk_delay_seconds: float,
+    object_storage: ObjectStorageService | None,
+    composition_writer: CompositionSegmentWriter | None,
+) -> None:
+    CompositionJobService(
+        session,
+        chunk_delay_seconds=chunk_delay_seconds,
+        object_storage=object_storage,
+        writer=composition_writer,
+    ).mark_job_failed(composition_job_id, error_message=error_message)
+    session.commit()
+
+
+def _mark_audio_job_failed(
+    session,
+    *,
+    audio_job_id: str,
+    error_message: str,
+    object_storage: ObjectStorageService | None,
+    tts_adapter: NarrationTextToSpeechAdapter | None,
+) -> None:
+    AudioJobService(
+        session,
+        object_storage=object_storage,
+        tts_adapter=tts_adapter,
+    ).mark_job_failed(audio_job_id, error_message=error_message)
+    session.commit()

@@ -381,7 +381,7 @@ class GeminiSettings(BaseSettingsModel):
     api_key: SecretStr
     planning_model: str = "gemini-3.1-flash-lite"
     composition_model: str = "gemini-3.1-pro"
-    tts_model: str = "gemini-tts"
+    tts_model: str = "gemini-2.5-flash-preview-tts"
     approximate_pricing: "GeminiApproximatePricingSettings" = Field(
         default_factory=lambda: GeminiApproximatePricingSettings()
     )
