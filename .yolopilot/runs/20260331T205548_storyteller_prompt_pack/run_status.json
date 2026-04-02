@@ -62,9 +62,10 @@
     "59-planning-funnel-e2e-test.md",
     "60-composition-job-orchestration.md",
     "61-segmented-writing-engine.md",
-    "62-composition-streaming-events.md"
+    "62-composition-streaming-events.md",
+    "63-composition-main-pane-ui.md"
   ],
-  "current_success_ref": "5b7066e0b0b66384a3ae73953587b769a569dcbe",
+  "current_success_ref": "f5dbbdafe67b0f945557ff8e3fed64fb444fb479",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
