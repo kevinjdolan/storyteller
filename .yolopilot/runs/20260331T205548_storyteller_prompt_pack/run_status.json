@@ -37,12 +37,13 @@
     "34-ui-events-to-agent-context.md",
     "35-chat-commands-and-quick-actions.md",
     "36-conversation-memory-summaries.md",
-    "37-agent-tool-registry.md"
+    "37-agent-tool-registry.md",
+    "38-session-replay-and-resume-hydration.md"
   ],
-  "current_success_ref": "160962ecceb515e29af31d7fc29286b82c8978e3",
+  "current_success_ref": "dbd84087b07ca52c727baa8783725d7433ddb7a1",
   "failed_tasks": [],
   "finished_at": null,
-  "overall_status": "pending",
+  "overall_status": "interrupted",
   "pr_base_branch": "main",
   "pull_request_url": null,
   "run_anchor_commit": "5b48b874c118b8495c4dc0427fa5ce5835e55a46",
