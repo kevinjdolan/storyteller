@@ -68,9 +68,10 @@
     "65-interrupt-and-redirect-composition.md",
     "66-rewrite-prior-segments.md",
     "67-diff-and-compare-ui.md",
-    "68-autosave-drafts-and-partials.md"
+    "68-autosave-drafts-and-partials.md",
+    "69-composition-loop-e2e-test.md"
   ],
-  "current_success_ref": "f9f204e449065e18b7b54ee39ab14e2545616170",
+  "current_success_ref": "755cb45417406cfe9d6c9f2a2117ac718ffbb71d",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
