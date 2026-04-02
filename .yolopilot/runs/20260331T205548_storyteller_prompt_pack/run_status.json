@@ -69,9 +69,10 @@
     "66-rewrite-prior-segments.md",
     "67-diff-and-compare-ui.md",
     "68-autosave-drafts-and-partials.md",
-    "69-composition-loop-e2e-test.md"
+    "69-composition-loop-e2e-test.md",
+    "70-audio-settings-model-and-ui.md"
   ],
-  "current_success_ref": "755cb45417406cfe9d6c9f2a2117ac718ffbb71d",
+  "current_success_ref": "8455fb24d1a9fa74096356abd82aba197a26b1d7",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
