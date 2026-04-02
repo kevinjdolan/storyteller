@@ -41,9 +41,10 @@
     "38-session-replay-and-resume-hydration.md",
     "39-bridge-and-replay-tests.md",
     "40-genre-selection-api-and-ui.md",
-    "41-tone-selection-api-and-ui.md"
+    "41-tone-selection-api-and-ui.md",
+    "42-story-setup-brief-form.md"
   ],
-  "current_success_ref": "baec48c55b9620399e7634c0688a3b5d3deccf5d",
+  "current_success_ref": "64f4b88b04d45f20de61d1c6f7db71246e5f941a",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
