@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import math
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -64,10 +62,9 @@ from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
+from app.services.planning_heuristics import estimate_narration_duration_seconds
 from app.services.pitch_generation import PitchGenerationService
 from app.services.sessions import SessionNotFoundError, SessionService
-
-ESTIMATED_NARRATION_WORDS_PER_MINUTE = 140
 
 
 class StoryWorkflowToolServiceError(Exception):
@@ -1370,11 +1367,10 @@ def _side_effect(
 
 
 def _estimate_duration_seconds(word_count: int, *, playback_speed: float) -> int:
-    if word_count <= 0:
-        return 0
-
-    effective_words_per_minute = ESTIMATED_NARRATION_WORDS_PER_MINUTE * playback_speed
-    return int(math.ceil((word_count / effective_words_per_minute) * 60))
+    return estimate_narration_duration_seconds(
+        word_count,
+        playback_speed=playback_speed,
+    )
 
 
 def _stage_status(snapshot, stage: WorkflowStage) -> WorkflowStageState:
