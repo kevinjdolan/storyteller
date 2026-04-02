@@ -24,6 +24,7 @@ from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     ChatToUIActionBatch,
     ChatToUIActionType,
+    CompositionPromptAssemblyInput,
     CompositionStartMode,
     SelectionKind,
     SessionEventActor,
@@ -68,7 +69,8 @@ from app.models.story_tools import (
 )
 from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
-from app.services.continuity import SessionContinuityService, build_continuity_payload
+from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
+from app.services.continuity import SessionContinuityService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
 from app.services.outline_generation import StoryOutlineGenerationService
@@ -652,6 +654,7 @@ class StoryWorkflowToolService:
         self._registry = registry or get_story_workflow_tool_registry()
         self._sessions = SessionService(session)
         self._continuity = SessionContinuityService(session)
+        self._composition_prompt_assembly = CompositionPromptAssemblyService(session)
         self._events = SessionEventLogService(session)
         self._plan_revisions = PlanRevisionService(session)
         self._jobs = BackgroundJobService(session)
@@ -1167,17 +1170,19 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a new composition pass started.",
         )
-        continuity_bible = self._continuity.refresh_for_session(
-            session_id,
-            source_stage=WorkflowStage.COMPOSITION,
-            source_summary="Prepared composition context from the current continuity bible.",
-        )
         next_segment_index = request.restart_from_segment_index or self._next_segment_index(
             session_id
         )
-        selected_outline = self._get_selected_story_outline_row(session_id)
-        outline_card_metadata = _resolve_outline_card_metadata(selected_outline, next_segment_index)
-        continuity_payload = build_continuity_payload(continuity_bible)
+        assembled_prompt = self._composition_prompt_assembly.assemble_prompt_package(
+            CompositionPromptAssemblyInput(
+                session_id=session_id,
+                job_kind=CompositionJobKind.DRAFT.value,
+                segment_index=next_segment_index,
+                instructions=request.instructions,
+                restart_from_segment_index=request.restart_from_segment_index,
+            )
+        )
+        prompt_storage_payload = assembled_prompt.build_storage_payload()
         plan_revision = self._plan_revisions.ensure_current_revision(
             session_id,
             source_stage=WorkflowStage.STORY_SETUP,
@@ -1194,8 +1199,7 @@ class StoryWorkflowToolService:
             current_segment_index=next_segment_index,
             metadata_json={
                 **request.model_dump(mode="json", exclude_none=True),
-                **outline_card_metadata,
-                **continuity_payload,
+                **prompt_storage_payload,
             },
             started_at=utc_now(),
         )
@@ -1208,15 +1212,10 @@ class StoryWorkflowToolService:
             segment_index=next_segment_index,
             revision_number=self._next_segment_revision(session_id, next_segment_index),
             status=JobStatus.IN_PROGRESS,
-            planned_summary=(
-                request.instructions
-                or outline_card_metadata.get("outline_card_drafting_brief")
-                or outline_card_metadata.get("outline_card_summary")
-            ),
+            planned_summary=assembled_prompt.dynamic_context.segment_goal_summary,
             payload={
                 **request.model_dump(mode="json", exclude_none=True),
-                **outline_card_metadata,
-                **continuity_payload,
+                **prompt_storage_payload,
             },
         )
         self._session.add(segment)
@@ -1238,7 +1237,7 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     f"Composing segment {next_segment_index}.",
-                    outline_card_metadata.get("outline_card_title"),
+                    assembled_prompt.debug_context.outline_card_title,
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),
@@ -1275,17 +1274,16 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a rewrite pass started.",
         )
-        continuity_bible = self._continuity.refresh_for_session(
-            session_id,
-            source_stage=WorkflowStage.COMPOSITION,
-            source_summary="Prepared rewrite context from the current continuity bible.",
+        assembled_prompt = self._composition_prompt_assembly.assemble_prompt_package(
+            CompositionPromptAssemblyInput(
+                session_id=session_id,
+                job_kind=CompositionJobKind.REWRITE.value,
+                segment_index=request.rewrite_from_segment_index,
+                instructions=request.instructions,
+                rewrite_from_segment_index=request.rewrite_from_segment_index,
+            )
         )
-        selected_outline = self._get_selected_story_outline_row(session_id)
-        outline_card_metadata = _resolve_outline_card_metadata(
-            selected_outline,
-            request.rewrite_from_segment_index,
-        )
-        continuity_payload = build_continuity_payload(continuity_bible)
+        prompt_storage_payload = assembled_prompt.build_storage_payload()
         plan_revision = self._plan_revisions.ensure_current_revision(
             session_id,
             source_stage=WorkflowStage.STORY_SETUP,
@@ -1302,8 +1300,7 @@ class StoryWorkflowToolService:
             current_segment_index=request.rewrite_from_segment_index,
             metadata_json={
                 **request.model_dump(mode="json", exclude_none=True),
-                **outline_card_metadata,
-                **continuity_payload,
+                **prompt_storage_payload,
             },
             started_at=utc_now(),
         )
@@ -1319,13 +1316,10 @@ class StoryWorkflowToolService:
                 request.rewrite_from_segment_index,
             ),
             status=JobStatus.IN_PROGRESS,
-            planned_summary=request.instructions
-            or outline_card_metadata.get("outline_card_drafting_brief")
-            or outline_card_metadata.get("outline_card_summary"),
+            planned_summary=assembled_prompt.dynamic_context.segment_goal_summary,
             payload={
                 **request.model_dump(mode="json", exclude_none=True),
-                **outline_card_metadata,
-                **continuity_payload,
+                **prompt_storage_payload,
             },
         )
         self._session.add(segment)
@@ -1347,7 +1341,7 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     f"Rewriting from segment {request.rewrite_from_segment_index}.",
-                    outline_card_metadata.get("outline_card_title"),
+                    assembled_prompt.debug_context.outline_card_title,
                     _optional_detail("Instructions", request.instructions),
                 ]
             ),

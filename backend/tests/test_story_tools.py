@@ -398,8 +398,22 @@ def test_story_workflow_tool_service_seeds_composition_segments_from_outline_car
     assert job.metadata_json["outline_card_title"].startswith("Chapter 1:")
     assert job.metadata_json["continuity_bible_id"]
     assert job.metadata_json["continuity_summary"]
+    assert job.metadata_json["composition_prompt"]["assembly_version"] == (
+        "composition_prompt_assembly.v1"
+    )
+    assert (
+        "Stage focus for composition"
+        in job.metadata_json["composition_prompt"]["system_instructions"][
+            "bedtime_guidelines_fragment"
+        ]
+    )
+    assert (
+        job.metadata_json["composition_prompt"]["dynamic_context"]["genre"]["label"]
+        == "Quest Fantasy"
+    )
     assert segment.payload["continuity_bible_id"] == job.metadata_json["continuity_bible_id"]
     assert any(fact["category"] == "promise" for fact in segment.payload["continuity_facts"])
+    assert segment.payload["composition_prompt"]["debug_context"]["outline_card_key"] == "chapter-1"
     assert segment.planned_summary is not None
     assert "Chapter 1" in job.metadata_json["outline_card_title"]
 
@@ -467,6 +481,14 @@ def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
         fact["category"] == "voice_constraint" for fact in segment.payload["continuity_facts"]
     )
     assert (
+        job.metadata_json["composition_prompt"]["dynamic_context"]["outline_card"]["card_key"]
+        == "chapter-1"
+    )
+    assert (
+        job.metadata_json["composition_prompt"]["dynamic_context"]["segment_goal_summary"]
+        == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."
+    )
+    assert (
         segment.planned_summary
         == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."
     )
@@ -474,6 +496,33 @@ def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
         segment.payload["outline_card_drafting_brief"]
         == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."
     )
+
+
+def test_story_workflow_tool_service_persists_rewrite_prompt_package(db_session) -> None:
+    seeded = _seed_story_setup_session(db_session)
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
+        session_id=seeded["session_id"],
+        arguments={
+            "instructions": "Soften the midpoint and make the support visible sooner.",
+            "rewrite_from_segment_index": 2,
+        },
+    )
+
+    job = db_session.get(CompositionJob, result.composition_job_id)
+    segment = db_session.get(CompositionSegment, result.segment_id)
+
+    assert job is not None
+    assert segment is not None
+    assert job.metadata_json["composition_prompt"]["dynamic_context"]["job_kind"] == "rewrite"
+    assert job.metadata_json["composition_prompt"]["dynamic_context"]["segment_index"] == 2
+    assert (
+        job.metadata_json["composition_prompt"]["dynamic_context"]["request_instructions"]
+        == "Soften the midpoint and make the support visible sooner."
+    )
+    assert job.metadata_json["outline_card_key"] == "chapter-2"
+    assert segment.planned_summary == "Soften the midpoint and make the support visible sooner."
 
 
 def test_eval_outline_edit_revisions_keep_locked_structure_and_refresh_downstream(

@@ -28,6 +28,10 @@ from app.services.character_generation import (
     build_character_model_output,
     evaluate_character_sheet_batch,
 )
+from app.services.composition_prompt_assembly import (
+    CompositionPromptAssemblyService,
+    CompositionPromptAssemblyServiceError,
+)
 from app.services.continuity import SessionContinuityService, build_continuity_payload
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
@@ -86,6 +90,8 @@ __all__ = [
     "BriefNormalizationService",
     "CharacterGenerationService",
     "ClaimedBackgroundJob",
+    "CompositionPromptAssemblyService",
+    "CompositionPromptAssemblyServiceError",
     "SessionContinuityService",
     "InvalidStageTransitionError",
     "PitchGenerationService",
