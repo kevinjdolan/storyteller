@@ -275,6 +275,79 @@ const sampleGenreCatalog = [
   },
 ] as const
 
+const sampleToneCatalogByGenre = {
+  'quest-fantasy': [
+    {
+      id: 'tone-1',
+      genre_id: 'genre-1',
+      slug: 'hushed-wonder',
+      label: 'Hushed Wonder',
+      description:
+        'Moonlit awe, soft magic, and quiet courage lead the adventure.',
+      bedtime_notes:
+        'Avoid sharp reversals or loud triumph; let discoveries feel luminous and safe.',
+      descriptors: ['luminous', 'moonlit', 'gentle', 'reverent'],
+      default_planning_hints: {
+        pacing: 'unhurried',
+        conflict_style:
+          'obstacles yield through patience, observation, or kindness',
+        sensory_motifs: ['lantern light', 'silver water', 'whispering leaves'],
+        ending_style: 'return home carrying a small token of wonder',
+      },
+      sort_order: 0,
+    },
+    {
+      id: 'tone-2',
+      genre_id: 'genre-1',
+      slug: 'lantern-brave',
+      label: 'Lantern Brave',
+      description:
+        'A steadier, more active quest tone where bravery feels cozy instead of intense.',
+      bedtime_notes:
+        "Keep the hero's courage rooted in reassurance from mentors, companions, or familiar rituals.",
+      descriptors: [
+        'steady',
+        'reassuring',
+        'warmhearted',
+        'lightly adventurous',
+      ],
+      default_planning_hints: {
+        pacing: 'steady',
+        conflict_style:
+          'one central problem solved through teamwork and persistence',
+        sensory_motifs: ['lantern glow', 'packed satchel', 'firelit path'],
+        ending_style: 'celebrate quietly, then settle into rest',
+      },
+      sort_order: 1,
+    },
+  ],
+  'gentle-mystery': [
+    {
+      id: 'tone-3',
+      genre_id: 'genre-2',
+      slug: 'cozy-sleuthing',
+      label: 'Cozy Sleuthing',
+      description:
+        'Homey detective energy with snacks, family, and friendly helpers in the loop.',
+      bedtime_notes:
+        'Let the investigation happen in familiar spaces with emotionally available companions.',
+      descriptors: ['homey', 'playful', 'reassuring', 'neighborly'],
+      default_planning_hints: {
+        pacing: 'brisk enough to feel engaging, but never frantic',
+        conflict_style:
+          'clues are solved through conversation, memory, and shared effort',
+        sensory_motifs: ['kitchen light', 'padded footsteps', 'sleepy pets'],
+        ending_style: 'finish with everyone gathered and content',
+      },
+      sort_order: 0,
+    },
+  ],
+} as const
+
+const allSampleToneCatalogEntries = Object.values(
+  sampleToneCatalogByGenre,
+).flat()
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -457,6 +530,104 @@ function buildGenreSelectionResponse(body: Record<string, unknown>) {
   }
 }
 
+function buildToneSelectionResponse(body: Record<string, unknown>) {
+  const requestedTone =
+    allSampleToneCatalogEntries.find(
+      (tone) => tone.id === body.tone_profile_id,
+    ) ??
+    allSampleToneCatalogEntries.find(
+      (tone) => tone.slug === body.tone_profile_slug,
+    ) ??
+    allSampleToneCatalogEntries.find(
+      (tone) => tone.label === body.tone_profile_label,
+    ) ??
+    sampleToneCatalogByGenre['quest-fantasy'][0]
+  const requestedGenre =
+    sampleGenreCatalog.find((genre) => genre.id === requestedTone.genre_id) ??
+    sampleGenreCatalog[0]
+
+  return {
+    snapshot: {
+      ...sampleSnapshot,
+      current_stage: 'brief',
+      resume_stage: 'brief',
+      furthest_completed_stage: 'tone',
+      overall_status: 'in_progress',
+      updated_at: '2026-04-01T05:17:00Z',
+      selected_genre: {
+        id: requestedGenre.id,
+        slug: requestedGenre.slug,
+        label: requestedGenre.label,
+      },
+      selected_tone_profile: {
+        id: requestedTone.id,
+        slug: requestedTone.slug,
+        label: requestedTone.label,
+      },
+      progress: {
+        total_stages: 10,
+        completed_stages: 2,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => {
+        if (index === 0) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Selected genre: ${requestedGenre.label}. Tone choices filter from this lane next.`,
+            last_event_summary: `Selected genre: ${requestedGenre.label}.`,
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:16:00Z',
+          }
+        }
+
+        if (index === 1) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Selected tone: ${requestedTone.label}. The story brief will inherit this bedtime texture.`,
+            last_event_summary: `Selected tone profile: ${requestedTone.label}.`,
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:17:00Z',
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    },
+    event: {
+      id: 'tone-selection-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 11,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'tone',
+      summary: `Selected tone profile: ${requestedTone.label}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'tone_profile',
+        selection_id: requestedTone.id,
+        slug: requestedTone.slug,
+        label: requestedTone.label,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+      },
+      created_at: '2026-04-01T05:17:00Z',
+    },
+  }
+}
+
 function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
   const explicitCommand =
     typeof requestBody.explicit_command === 'object' &&
@@ -536,6 +707,10 @@ function mockWorkspaceApi(options?: {
   genreSelectionResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
+  toneCatalogByGenre?: Record<string, unknown>
+  toneSelectionResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   history?: unknown
   hydration?: unknown
   hydrationStatus?: number
@@ -545,6 +720,9 @@ function mockWorkspaceApi(options?: {
 }) {
   const history = options?.history ?? sampleHistory
   const genreCatalog = options?.genreCatalog ?? sampleGenreCatalog
+  const toneCatalogByGenre: Record<string, unknown> =
+    options?.toneCatalogByGenre ??
+    (sampleToneCatalogByGenre as unknown as Record<string, unknown>)
   const hydration =
     options?.hydration ??
     ({
@@ -554,8 +732,11 @@ function mockWorkspaceApi(options?: {
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
   const genreSelectionRequests: Record<string, unknown>[] = []
+  const toneSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionResponse =
     options?.genreSelectionResponse ?? buildGenreSelectionResponse
+  const toneSelectionResponse =
+    options?.toneSelectionResponse ?? buildToneSelectionResponse
   const chatIntentResponse = options?.chatIntentResponse ?? {
     schema_version: 1,
     status: 'parsed',
@@ -613,6 +794,20 @@ function mockWorkspaceApi(options?: {
         (init?.method == null || init.method === 'GET')
       ) {
         return Promise.resolve(buildJsonResponse(200, genreCatalog))
+      }
+
+      const toneCatalogMatch = pathname.match(
+        /^\/api\/v1\/catalog\/genres\/([^/]+)\/tones$/,
+      )
+
+      if (
+        toneCatalogMatch != null &&
+        (init?.method == null || init.method === 'GET')
+      ) {
+        const genreSlug = decodeURIComponent(toneCatalogMatch[1] ?? '')
+        return Promise.resolve(
+          buildJsonResponse(200, toneCatalogByGenre[genreSlug] ?? []),
+        )
       }
 
       if (
@@ -684,6 +879,25 @@ function mockWorkspaceApi(options?: {
         )
       }
 
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/selections/tone' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        toneSelectionRequests.push(requestBody)
+        const resolvedToneSelectionResponse =
+          typeof toneSelectionResponse === 'function'
+            ? toneSelectionResponse(requestBody)
+            : toneSelectionResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedToneSelectionResponse),
+        )
+      }
+
       throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
     }),
   )
@@ -691,6 +905,7 @@ function mockWorkspaceApi(options?: {
   return {
     chatIntentRequests,
     genreSelectionRequests,
+    toneSelectionRequests,
   }
 }
 
@@ -869,6 +1084,116 @@ describe('SessionWorkspacePage', () => {
     ])
   })
 
+  it('renders tone cards from the filtered catalog and persists a selected tone', async () => {
+    const toneStageSnapshot = {
+      ...sampleSnapshot,
+      current_stage: 'tone',
+      resume_stage: 'tone',
+      furthest_completed_stage: 'genre',
+      overall_status: 'in_progress',
+      selected_tone_profile: null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 1,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      story_brief: null,
+      selected_pitch: null,
+      selected_story_setup: null,
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => {
+        if (index === 0) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail:
+              'Selected genre: Quest Fantasy. Tone choices filter from this lane next.',
+            last_event_summary: 'Selected genre: Quest Fantasy.',
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:16:00Z',
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    } as const
+    const toneStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 2,
+      events: [sampleHistory.events[0], sampleHistory.events[1]],
+    } as const
+
+    const { toneSelectionRequests } = mockWorkspaceApi({
+      history: toneStageHistory,
+      hydration: {
+        snapshot: toneStageSnapshot,
+        recent_history: toneStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 2,
+          history_event_count: 2,
+          materialized_through_sequence_number: 2,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Tune the bedtime mood',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 3,
+        name: 'Hushed Wonder',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Lantern Brave' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Cozy Sleuthing')).not.toBeInTheDocument()
+
+    const hushedWonderCard = screen
+      .getByText('Hushed Wonder')
+      .closest('article')
+    expect(hushedWonderCard).not.toBeNull()
+
+    fireEvent.click(
+      within(hushedWonderCard as HTMLElement).getByRole('button', {
+        name: 'Choose tone',
+      }),
+    )
+
+    expect(
+      await screen.findByText('Selected tone: Hushed Wonder'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Capture the free-form story brief',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Quest Fantasy / Hushed Wonder'),
+    ).toBeInTheDocument()
+    expect(toneSelectionRequests).toEqual([
+      {
+        tone_profile_id: 'tone-1',
+        origin: 'workspace',
+      },
+    ])
+  })
+
   it('supports route-backed stage preview without changing the durable current step', async () => {
     mockWorkspaceApi()
 
@@ -948,6 +1273,145 @@ describe('SessionWorkspacePage', () => {
         name: 'Configure narration and music',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('applies accepted chat-driven tone selections through the workspace runtime', async () => {
+    const toneStageSnapshot = {
+      ...sampleSnapshot,
+      current_stage: 'tone',
+      resume_stage: 'tone',
+      furthest_completed_stage: 'genre',
+      overall_status: 'in_progress',
+      selected_tone_profile: null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 1,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      story_brief: null,
+      selected_pitch: null,
+      selected_story_setup: null,
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => {
+        if (index === 0) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail:
+              'Selected genre: Quest Fantasy. Tone choices filter from this lane next.',
+            last_event_summary: 'Selected genre: Quest Fantasy.',
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:16:00Z',
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    } as const
+    const toneStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 2,
+      events: [sampleHistory.events[0], sampleHistory.events[1]],
+    } as const
+
+    const { toneSelectionRequests } = mockWorkspaceApi({
+      history: toneStageHistory,
+      hydration: {
+        snapshot: toneStageSnapshot,
+        recent_history: toneStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 2,
+          history_event_count: 2,
+          materialized_through_sequence_number: 2,
+        },
+      },
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response:
+          'I can shift the mood to Hushed Wonder before we draft the brief.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'select_tone',
+              target_stage: 'tone',
+              confidence: 0.93,
+              rationale:
+                'The user explicitly asked for the hush-and-wonder tone.',
+              requires_confirmation: false,
+              extracted_values: {
+                tone_profile_slug: 'hushed-wonder',
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'select_tone',
+              target_stage: 'tone',
+              decision: 'accepted',
+              summary: 'Tone selection is allowed.',
+              reasons: [],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: 'Make it feel like hushed wonder.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      within(screen.getByRole('log')).getByText(
+        'Make it feel like hushed wonder.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'I can shift the mood to Hushed Wonder before we draft the brief.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('Selected tone: Hushed Wonder'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Capture the free-form story brief',
+      }),
+    ).toBeInTheDocument()
+    expect(toneSelectionRequests).toEqual([
+      {
+        tone_profile_slug: 'hushed-wonder',
+        origin: 'chat',
+      },
+    ])
   })
 
   it('shows rejected chat-driven action echoes without mutating the visible workspace stage', async () => {

@@ -75,7 +75,9 @@ function buildRequiresConfirmation(actionType: ChatToUiAction['action_type']) {
   return getChatToUiActionDefaultPolicy(actionType) === 'confirm_first'
 }
 
-function buildNavigateToStageAction(targetStage: WorkflowStageId): ChatToUiAction {
+function buildNavigateToStageAction(
+  targetStage: WorkflowStageId,
+): ChatToUiAction {
   return {
     schema_version: CHAT_TO_UI_ACTION_SCHEMA_VERSION,
     action_type: 'navigate_to_stage',
@@ -172,7 +174,9 @@ const commandDefinitions: ReadonlyArray<SessionChatCommandDefinition> = [
       resolveNextStageId(selectedStageId) != null,
     buildActions: ({ selectedStageId }) => {
       const nextStageId = resolveNextStageId(selectedStageId)
-      return nextStageId == null ? [] : [buildNavigateToStageAction(nextStageId)]
+      return nextStageId == null
+        ? []
+        : [buildNavigateToStageAction(nextStageId)]
     },
   },
   {

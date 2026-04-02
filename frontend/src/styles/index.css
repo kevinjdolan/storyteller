@@ -898,13 +898,24 @@ h4 {
   align-items: stretch;
 }
 
+.tone-selection-grid {
+  align-items: stretch;
+}
+
 .genre-selection-card__facts {
   display: grid;
   gap: var(--space-3);
   margin: 0;
 }
 
-.genre-selection-card__facts div {
+.tone-selection-card__facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.genre-selection-card__facts div,
+.tone-selection-card__facts div {
   display: grid;
   gap: var(--space-1);
   padding: 0.85rem 0.95rem;
@@ -912,7 +923,8 @@ h4 {
   background: rgba(255, 255, 255, 0.7);
 }
 
-.genre-selection-card__facts dt {
+.genre-selection-card__facts dt,
+.tone-selection-card__facts dt {
   margin: 0;
   color: var(--color-ink-muted);
   font-size: 0.76rem;
@@ -921,21 +933,51 @@ h4 {
   text-transform: uppercase;
 }
 
-.genre-selection-card__facts dd {
+.genre-selection-card__facts dd,
+.tone-selection-card__facts dd {
   margin: 0;
   color: var(--color-ink-strong);
 }
 
-.genre-selection-card__footer {
+.genre-selection-card__footer,
+.tone-selection-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
 }
 
-.genre-selection-card__footer p {
+.genre-selection-card__footer p,
+.tone-selection-card__footer p {
   margin: 0;
   color: var(--color-ink-soft);
+}
+
+.tone-selection-card__descriptors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tone-selection-card__motifs {
+  display: grid;
+  gap: var(--space-1);
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.tone-selection-card__motifs span {
+  color: var(--color-ink-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tone-selection-card__motifs p {
+  margin: 0;
+  color: var(--color-ink-strong);
 }
 
 .inline-help {
@@ -2168,6 +2210,7 @@ h4 {
   .session-card__header,
   .session-card__title-row,
   .genre-selection-card__footer,
+  .tone-selection-card__footer,
   .cta-row,
   .feedback-banner__header,
   .feedback-banner__actions,

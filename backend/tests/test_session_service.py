@@ -498,7 +498,9 @@ def test_select_tone_invalidates_brief_and_later_stages_when_changed(db_session)
     assert updated_snapshot.resume_stage == WorkflowStage.BRIEF
     assert stage_map[WorkflowStage.TONE].status == WorkflowStageState.COMPLETED
     assert stage_map[WorkflowStage.TONE].last_event_type == "selection.recorded"
-    assert stage_map[WorkflowStage.TONE].last_event_summary == "Selected tone profile: Lantern Brave."
+    assert stage_map[WorkflowStage.TONE].last_event_summary == (
+        "Selected tone profile: Lantern Brave."
+    )
     assert stage_map[WorkflowStage.BRIEF].status == WorkflowStageState.NEEDS_REGENERATION
     assert stage_map[WorkflowStage.BRIEF].detail == (
         "Tone changed to Lantern Brave. Revisit the brief and any downstream planning."

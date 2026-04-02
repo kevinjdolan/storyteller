@@ -176,7 +176,9 @@ export function SessionChatPane({
     await submitDraft()
   }
 
-  async function runQuickAction(commandId: SessionChatQuickAction['commandId']) {
+  async function runQuickAction(
+    commandId: SessionChatQuickAction['commandId'],
+  ) {
     if (isSubmitting || disabledReason != null || onQuickAction == null) {
       return
     }

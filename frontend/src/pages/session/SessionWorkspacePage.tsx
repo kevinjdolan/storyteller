@@ -1,6 +1,6 @@
 import { type MouseEvent, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { selectSessionGenre } from '../../api/catalog.ts'
+import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
   parseSessionChatIntent,
@@ -12,6 +12,7 @@ import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
+import { ToneSelectionStage } from '../../features/session/ToneSelectionStage.tsx'
 import {
   useSessionChatMessages,
   useCurrentSessionHydrationQuery,
@@ -716,6 +717,44 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyToneSelection(options: {
+    origin: string
+    previewCurrentStage?: boolean
+    toneProfileId?: string | null
+    toneProfileLabel?: string | null
+    toneProfileSlug?: string | null
+  }) {
+    const requestBody =
+      options.toneProfileId != null
+        ? {
+            tone_profile_id: options.toneProfileId,
+            origin: options.origin,
+          }
+        : options.toneProfileSlug != null
+          ? {
+              tone_profile_slug: options.toneProfileSlug,
+              origin: options.origin,
+            }
+          : {
+              tone_profile_label: options.toneProfileLabel ?? null,
+              origin: options.origin,
+            }
+
+    const result = await selectSessionTone<
+      SessionSnapshot,
+      SessionHistoryEvent
+    >(sessionId, requestBody)
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -734,6 +773,16 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         genreId: action.extracted_values.genre_id ?? null,
         genreLabel: action.extracted_values.genre_label ?? null,
         genreSlug: action.extracted_values.genre_slug ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'select_tone') {
+      await applyToneSelection({
+        toneProfileId: action.extracted_values.tone_profile_id ?? null,
+        toneProfileLabel: action.extracted_values.tone_profile_label ?? null,
+        toneProfileSlug: action.extracted_values.tone_profile_slug ?? null,
         origin: 'chat',
       })
       return
@@ -808,6 +857,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         action == null ||
         (action.action_type !== 'navigate_to_stage' &&
           action.action_type !== 'select_genre' &&
+          action.action_type !== 'select_tone' &&
           action.action_type !== 'open_finalize_view')
       ) {
         continue
@@ -1083,6 +1133,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 <GenreSelectionStage
                   onPreviewStage={setPreviewStage}
                   onSelectGenre={applyGenreSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'tone' ? (
+                <ToneSelectionStage
+                  onPreviewStage={setPreviewStage}
+                  onSelectTone={applyToneSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />

@@ -218,9 +218,7 @@ export type SessionExplicitChatCommandId =
   | 'pause_writing'
   | 'resume_writing'
 
-export type SessionExplicitChatCommandSource =
-  | 'slash_command'
-  | 'quick_action'
+export type SessionExplicitChatCommandSource = 'slash_command' | 'quick_action'
 
 export type SessionExplicitChatCommand = {
   command_id: SessionExplicitChatCommandId
