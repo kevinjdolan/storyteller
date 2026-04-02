@@ -26,6 +26,10 @@ from app.db import (
     CompositionSegmentAcceptanceState,
     Genre,
     JobStatus,
+    NarrationMusicTransitionHint,
+    NarrationPauseHint,
+    NarrationSegment,
+    NarrationSourceBoundaryKind,
     Pitch,
     SessionAsset,
     StoryBrief,
@@ -688,6 +692,46 @@ def test_story_workflow_tool_service_estimates_audio_length_from_segments(db_ses
     assert result.estimated_word_count == 400
     assert result.estimated_duration_seconds == 215
     assert result.basis_source == "composition_segments"
+
+
+def test_story_workflow_tool_service_creates_durable_narration_segments(db_session) -> None:
+    seeded = _seed_story_setup_session(
+        db_session,
+        mark_composition_completed=True,
+        composition_segment_word_counts=[240, 160, 180],
+    )
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+
+    audio_job = db_session.get(AudioJob, result.audio_job_id)
+    narration_segments = list(
+        db_session.execute(
+            select(NarrationSegment)
+            .where(NarrationSegment.audio_job_id == result.audio_job_id)
+            .order_by(NarrationSegment.segment_index.asc())
+        ).scalars()
+    )
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+
+    assert audio_job is not None
+    assert audio_job.current_segment_index == 1
+    assert audio_job.config_json["total_segments"] == 3
+    assert audio_job.config_json["narration_plan_version"] == "narration_segments.v1"
+    assert len(narration_segments) == 3
+    assert [segment.segment_index for segment in narration_segments] == [1, 2, 3]
+    assert narration_segments[0].source_boundary_kind == NarrationSourceBoundaryKind.CHAPTER
+    assert narration_segments[0].pause_hint == NarrationPauseHint.CHAPTER_BREAK
+    assert narration_segments[1].pause_after_seconds == 3
+    assert narration_segments[-1].music_transition_hint == (
+        NarrationMusicTransitionHint.END_STORY
+    )
+    assert snapshot.active_audio_job is not None
+    assert snapshot.active_audio_job.total_segments == 3
+    assert snapshot.active_audio_job.current_segment_index == 1
 
 
 def test_story_workflow_tool_service_updates_story_outline_and_tracks_revision(

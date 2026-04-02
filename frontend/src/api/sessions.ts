@@ -420,6 +420,7 @@ export type AudioJobView = {
   include_background_music?: boolean
   music_profile?: string | null
   estimated_duration_seconds?: number | null
+  total_segments?: number | null
   current_segment_index?: number | null
   attempt_count?: number
   stop_reason?: string | null

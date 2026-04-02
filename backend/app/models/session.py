@@ -353,6 +353,7 @@ class AudioJobView(BaseModel):
     include_background_music: bool
     music_profile: str | None = None
     estimated_duration_seconds: int | None = None
+    total_segments: int | None = None
     current_segment_index: int | None = None
     attempt_count: int
     stop_reason: str | None = None

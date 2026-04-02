@@ -55,6 +55,11 @@ from app.services.jobs import (
     BackgroundJobServiceError,
     ClaimedBackgroundJob,
 )
+from app.services.narration_segmentation import (
+    NarrationPlanResult,
+    NarrationSegmentationError,
+    NarrationSegmentationService,
+)
 from app.services.outline_generation import (
     StoryOutlineGenerationService,
     StoryOutlineGenerationServiceError,
@@ -112,6 +117,9 @@ __all__ = [
     "GeminiCompositionSegmentWriter",
     "SessionContinuityService",
     "InvalidStageTransitionError",
+    "NarrationPlanResult",
+    "NarrationSegmentationError",
+    "NarrationSegmentationService",
     "PitchGenerationService",
     "StoryOutlineGenerationService",
     "StoryOutlineGenerationServiceError",

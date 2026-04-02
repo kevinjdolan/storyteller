@@ -78,6 +78,24 @@ class CompositionSegmentAcceptanceState(str, Enum):
     REJECTED = "rejected"
 
 
+class NarrationSourceBoundaryKind(str, Enum):
+    CHAPTER = "chapter"
+    SCENE = "scene"
+    SEGMENT = "segment"
+    UNKNOWN = "unknown"
+
+
+class NarrationPauseHint(str, Enum):
+    NONE = "none"
+    CHAPTER_BREAK = "chapter_break"
+
+
+class NarrationMusicTransitionHint(str, Enum):
+    CONTINUE_BED = "continue_bed"
+    SOFT_RESET = "soft_reset"
+    END_STORY = "end_story"
+
+
 class AssetKind(str, Enum):
     DRAFT_TEXT_SNAPSHOT = "draft_text_snapshot"
     COMPOSITION_SEGMENT = "composition_segment"
@@ -114,6 +132,18 @@ COMPOSITION_INTERRUPTION_STATE_ENUM = build_enum(
 COMPOSITION_SEGMENT_ACCEPTANCE_STATE_ENUM = build_enum(
     CompositionSegmentAcceptanceState,
     "composition_segment_acceptance_state",
+)
+NARRATION_SOURCE_BOUNDARY_KIND_ENUM = build_enum(
+    NarrationSourceBoundaryKind,
+    "narration_source_boundary_kind",
+)
+NARRATION_PAUSE_HINT_ENUM = build_enum(
+    NarrationPauseHint,
+    "narration_pause_hint",
+)
+NARRATION_MUSIC_TRANSITION_HINT_ENUM = build_enum(
+    NarrationMusicTransitionHint,
+    "narration_music_transition_hint",
 )
 ASSET_KIND_ENUM = build_enum(AssetKind, "asset_kind")
 ASSET_STATUS_ENUM = build_enum(AssetStatus, "asset_status")
@@ -263,6 +293,10 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
     audio_jobs: Mapped[list["AudioJob"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    narration_segments: Mapped[list["NarrationSegment"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )
@@ -1084,10 +1118,79 @@ class AudioJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     session: Mapped["StorySession"] = relationship(back_populates="audio_jobs")
     source_composition_job: Mapped["CompositionJob | None"] = relationship()
+    narration_segments: Mapped[list["NarrationSegment"]] = relationship(
+        back_populates="audio_job",
+        cascade="all, delete-orphan",
+        order_by="NarrationSegment.segment_index",
+    )
     assets: Mapped[list["SessionAsset"]] = relationship(back_populates="audio_job")
 
     __table_args__ = (
         Index("ix_audio_jobs_session_id_status_created_at", "session_id", "status", "created_at"),
+    )
+
+
+class NarrationSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "narration_segments"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    audio_job_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("audio_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_composition_segment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("composition_segments.id", ondelete="SET NULL"),
+    )
+    segment_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[JobStatus] = mapped_column(
+        JOB_STATUS_ENUM,
+        nullable=False,
+        default=JobStatus.QUEUED,
+    )
+    source_boundary_kind: Mapped[NarrationSourceBoundaryKind] = mapped_column(
+        NARRATION_SOURCE_BOUNDARY_KIND_ENUM,
+        nullable=False,
+        default=NarrationSourceBoundaryKind.UNKNOWN,
+    )
+    source_outline_card_key: Mapped[str | None] = mapped_column(String(160))
+    source_outline_card_title: Mapped[str | None] = mapped_column(String(255))
+    text_content: Mapped[str] = mapped_column(Text, nullable=False)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    text_start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    text_end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    pause_after_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pause_hint: Mapped[NarrationPauseHint] = mapped_column(
+        NARRATION_PAUSE_HINT_ENUM,
+        nullable=False,
+        default=NarrationPauseHint.NONE,
+    )
+    music_transition_hint: Mapped[NarrationMusicTransitionHint] = mapped_column(
+        NARRATION_MUSIC_TRANSITION_HINT_ENUM,
+        nullable=False,
+        default=NarrationMusicTransitionHint.CONTINUE_BED,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped["StorySession"] = relationship(back_populates="narration_segments")
+    audio_job: Mapped["AudioJob"] = relationship(back_populates="narration_segments")
+    source_composition_segment: Mapped["CompositionSegment | None"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "audio_job_id",
+            "segment_index",
+            name="uq_narration_segments_audio_job_segment",
+        ),
+        Index("ix_narration_segments_session_id_status", "session_id", "status"),
+        Index("ix_narration_segments_audio_job_id_status", "audio_job_id", "status"),
     )
 
 

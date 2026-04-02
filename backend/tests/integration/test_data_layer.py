@@ -42,6 +42,7 @@ EXPECTED_TABLES = {
     "composition_segments",
     "event_log_entries",
     "genres",
+    "narration_segments",
     "pitches",
     "session_memory_snapshots",
     "session_assets",
@@ -133,6 +134,29 @@ EXPECTED_COMPOSITION_SEGMENT_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_NARRATION_SEGMENT_COLUMNS = {
+    "id",
+    "session_id",
+    "audio_job_id",
+    "source_composition_segment_id",
+    "segment_index",
+    "status",
+    "source_boundary_kind",
+    "source_outline_card_key",
+    "source_outline_card_title",
+    "text_content",
+    "word_count",
+    "text_start_offset",
+    "text_end_offset",
+    "pause_after_seconds",
+    "pause_hint",
+    "music_transition_hint",
+    "error_message",
+    "metadata_json",
+    "completed_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -188,6 +212,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
         database_url,
         "composition_segments",
     )
+    assert EXPECTED_NARRATION_SEGMENT_COLUMNS <= _column_names(
+        database_url,
+        "narration_segments",
+    )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,
         "session_memory_snapshots",
@@ -205,6 +233,10 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _column_names(
         database_url,
         "composition_segments",
+    )
+    assert EXPECTED_NARRATION_SEGMENT_COLUMNS <= _column_names(
+        database_url,
+        "narration_segments",
     )
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,

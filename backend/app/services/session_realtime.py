@@ -473,7 +473,7 @@ class SessionRealtimeService:
     ) -> SessionRealtimeEvent:
         job = self._session.get(AudioJob, payload.job_id)
         status = RealtimeJobStatus(payload.status)
-        total_segments = payload.total_segments
+        total_segments = payload.total_segments or _read_metadata_int(job, "total_segments")
         message = _build_audio_message(
             estimated_duration_seconds=payload.estimated_duration_seconds,
             progress_percent=payload.progress_percent,

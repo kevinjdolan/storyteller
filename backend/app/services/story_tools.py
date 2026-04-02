@@ -74,6 +74,10 @@ from app.services.composition_jobs import CompositionJobService
 from app.services.continuity import SessionContinuityService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
+from app.services.narration_segmentation import (
+    NarrationSegmentationError,
+    NarrationSegmentationService,
+)
 from app.services.outline_generation import StoryOutlineGenerationService
 from app.services.pitch_generation import PitchGenerationService
 from app.services.plan_revisions import PlanRevisionService
@@ -1367,6 +1371,21 @@ class StoryWorkflowToolService:
         )
         self._session.add(job)
         self._session.flush()
+        try:
+            narration_plan = NarrationSegmentationService(self._session).create_plan(
+                session_id=session_id,
+                audio_job_id=job.id,
+            )
+        except NarrationSegmentationError as exc:
+            raise StoryWorkflowToolServiceError(str(exc)) from exc
+        job.current_segment_index = narration_plan.segments[0].segment_index
+        job.config_json = {
+            **(job.config_json if isinstance(job.config_json, dict) else {}),
+            "total_segments": narration_plan.total_segments,
+            "planned_word_count": narration_plan.total_words,
+            "compiled_text_length": narration_plan.compiled_text_length,
+            "narration_plan_version": "narration_segments.v1",
+        }
 
         self._events.record_audio_progress(
             session_id,
@@ -1374,7 +1393,7 @@ class StoryWorkflowToolService:
             status=job.status,
             progress_percent=0,
             current_segment_index=job.current_segment_index,
-            total_segments=None,
+            total_segments=narration_plan.total_segments,
             estimated_duration_seconds=job.estimated_duration_seconds,
             voice_key=job.voice_key,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
@@ -1387,6 +1406,11 @@ class StoryWorkflowToolService:
                     "Starting audio generation.",
                     _optional_detail("Voice", voice_key),
                     f"Playback speed {playback_speed:g}x.",
+                    (
+                        "Prepared "
+                        f"{narration_plan.total_segments} narration segment"
+                        f"{'' if narration_plan.total_segments == 1 else 's'}."
+                    ),
                     "Background music enabled." if include_background_music else None,
                 ]
             ),

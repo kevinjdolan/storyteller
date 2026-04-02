@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "event_log_entries",
     "genres",
     "model_usage_events",
+    "narration_segments",
     "pitches",
     "session_usage_rollups",
     "session_memory_snapshots",
@@ -176,6 +177,29 @@ EXPECTED_COMPOSITION_INTERRUPTION_REQUEST_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_NARRATION_SEGMENT_COLUMNS = {
+    "id",
+    "session_id",
+    "audio_job_id",
+    "source_composition_segment_id",
+    "segment_index",
+    "status",
+    "source_boundary_kind",
+    "source_outline_card_key",
+    "source_outline_card_title",
+    "text_content",
+    "word_count",
+    "text_start_offset",
+    "text_end_offset",
+    "pause_after_seconds",
+    "pause_hint",
+    "music_transition_hint",
+    "error_message",
+    "metadata_json",
+    "completed_at",
+    "created_at",
+    "updated_at",
+}
 EXPECTED_MODEL_USAGE_EVENT_COLUMNS = {
     "id",
     "session_id",
@@ -268,6 +292,10 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
         database_url,
         "composition_interruption_requests",
     )
+    assert EXPECTED_NARRATION_SEGMENT_COLUMNS <= _get_column_names(
+        database_url,
+        "narration_segments",
+    )
     assert EXPECTED_MODEL_USAGE_EVENT_COLUMNS <= _get_column_names(
         database_url,
         "model_usage_events",
@@ -298,6 +326,10 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _get_column_names(
         database_url,
         "composition_segments",
+    )
+    assert EXPECTED_NARRATION_SEGMENT_COLUMNS <= _get_column_names(
+        database_url,
+        "narration_segments",
     )
     assert EXPECTED_MODEL_USAGE_EVENT_COLUMNS <= _get_column_names(
         database_url,

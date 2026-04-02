@@ -529,6 +529,11 @@ function applyJobProgressEvent(
         : (snapshot.latest_audio_job?.estimated_duration_seconds ??
           snapshot.active_audio_job?.estimated_duration_seconds ??
           null),
+    total_segments:
+      event.payload.total_segments ??
+      snapshot.latest_audio_job?.total_segments ??
+      snapshot.active_audio_job?.total_segments ??
+      null,
     current_segment_index:
       event.payload.current_segment_index ??
       snapshot.latest_audio_job?.current_segment_index ??

@@ -701,6 +701,13 @@ def merge_audio_job_view(
             if current_job is not None
             else None
         ),
+        total_segments=(
+            payload.total_segments
+            if payload.total_segments is not None
+            else current_job.total_segments
+            if current_job is not None
+            else None
+        ),
         current_segment_index=(
             payload.current_segment_index
             if payload.current_segment_index is not None
@@ -816,7 +823,15 @@ def build_audio_job_detail(
         return "Narration failed and needs another pass."
     if job.estimated_duration_seconds is not None:
         minutes = round(job.estimated_duration_seconds / 60)
-        return f"Narration {job.status.replace('_', ' ')}. Estimated length {minutes} min."
+        segment_detail = ""
+        if job.current_segment_index is not None and job.total_segments is not None:
+            segment_detail = (
+                f" Segment {job.current_segment_index} of {job.total_segments} is active."
+            )
+        return (
+            f"Narration {job.status.replace('_', ' ')}. Estimated length {minutes} min."
+            f"{segment_detail}"
+        )
     return fallback_summary
 
 
@@ -1990,6 +2005,7 @@ def build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:
     if row is None:
         return None
 
+    config = _read_mapping(row.config_json)
     return AudioJobView(
         id=row.id,
         status=row.status,
@@ -1998,6 +2014,7 @@ def build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:
         include_background_music=row.include_background_music,
         music_profile=row.music_profile,
         estimated_duration_seconds=row.estimated_duration_seconds,
+        total_segments=_read_optional_mapping_int(config, "total_segments"),
         current_segment_index=row.current_segment_index,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
