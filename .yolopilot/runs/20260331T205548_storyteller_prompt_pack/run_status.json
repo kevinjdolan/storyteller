@@ -61,9 +61,10 @@
     "58-usage-cost-and-latency-metrics.md",
     "59-planning-funnel-e2e-test.md",
     "60-composition-job-orchestration.md",
-    "61-segmented-writing-engine.md"
+    "61-segmented-writing-engine.md",
+    "62-composition-streaming-events.md"
   ],
-  "current_success_ref": "0d8d4a481bacfa205897b73b4da27d64f0b79287",
+  "current_success_ref": "5b7066e0b0b66384a3ae73953587b769a569dcbe",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",

@@ -1,0 +1,271 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'rg -n \"CompositionChunk|composition chunk|chunk_kind|segment_summary|segment_start\" frontend/src backend/tests frontend/tests backend/app -S'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"composition/start|composition/.*/pause|composition/.*/resume|composition/.*/redirect|composition/.*/cancel\" frontend/src/api/sessions.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"startSessionComposition|pauseSessionComposition|resumeSessionComposition|cancelSessionComposition|redirectSessionComposition\" frontend/src/api/sessions.ts frontend/src -S'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' frontend/src/index.css\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"selectedStage.stage === 'composition'|CompositionStage|startSessionComposition|pauseSessionComposition|redirectSessionComposition\\\" frontend/src/pages/session/SessionWorkspacePage.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"vi.mock\\\\('../../api/sessions|fetchSessionHydration|startSessionComposition|recordSessionUiAction\\\" frontend/src/pages/session/SessionWorkspacePage.test.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"vi.spyOn|mockResolvedValue|mockRejectedValue|fetchSessionSnapshot|parseSessionChatIntent\" frontend/src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"global\\\\.fetch|window\\\\.fetch|mockFetch|fetchMock|server.use|msw|vi\\\\.mock\\\" frontend/src/pages/session/SessionWorkspacePage.test.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"composition.progress.recorded|audio.progress.recorded\\\" frontend/src/features/session/chat/actionEchoes.ts && sed -n '1,260p' frontend/src/features/session/chat/actionEchoes.ts\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' /Users/kevin/code/storyteller/.codex/skills/webapp-qa/scripts/README.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"CompositionJobService|RecordingCompositionWriter|build_test_object_storage|WebSocketDisconnect|websocket_connect\" backend/tests/test_session_api.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run frontend/src/features/session/sessionRuntimeStore.test.ts frontend/src/features/session/live/sessionRealtimeClient.test.ts frontend/src/features/session/CompositionStage.test.tsx frontend/src/features/session/chat/actionEchoes.test.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"pytest backend/tests/test_session_api.py -k 'session_events_websocket or session_realtime_service_suppresses_initial_chunk_baseline' backend/tests/test_story_tools.py -k 'split_text_for_streaming_preserves_exact_story_text'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest tests/test_session_api.py::test_session_events_websocket_replays_composition_job_status tests/test_session_api.py::test_session_events_websocket_streams_composition_chunk_deltas tests/test_session_api.py::test_session_realtime_service_suppresses_initial_chunk_baseline_and_keeps_snapshot_recoverable tests/test_story_tools.py::test_split_text_for_streaming_preserves_exact_story_text'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest tests/test_session_api.py::test_session_events_websocket_replays_composition_job_status tests/test_session_api.py::test_session_events_websocket_streams_composition_chunk_deltas tests/test_session_api.py::test_session_realtime_service_suppresses_initial_chunk_baseline_and_keeps_snapshot_recoverable tests/test_story_tools.py::test_split_text_for_streaming_preserves_exact_story_text'",
+        "exit_code": -1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check app tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check --fix app/services/composition_jobs.py app/services/session_realtime.py app/api/v1/routes/session_events.py tests/test_session_api.py tests/test_story_tools.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"def save_story_setup\\\\(\\\" backend/app/services/sessions.py && sed -n '2240,2360p' backend/app/services/sessions.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"save_story_setup\" backend/app/services/sessions.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"export PYTHONPATH=/Users/kevin/code/storyteller/backend && export STORYTELLER_DATABASE_URL=postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller && export STORYTELLER_SECRETS_FILE='' && python - <<'PY'\nfrom app.db.session import get_engine, get_session_factory\nfrom app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog\nfrom app.services.sessions import SessionService\nfrom app.services import (\n    BeatSheetGenerationService,\n    BriefNormalizationService,\n    CharacterGenerationService,\n    PitchGenerationService,\n    StoryWorkflowToolService,\n)\nfrom app.models import StoryWorkflowToolName\nfrom tests.test_session_api import (\n    StubBeatSheetGenerationAdapter,\n    StubBriefNormalizationAdapter,\n    StubCharacterGenerationAdapter,\n    StubPitchGenerationAdapter,\n)\n\nget_engine.cache_clear()\nget_session_factory.cache_clear()\nsession_factory = get_session_factory()\n\nwith session_factory() as session:\n    seed_catalog(session, load_catalog_document(CATALOG_FILE_PATH))\n\nwith session_factory() as session:\n    service = SessionService(\n        session,\n        brief_normalization_service=BriefNormalizationService(\n            adapter=StubBriefNormalizationAdapter()\n        ),\n    )\n    created = service.create_session(working_title='QA Composition Stream')\n    session_id = created.id\n    service.select_genre(session_id, genre_slug='quest-fantasy', origin='workspace')\n    service.select_tone(session_id, tone_profile_slug='hushed-wonder', origin='workspace')\n    service.save_story_brief(\n        session_id,\n        raw_brief='A harbor child follows a drifting bell across moonlit water and brings the night back to calm.',\n        origin='workspace',\n    )\n    pitch_response = service.generate_pitches(\n        session_id,\n        candidate_count=3,\n        origin='workspace',\n        pitch_generation_service=PitchGenerationService(\n            adapter=StubPitchGenerationAdapter()\n        ),\n    )\n    pitch_id = pitch_response.snapshot.pitch_batches[0].pitches[0].id\n    service.select_pitch(session_id, pitch_id=pitch_id, origin='workspace')\n    character_response = service.generate_character_sheets(\n        session_id,\n        candidate_count=2,\n        origin='workspace',\n        character_generation_service=CharacterGenerationService(\n            adapter=StubCharacterGenerationAdapter()\n        ),\n    )\n    character_id = character_response.snapshot.character_sheet_batches[0].character_sheets[0].id\n    service.select_character_sheet(\n        session_id,\n        character_sheet_id=character_id,\n        origin='workspace',\n    )\n    beat_response = service.generate_beat_sheet(\n        session_id,\n        origin='workspace',\n        beat_sheet_generation_service=BeatSheetGenerationService(\n            adapter=StubBeatSheetGenerationAdapter()\n        ),\n    )\n    beat_id = beat_response.snapshot.beat_sheet_revisions[0].id\n    service.select_beat_sheet(session_id, beat_sheet_id=beat_id, origin='workspace')\n    StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,\n        session_id=session_id,\n        arguments={\n            'target_word_count': 1800,\n            'target_runtime_minutes': 12,\n            'chapter_count': 3,\n            'approximate_scene_count': 8,\n            'guidance_notes': 'Let each chapter land calmer than it began.',\n            'origin': 'workspace',\n        },\n    )\n    composition = StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,\n        session_id=session_id,\n        arguments={'origin': 'workspace'},\n    )\n    print(session_id)\n    print(composition.composition_job_id)\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"export PYTHONPATH=/Users/kevin/code/storyteller/backend && export STORYTELLER_DATABASE_URL=postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller && export STORYTELLER_SECRETS_FILE='' && export STORYTELLER_GEMINI_API_KEY=local-placeholder-key && export STORYTELLER_GCS_ENDPOINT=http://localhost:8568 && export STORYTELLER_GCS_PROJECT_ID=storyteller-local && export STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568 && export STORYTELLER_GCS_SESSIONS_BUCKET_NAME=storyteller-sessions && export STORYTELLER_GCS_AUDIO_BUCKET_NAME=storyteller-audio && export STORYTELLER_GCS_EXPORTS_BUCKET_NAME=storyteller-exports && python - <<'PY'\nfrom app.db.session import get_engine, get_session_factory\nfrom app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog\nfrom app.services.sessions import SessionService\nfrom app.services import (\n    BeatSheetGenerationService,\n    BriefNormalizationService,\n    CharacterGenerationService,\n    PitchGenerationService,\n    StoryWorkflowToolService,\n)\nfrom app.models import StoryWorkflowToolName\nfrom tests.test_session_api import (\n    StubBeatSheetGenerationAdapter,\n    StubBriefNormalizationAdapter,\n    StubCharacterGenerationAdapter,\n    StubPitchGenerationAdapter,\n)\n\nget_engine.cache_clear()\nget_session_factory.cache_clear()\nsession_factory = get_session_factory()\n\nwith session_factory() as session:\n    seed_catalog(session, load_catalog_document(CATALOG_FILE_PATH))\n\nwith session_factory() as session:\n    service = SessionService(\n        session,\n        brief_normalization_service=BriefNormalizationService(\n            adapter=StubBriefNormalizationAdapter()\n        ),\n    )\n    created = service.create_session(working_title='QA Composition Stream')\n    session_id = created.id\n    service.select_genre(session_id, genre_slug='quest-fantasy', origin='workspace')\n    service.select_tone(session_id, tone_profile_slug='hushed-wonder', origin='workspace')\n    service.save_story_brief(\n        session_id,\n        raw_brief='A harbor child follows a drifting bell across moonlit water and brings the night back to calm.',\n        origin='workspace',\n    )\n    pitch_response = service.generate_pitches(\n        session_id,\n        candidate_count=3,\n        origin='workspace',\n        pitch_generation_service=PitchGenerationService(\n            adapter=StubPitchGenerationAdapter()\n        ),\n    )\n    pitch_id = pitch_response.snapshot.pitch_batches[0].pitches[0].id\n    service.select_pitch(session_id, pitch_id=pitch_id, origin='workspace')\n    character_response = service.generate_character_sheets(\n        session_id,\n        candidate_count=2,\n        origin='workspace',\n        character_generation_service=CharacterGenerationService(\n            adapter=StubCharacterGenerationAdapter()\n        ),\n    )\n    character_id = character_response.snapshot.character_sheet_batches[0].character_sheets[0].id\n    service.select_character_sheet(\n        session_id,\n        character_sheet_id=character_id,\n        origin='workspace',\n    )\n    beat_response = service.generate_beat_sheet(\n        session_id,\n        origin='workspace',\n        beat_sheet_generation_service=BeatSheetGenerationService(\n            adapter=StubBeatSheetGenerationAdapter()\n        ),\n    )\n    beat_id = beat_response.snapshot.beat_sheet_revisions[0].id\n    service.select_beat_sheet(session_id, beat_sheet_id=beat_id, origin='workspace')\n    StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,\n        session_id=session_id,\n        arguments={\n            'target_word_count': 1800,\n            'target_runtime_minutes': 12,\n            'chapter_count': 3,\n            'approximate_scene_count': 8,\n            'guidance_notes': 'Let each chapter land calmer than it began.',\n            'origin': 'workspace',\n        },\n    )\n    composition = StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,\n        session_id=session_id,\n        arguments={'origin': 'workspace'},\n    )\n    print(session_id)\n    print(composition.composition_job_id)\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"export PYTHONPATH=/Users/kevin/code/storyteller/backend && export STORYTELLER_DATABASE_URL=postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller && export STORYTELLER_SECRETS_FILE='' && export STORYTELLER_GEMINI_API_KEY=local-placeholder-key && export STORYTELLER_GCS_ENDPOINT=http://localhost:8568 && export STORYTELLER_GCS_PROJECT_ID=storyteller-local && export STORYTELLER_GCS_PUBLIC_URL=http://localhost:8568 && export STORYTELLER_GCS_SESSIONS_BUCKET_NAME=storyteller-sessions && export STORYTELLER_GCS_AUDIO_BUCKET_NAME=storyteller-audio && export STORYTELLER_GCS_EXPORTS_BUCKET_NAME=storyteller-exports && python - <<'PY'\nfrom app.db.session import get_engine, get_session_factory\nfrom app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog\nfrom app.services.sessions import SessionService\nfrom app.services import (\n    BeatSheetGenerationService,\n    BriefNormalizationService,\n    CharacterGenerationService,\n    PitchGenerationService,\n    StoryWorkflowToolService,\n)\nfrom app.models import StoryWorkflowToolName\nfrom tests.test_session_api import (\n    StubBeatSheetGenerationAdapter,\n    StubBriefNormalizationAdapter,\n    StubCharacterGenerationAdapter,\n    StubPitchGenerationAdapter,\n)\n\nget_engine.cache_clear()\nget_session_factory.cache_clear()\nsession_factory = get_session_factory()\n\nwith session_factory() as session:\n    seed_catalog(session, load_catalog_document(CATALOG_FILE_PATH))\n\nwith session_factory() as session:\n    service = SessionService(\n        session,\n        brief_normalization_service=BriefNormalizationService(\n            adapter=StubBriefNormalizationAdapter()\n        ),\n    )\n    created = service.create_session(working_title='QA Composition Stream')\n    session_id = created.id\n    service.select_genre(session_id, genre_slug='quest-fantasy', origin='workspace')\n    service.select_tone(session_id, tone_profile_slug='hushed-wonder', origin='workspace')\n    service.save_story_brief(\n        session_id,\n        raw_brief='A harbor child follows a drifting bell across moonlit water and brings the night back to calm.',\n        origin='workspace',\n    )\n    pitch_response = service.generate_pitches(\n        session_id,\n        candidate_count=3,\n        origin='workspace',\n        pitch_generation_service=PitchGenerationService(\n            adapter=StubPitchGenerationAdapter()\n        ),\n    )\n    pitch_id = pitch_response.snapshot.pitch_batches[0].pitches[0].id\n    service.select_pitch(session_id, pitch_id=pitch_id, origin='workspace')\n    character_response = service.generate_character_sheets(\n        session_id,\n        candidate_count=2,\n        origin='workspace',\n        character_generation_service=CharacterGenerationService(\n            adapter=StubCharacterGenerationAdapter()\n        ),\n    )\n    character_id = character_response.snapshot.character_sheet_batches[0].character_sheets[0].id\n    service.select_character_sheet(\n        session_id,\n        character_sheet_id=character_id,\n        origin='workspace',\n    )\n    beat_response = service.generate_beat_sheet(\n        session_id,\n        origin='workspace',\n        beat_sheet_generation_service=BeatSheetGenerationService(\n            adapter=StubBeatSheetGenerationAdapter()\n        ),\n    )\n    beat_id = beat_response.snapshot.beat_sheet_revisions[0].id\n    service.select_beat_sheet(session_id, beat_sheet_id=beat_id, origin='workspace')\n    StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,\n        session_id=session_id,\n        arguments={\n            'target_word_count': 1800,\n            'target_runtime_minutes': 12,\n            'chapter_count': 3,\n            'approximate_scene_count': 8,\n            'guidance_notes': 'Let each chapter land calmer than it began.',\n            'origin': 'workspace',\n        },\n    )\n    composition = StoryWorkflowToolService(session).execute(\n        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,\n        session_id=session_id,\n        arguments={'origin': 'workspace'},\n    )\n    print(session_id)\n    print(composition.composition_job_id)\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"curl -s http://localhost:8565/api/v1/sessions/d24f0a2d-b75b-4409-b333-c2992f1b0465 | python - <<'PY'\nimport json,sys\nobj=json.load(sys.stdin)\nprint(obj.get('current_stage'))\nprint(obj.get('active_composition_job',{}).get('status'))\nprint(obj.get('active_composition_job',{}).get('progress_percent'))\nprint((obj.get('active_composition_job') or obj.get('latest_composition_job') or {}).get('accepted_story_so_far'))\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose run --rm browser npm run check -- --spec /tmp/composition-reconnect.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose run --rm browser npm run check -- --spec /tmp/composition-live.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose run --rm browser npm run check -- --spec /workspace/.artifacts/webapp-qa/composition-live.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n '\\\"action\\\": \\\"click\\\"|clickSelector|waitForNavigation|type\\\" .artifacts/webapp-qa -g '*.json'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"class .*Composition.*Writer|def build_.*composition|writer=|Gemini\\\" backend/app/services backend/app/main.py backend/app/settings.py -g '*.py'\"",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"curl -s http://localhost:8565/api/v1/sessions/3193b0ba-3739-4a74-a1e7-91b1cd456493 | python - <<'PY'\nimport json,sys\npayload=json.load(sys.stdin)\nprint(json.dumps({\n  'session_id': payload['id'],\n  'selected_story_outline_present': payload['selected_story_outline'] is not None,\n  'selected_story_setup_present': payload['selected_story_setup'] is not None,\n  'selected_beat_sheet_present': payload['selected_beat_sheet'] is not None,\n  'active_composition_job': payload['active_composition_job'],\n  'latest_composition_job': payload['latest_composition_job'],\n  'stage': payload['selected_stage']['stage'],\n}, indent=2))\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"curl -s http://localhost:8565/api/v1/sessions/3193b0ba-3739-4a74-a1e7-91b1cd456493 | python -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps({\\\"session_id\\\": payload[\\\"id\\\"], \\\"selected_story_outline_present\\\": payload[\\\"selected_story_outline\\\"] is not None, \\\"selected_story_setup_present\\\": payload[\\\"selected_story_setup\\\"] is not None, \\\"selected_beat_sheet_present\\\": payload[\\\"selected_beat_sheet\\\"] is not None, \\\"active_composition_job\\\": payload[\\\"active_composition_job\\\"], \\\"latest_composition_job\\\": payload[\\\"latest_composition_job\\\"], \\\"stage\\\": payload[\\\"selected_stage\\\"][\\\"stage\\\"]}, indent=2))'\"",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T14:31:14.131300Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/composition_jobs.py:",
+      "2026-04-02T14:35:48.069201Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_realtime.py:",
+      "2026-04-02T14:37:24.044230Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_realtime.py:",
+      "2026-04-02T14:57:29.303457Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open",
+      "2026-04-02T15:07:58.044536Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 60670",
+      "2026-04-02T15:13:05.425136Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_story_tools.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 883,
+    "file_paths": [
+      "backend/app/services/composition_streaming.py",
+      "backend/app/services/composition_jobs.py",
+      "backend/app/models/session.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/models/events.py",
+      "backend/app/services/event_log.py",
+      "backend/app/services/session_realtime.py",
+      "backend/app/api/v1/routes/session_events.py",
+      "backend/app/api/v1/router.py",
+      "backend/app/worker/default_handlers.py",
+      "backend/app/worker/__main__.py",
+      "frontend/src/features/session/sessionRuntimeStore.ts",
+      "frontend/src/features/session/sessionWorkspaceContext.ts",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/live/sessionRealtimeClient.ts",
+      "frontend/src/features/session/SessionWorkspaceProvider.tsx",
+      "frontend/src/features/session/CompositionStage.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/features/session/chat/actionEchoes.ts",
+      "frontend/src/styles/index.css",
+      "frontend/vite.config.ts",
+      "infra/compose/docker-compose.yml",
+      "frontend/src/features/session/sessionRuntimeStore.test.ts",
+      "frontend/src/features/session/live/sessionRealtimeClient.test.ts",
+      "frontend/src/features/session/CompositionStage.test.tsx",
+      "frontend/src/features/session/chat/actionEchoes.test.ts",
+      "backend/tests/test_story_tools.py",
+      "backend/tests/test_session_api.py",
+      ".artifacts/webapp-qa/composition-live.spec.json",
+      ".artifacts/webapp-qa/composition-reconnect.spec.json",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/62_composition_streaming_events/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4e91-6d9c-79c2-9df9-57a12ae4ef38",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 41109120,
+      "input_tokens": 41603756,
+      "output_tokens": 139171,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T14:31:14.131300Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/composition_jobs.py:",
+    "2026-04-02T14:35:48.069201Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_realtime.py:",
+    "2026-04-02T14:37:24.044230Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_realtime.py:",
+    "2026-04-02T14:57:29.303457Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open",
+    "2026-04-02T15:07:58.044536Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 60670",
+    "2026-04-02T15:13:05.425136Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_story_tools.py:"
+  ],
+  "head_commit": "5b7066e0b0b66384a3ae73953587b769a569dcbe",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "62-composition-streaming-events.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_62_composition_streaming_events",
+  "task_name_human": "62 composition streaming events",
+  "task_name_system": "62_composition_streaming_events",
+  "timing": {
+    "duration_seconds": 3282.0,
+    "finished_at": "2026-04-02T08:15:27-07:00",
+    "started_at": "2026-04-02T07:20:45-07:00"
+  }
+}
