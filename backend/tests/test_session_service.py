@@ -25,6 +25,8 @@ from app.db import (
     make_engine,
 )
 from app.models import (
+    BriefNormalizationResult,
+    NormalizedBriefPreferences,
     SessionContextUpdateRequest,
     UserEditTargetKind,
     WorkflowStage,
@@ -61,6 +63,39 @@ def db_session():
 
 def _seed_catalog_rows(db_session) -> None:
     seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))
+
+
+class StubBriefNormalizationService:
+    def __init__(
+        self,
+        *,
+        normalized_summary: str | None = None,
+        normalized_preferences: NormalizedBriefPreferences | None = None,
+    ) -> None:
+        self.calls: list[dict[str, object | None]] = []
+        self._normalized_summary = normalized_summary
+        self._normalized_preferences = normalized_preferences or NormalizedBriefPreferences(
+            protagonist_type="A child and an otter guardian",
+            setting="a moonlit harbor",
+            emotional_goal="a calm return home",
+            constraint_notes=["End with the harbor settled and everyone tucked in."],
+            bedtime_safety_concerns=["Keep every surprise quickly reassuring."],
+            candidate_motifs=["floating lanterns", "still water"],
+        )
+
+    def normalize_brief(self, **kwargs) -> BriefNormalizationResult:
+        self.calls.append(kwargs)
+        return BriefNormalizationResult(
+            source="stub",
+            model_id="stub-brief-normalizer",
+            prompt_version="brief_normalizer.test",
+            normalized_summary=(
+                self._normalized_summary
+                or "A harbor bedtime quest with a calm lantern-by-lantern reunion."
+            ),
+            normalized_preferences=self._normalized_preferences,
+            raw_response={"stub": True},
+        )
 
 
 def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> None:
@@ -184,6 +219,14 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
         must_have_elements="The fox should come home feeling calmer than when the story began.",
         raw_brief="A young fox rows across a moonlit lake.",
         normalized_summary="A sleepy quest to find a glowing reed before dawn.",
+        normalized_preferences={
+            "protagonist_type": "A young fox",
+            "setting": "a moonlit lake",
+            "emotional_goal": "a calmer return home",
+            "constraint_notes": ["The fox should feel calmer by the ending."],
+            "bedtime_safety_concerns": ["Keep the lake mystery quickly reassuring."],
+            "candidate_motifs": ["glowing reed", "moonlit lake"],
+        },
         planning_notes="Keep the tension soft and quickly reparative.",
         is_active=True,
         accepted_at=now,
@@ -526,7 +569,11 @@ def test_select_tone_invalidates_brief_and_later_stages_when_changed(db_session)
 
 def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) -> None:
     _seed_catalog_rows(db_session)
-    service = SessionService(db_session)
+    brief_normalizer = StubBriefNormalizationService()
+    service = SessionService(
+        db_session,
+        brief_normalization_service=brief_normalizer,
+    )
     snapshot = service.create_session(working_title="Brief First")
     service.select_genre(snapshot.id, genre_slug="quest-fantasy")
     service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
@@ -568,6 +615,15 @@ def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) 
         "gentle bravery, belonging, helping others rest"
     )
     assert (
+        updated_snapshot.story_brief.normalized_summary
+        == "A harbor bedtime quest with a calm lantern-by-lantern reunion."
+    )
+    assert updated_snapshot.story_brief.normalized_preferences is not None
+    assert (
+        updated_snapshot.story_brief.normalized_preferences.protagonist_type
+        == "A child and an otter guardian"
+    )
+    assert (
         "Desired themes: gentle bravery, belonging, helping others rest"
         in updated_snapshot.story_brief.raw_brief
     )
@@ -584,6 +640,8 @@ def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) 
     )
     assert len(stored_briefs) == 1
     assert stored_briefs[0].is_active is True
+    assert stored_briefs[0].normalized_preferences is not None
+    assert brief_normalizer.calls[0]["raw_brief"] == stored_briefs[0].raw_brief
 
     history = service.load_session_history(snapshot.id)
     assert history.events[-2].event_type == "workflow.stage_changed"
@@ -594,7 +652,10 @@ def test_save_story_brief_creates_new_revision_and_invalidates_later_stages(
     db_session,
 ) -> None:
     _seed_catalog_rows(db_session)
-    service = SessionService(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
     snapshot = service.create_session(working_title="Brief Reset")
     service.select_genre(snapshot.id, genre_slug="quest-fantasy")
     service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
@@ -657,6 +718,50 @@ def test_save_story_brief_creates_new_revision_and_invalidates_later_stages(
     ]
     assert history.events[-1].payload is not None
     assert history.events[-1].payload.revision_number == 2
+
+
+def test_save_story_brief_accepts_manual_normalization_overrides(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    brief_normalizer = StubBriefNormalizationService()
+    service = SessionService(
+        db_session,
+        brief_normalization_service=brief_normalizer,
+    )
+    snapshot = service.create_session(working_title="Brief Override")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+
+    manual_preferences = NormalizedBriefPreferences(
+        protagonist_type="A child and an otter guardian",
+        setting="a lantern-washed harbor",
+        emotional_goal="a calm reunion before sleep",
+        constraint_notes=["Keep the ending tucked-in and emotionally repaired."],
+        bedtime_safety_concerns=["Avoid any threatening separation beats."],
+        candidate_motifs=["floating lanterns", "otter paws", "quiet docks"],
+    )
+
+    result = service.save_story_brief(
+        snapshot.id,
+        story_idea="A child and an otter guardian guide runaway lanterns back across the harbor.",
+        normalized_summary="A lantern-lit bedtime harbor story with a clearly reassuring reunion.",
+        normalized_preferences=manual_preferences,
+        provided_fields={"story_idea", "normalized_summary", "normalized_preferences"},
+    )
+
+    assert result.snapshot.story_brief is not None
+    assert (
+        result.snapshot.story_brief.normalized_summary
+        == "A lantern-lit bedtime harbor story with a clearly reassuring reunion."
+    )
+    assert result.snapshot.story_brief.normalized_preferences == manual_preferences
+
+    stored_brief = (
+        db_session.query(StoryBrief)
+        .filter(StoryBrief.session_id == snapshot.id, StoryBrief.is_active.is_(True))
+        .one()
+    )
+    assert stored_brief.model_output["normalization_source"] == "stub_with_user_overrides"
+    assert stored_brief.normalized_preferences == manual_preferences.model_dump(mode="json")
 
 
 def test_save_story_brief_rejects_skipping_tone_prerequisite(db_session) -> None:

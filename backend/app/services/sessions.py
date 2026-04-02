@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,7 @@ from app.db import StoryBrief
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
+    NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
     SessionContextUpdateRequest,
@@ -27,6 +29,12 @@ from app.models import (
     resolve_resume_stage,
 )
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
+from app.services.brief_normalization import (
+    BriefNormalizationService,
+    apply_brief_normalization_overrides,
+    build_brief_model_output,
+    build_brief_normalization_result_from_existing,
+)
 from app.services.catalog import find_active_genre, find_active_tone_for_genre
 from app.services.event_log import SessionEventLogService
 from app.services.session_hydration import (
@@ -78,11 +86,17 @@ STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
 
 
 class SessionService:
-    def __init__(self, session: Session):
+    def __init__(
+        self,
+        session: Session,
+        *,
+        brief_normalization_service: BriefNormalizationService | None = None,
+    ):
         self._session = session
         self._sessions = StorySessionRepository(session)
         self._stage_states = WorkflowStageStateRepository(session)
         self._event_log = SessionEventLogService(session)
+        self._brief_normalizer = brief_normalization_service or BriefNormalizationService()
 
     def create_session(
         self,
@@ -351,16 +365,19 @@ class SessionService:
         must_have_elements: str | None = None,
         raw_brief: str | None = None,
         normalized_summary: str | None = None,
+        normalized_preferences: NormalizedBriefPreferences | None = None,
         planning_notes: str | None = None,
         edit_mode: StoryBriefEditMode = StoryBriefEditMode.REPLACE,
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
+        provided_fields: set[str] | None = None,
     ) -> SessionStoryBriefResponse:
         story_session = self._sessions.get_for_update(session_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
         current_brief = self._sessions.get_active_story_brief(session_id)
+        provided_fields = provided_fields or set()
         resolved_brief = _resolve_story_brief_revision(
             current_brief,
             story_idea=story_idea,
@@ -369,9 +386,55 @@ class SessionService:
             audience_notes=audience_notes,
             must_have_elements=must_have_elements,
             raw_brief=raw_brief,
-            normalized_summary=normalized_summary,
             planning_notes=planning_notes,
             edit_mode=edit_mode,
+        )
+        raw_brief_changed = (
+            current_brief is None or current_brief.raw_brief != resolved_brief["raw_brief"]
+        )
+        normalized_summary_provided = "normalized_summary" in provided_fields
+        normalized_preferences_provided = "normalized_preferences" in provided_fields
+
+        if (
+            not raw_brief_changed
+            and current_brief is not None
+            and (
+                current_brief.normalized_summary is not None
+                or current_brief.normalized_preferences is not None
+            )
+        ):
+            normalization_result = build_brief_normalization_result_from_existing(
+                normalized_summary=current_brief.normalized_summary,
+                normalized_preferences=current_brief.normalized_preferences,
+                model_output=current_brief.model_output,
+            )
+        else:
+            normalization_result = self._brief_normalizer.normalize_brief(
+                raw_brief=resolved_brief["raw_brief"],
+                genre_label=(
+                    story_session.selected_genre.label
+                    if story_session.selected_genre is not None
+                    else None
+                ),
+                tone_label=(
+                    story_session.selected_tone_profile.label
+                    if story_session.selected_tone_profile is not None
+                    else None
+                ),
+                story_idea=resolved_brief["story_idea"],
+                desired_themes=resolved_brief["desired_themes"],
+                key_images=resolved_brief["key_images"],
+                audience_notes=resolved_brief["audience_notes"],
+                must_have_elements=resolved_brief["must_have_elements"],
+            )
+
+        normalization_result = apply_brief_normalization_overrides(
+            normalization_result,
+            raw_brief=resolved_brief["raw_brief"],
+            normalized_summary=normalized_summary,
+            normalized_summary_provided=normalized_summary_provided,
+            normalized_preferences=normalized_preferences,
+            normalized_preferences_provided=normalized_preferences_provided,
         )
 
         stage_map = self._stage_states.ensure_for_session(story_session)
@@ -397,8 +460,14 @@ class SessionService:
             audience_notes=resolved_brief["audience_notes"],
             must_have_elements=resolved_brief["must_have_elements"],
             raw_brief=resolved_brief["raw_brief"],
-            normalized_summary=resolved_brief["normalized_summary"],
+            normalized_summary=normalization_result.normalized_summary,
+            normalized_preferences=normalization_result.normalized_preferences.model_dump(
+                mode="json"
+            )
+            if normalization_result.normalized_preferences.has_content()
+            else None,
             planning_notes=resolved_brief["planning_notes"],
+            model_output=build_brief_model_output(normalization_result),
             is_active=True,
             accepted_at=now,
         )
@@ -407,7 +476,7 @@ class SessionService:
 
         stage_snapshot.status = WorkflowStageState.COMPLETED
         stage_snapshot.detail = _build_story_brief_stage_detail(
-            resolved_brief["normalized_summary"]
+            normalization_result.normalized_summary
             or resolved_brief["story_idea"]
             or resolved_brief["raw_brief"]
         )
@@ -752,7 +821,6 @@ _STORY_BRIEF_TEXT_FIELDS = (
     "key_images",
     "audience_notes",
     "must_have_elements",
-    "normalized_summary",
     "planning_notes",
 )
 
@@ -766,7 +834,6 @@ def _resolve_story_brief_revision(
     audience_notes: str | None,
     must_have_elements: str | None,
     raw_brief: str | None,
-    normalized_summary: str | None,
     planning_notes: str | None,
     edit_mode: StoryBriefEditMode,
 ) -> dict[str, str | None]:
@@ -790,9 +857,6 @@ def _resolve_story_brief_revision(
         "must_have_elements": _normalize_optional_text(current_brief.must_have_elements)
         if current_brief is not None
         else None,
-        "normalized_summary": _normalize_optional_text(current_brief.normalized_summary)
-        if current_brief is not None
-        else None,
         "planning_notes": _normalize_optional_text(current_brief.planning_notes)
         if current_brief is not None
         else None,
@@ -806,7 +870,6 @@ def _resolve_story_brief_revision(
         "key_images": _normalize_optional_text(key_images),
         "audience_notes": _normalize_optional_text(audience_notes),
         "must_have_elements": _normalize_optional_text(must_have_elements),
-        "normalized_summary": _normalize_optional_text(normalized_summary),
         "planning_notes": _normalize_optional_text(planning_notes),
     }
 
@@ -914,6 +977,7 @@ def _build_story_brief_changed_fields(
                 "must_have_elements",
                 "raw_brief",
                 "normalized_summary",
+                "normalized_preferences",
                 "planning_notes",
             )
             if getattr(new_brief, field_name) is not None
@@ -928,6 +992,7 @@ def _build_story_brief_changed_fields(
         "must_have_elements",
         "raw_brief",
         "normalized_summary",
+        "normalized_preferences",
         "planning_notes",
     ):
         if getattr(previous_brief, field_name) != getattr(new_brief, field_name):
@@ -940,7 +1005,7 @@ def _build_story_brief_event_values(
     story_brief: StoryBrief,
     *,
     edit_mode: StoryBriefEditMode,
-) -> dict[str, str | int | None]:
+) -> dict[str, Any]:
     return {
         "story_idea": story_brief.story_idea,
         "desired_themes": story_brief.desired_themes,
@@ -949,6 +1014,7 @@ def _build_story_brief_event_values(
         "must_have_elements": story_brief.must_have_elements,
         "raw_brief": story_brief.raw_brief,
         "normalized_summary": story_brief.normalized_summary,
+        "normalized_preferences": story_brief.normalized_preferences,
         "planning_notes": story_brief.planning_notes,
         "edit_mode": edit_mode.value,
         "revision_number": story_brief.revision_number,

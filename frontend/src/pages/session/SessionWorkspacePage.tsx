@@ -6,6 +6,7 @@ import {
   parseSessionChatIntent,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  type NormalizedBriefPreferencesView,
   type SessionHistoryEvent,
   type SessionSnapshot,
 } from '../../api/sessions.ts'
@@ -766,6 +767,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     desiredThemes?: string | null
     keyImages?: string | null
     mustHaveElements?: string | null
+    normalizedPreferences?: NormalizedBriefPreferencesView | null
     normalizedSummary?: string | null
     origin: string
     planningNotes?: string | null
@@ -781,7 +783,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       audience_notes: options.audienceNotes ?? null,
       must_have_elements: options.mustHaveElements ?? null,
       raw_brief: options.rawBrief ?? null,
-      normalized_summary: options.normalizedSummary ?? null,
+      normalized_summary: options.normalizedSummary,
+      normalized_preferences: options.normalizedPreferences,
       planning_notes: options.planningNotes ?? null,
       edit_mode: options.editMode ?? 'replace',
       origin: options.origin,
@@ -841,7 +844,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         audienceNotes: action.extracted_values.audience_notes ?? null,
         mustHaveElements: action.extracted_values.must_have_elements ?? null,
         rawBrief: action.extracted_values.raw_brief ?? null,
-        normalizedSummary: action.extracted_values.normalized_summary ?? null,
+        normalizedSummary: action.extracted_values.normalized_summary,
         planningNotes: action.extracted_values.planning_notes ?? null,
         editMode: action.extracted_values.edit_mode,
         origin: 'chat',

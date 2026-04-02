@@ -5,7 +5,12 @@ from collections.abc import Iterator
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from app.ai import GeminiIntentParserAdapter, IntentParserAdapter
+from app.ai import (
+    BriefNormalizationAdapter,
+    GeminiBriefNormalizationAdapter,
+    GeminiIntentParserAdapter,
+    IntentParserAdapter,
+)
 from app.db.session import get_session_factory
 from app.settings import AppSettings, get_settings
 
@@ -35,5 +40,18 @@ def get_intent_parser_adapter(request: Request) -> IntentParserAdapter:
             model_id=settings.gemini.planning_model,
         )
         request.app.state.intent_parser_adapter = adapter
+
+    return adapter
+
+
+def get_brief_normalization_adapter(request: Request) -> BriefNormalizationAdapter:
+    adapter = getattr(request.app.state, "brief_normalization_adapter", None)
+    if adapter is None:
+        settings = get_app_settings(request)
+        adapter = GeminiBriefNormalizationAdapter(
+            credential=settings.gemini_api_key,
+            model_id=settings.gemini.planning_model,
+        )
+        request.app.state.brief_normalization_adapter = adapter
 
     return adapter

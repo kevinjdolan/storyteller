@@ -15,6 +15,7 @@ from app.models import (
     CompositionJobView,
     CompositionProgressEventPayload,
     ConversationMemorySnapshotView,
+    NormalizedBriefPreferences,
     PitchView,
     RecentSessionSummary,
     SessionAssetView,
@@ -709,6 +710,11 @@ def build_story_brief_view(row) -> StoryBriefView | None:
         must_have_elements=row.must_have_elements,
         raw_brief=row.raw_brief,
         normalized_summary=row.normalized_summary,
+        normalized_preferences=NormalizedBriefPreferences.model_validate(
+            row.normalized_preferences or {}
+        )
+        if row.normalized_preferences is not None
+        else None,
         planning_notes=row.planning_notes,
         accepted_at=row.accepted_at,
         updated_at=row.updated_at,

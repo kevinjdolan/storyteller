@@ -57,9 +57,19 @@ export type StoryBriefView = {
   must_have_elements?: string | null
   raw_brief: string
   normalized_summary?: string | null
+  normalized_preferences?: NormalizedBriefPreferencesView | null
   planning_notes?: string | null
   accepted_at?: string | null
   updated_at: string
+}
+
+export type NormalizedBriefPreferencesView = {
+  protagonist_type?: string | null
+  setting?: string | null
+  emotional_goal?: string | null
+  constraint_notes: string[]
+  bedtime_safety_concerns: string[]
+  candidate_motifs: string[]
 }
 
 export type PitchView = {
@@ -302,6 +312,7 @@ export type SaveSessionStoryBriefRequest = {
   must_have_elements?: string | null
   raw_brief?: string | null
   normalized_summary?: string | null
+  normalized_preferences?: NormalizedBriefPreferencesView | null
   planning_notes?: string | null
   edit_mode?: 'replace' | 'append' | 'merge'
   origin?: string

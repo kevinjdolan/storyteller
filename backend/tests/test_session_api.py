@@ -8,11 +8,50 @@ import pytest
 from app.db import Base, StorySession
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
-from app.models import WorkflowStage, WorkflowStageState
+from app.models import (
+    BriefNormalizationInvocation,
+    BriefNormalizationInvocationResult,
+    BriefNormalizationStructuredOutput,
+    NormalizedBriefPreferences,
+    WorkflowStage,
+    WorkflowStageState,
+)
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.sessions import SessionService
 from app.settings import get_settings
 from fastapi.testclient import TestClient
+
+
+class StubBriefNormalizationAdapter:
+    def __init__(self) -> None:
+        self.model_id = "gemini-3.1-flash-lite"
+
+    def normalize(
+        self,
+        invocation: BriefNormalizationInvocation,
+    ) -> BriefNormalizationInvocationResult:
+        return BriefNormalizationInvocationResult(
+            invocation=invocation,
+            structured_output=BriefNormalizationStructuredOutput(
+                normalized_summary=(
+                    "A harbor bedtime quest where each lantern return settles the night."
+                ),
+                normalized_preferences=NormalizedBriefPreferences(
+                    protagonist_type="A child and an otter guide",
+                    setting="a moonlit harbor",
+                    emotional_goal="a calm return home",
+                    constraint_notes=["End with the harbor settled and safe."],
+                    bedtime_safety_concerns=[
+                        "Keep every surprise quickly reassuring."
+                    ],
+                    candidate_motifs=["floating lanterns", "moonlit water"],
+                ),
+            ),
+            raw_response={"stub": True},
+        )
+
+    def close(self) -> None:
+        return None
 
 
 @pytest.fixture
@@ -27,7 +66,10 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     engine = get_engine()
     Base.metadata.create_all(engine)
 
-    with TestClient(create_app()) as test_client:
+    app = create_app()
+    app.state.brief_normalization_adapter = StubBriefNormalizationAdapter()
+
+    with TestClient(app) as test_client:
         yield test_client
 
     get_settings.cache_clear()
@@ -392,6 +434,14 @@ def test_save_story_brief_endpoint_persists_revisioned_brief_and_returns_snapsho
     assert payload["snapshot"]["resume_stage"] == "pitches"
     assert payload["snapshot"]["story_brief"]["story_idea"].startswith(
         "A child follows floating lanterns"
+    )
+    assert (
+        payload["snapshot"]["story_brief"]["normalized_summary"]
+        == "A harbor bedtime quest where each lantern return settles the night."
+    )
+    assert (
+        payload["snapshot"]["story_brief"]["normalized_preferences"]["setting"]
+        == "a moonlit harbor"
     )
     assert (
         "Desired themes: gentle bravery, belonging, quiet wonder"

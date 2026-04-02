@@ -11,6 +11,17 @@ from app.models.action_policy import (
     SessionActionSideEffectKind,
     build_action_policy_request_from_batch,
 )
+from app.models.brief_normalization import (
+    BRIEF_NORMALIZATION_PROMPT_VERSION,
+    BRIEF_NORMALIZATION_SCHEMA_VERSION,
+    BriefNormalizationInvocation,
+    BriefNormalizationInvocationResult,
+    BriefNormalizationPromptContext,
+    BriefNormalizationResult,
+    BriefNormalizationStructuredOutput,
+    NormalizedBriefPreferences,
+    normalize_optional_brief_text,
+)
 from app.models.catalog import (
     GenreCatalogEntry,
     GenreCatalogSeed,
@@ -224,6 +235,13 @@ __all__ = [
     "AudioJobView",
     "AudioProgressEventPayload",
     "BeatSheetView",
+    "BRIEF_NORMALIZATION_PROMPT_VERSION",
+    "BRIEF_NORMALIZATION_SCHEMA_VERSION",
+    "BriefNormalizationInvocation",
+    "BriefNormalizationInvocationResult",
+    "BriefNormalizationPromptContext",
+    "BriefNormalizationResult",
+    "BriefNormalizationStructuredOutput",
     "CHAT_TO_UI_ACTION_SCHEMA_VERSION",
     "SESSION_ACTION_POLICY_SCHEMA_VERSION",
     "STORY_WORKFLOW_TOOL_SCHEMA_VERSION",
@@ -298,6 +316,7 @@ __all__ = [
     "JobStatusEventPayload",
     "JobStatusRealtimeEvent",
     "NavigateToStageAction",
+    "NormalizedBriefPreferences",
     "OpenFinalizeViewAction",
     "OpenFinalizeViewValues",
     "PauseJobAction",
@@ -416,6 +435,7 @@ __all__ = [
     "get_invalidated_stages_after_edit",
     "get_workflow_stage_definition",
     "parse_event_payload",
+    "normalize_optional_brief_text",
     "resolve_resume_stage",
     "serialize_event_payload",
 ]

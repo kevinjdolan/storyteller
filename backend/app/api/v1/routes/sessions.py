@@ -5,8 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.ai import IntentParserAdapter
-from app.api.dependencies import get_db_session, get_intent_parser_adapter
+from app.ai import BriefNormalizationAdapter, IntentParserAdapter
+from app.api.dependencies import (
+    get_brief_normalization_adapter,
+    get_db_session,
+    get_intent_parser_adapter,
+)
 from app.models import (
     CreateSessionRequest,
     ParseChatIntentRequest,
@@ -27,7 +31,11 @@ from app.models import (
     SessionSnapshot,
     SessionStoryBriefResponse,
 )
-from app.services import SessionActionPolicyService, SessionIntentParserService
+from app.services import (
+    BriefNormalizationService,
+    SessionActionPolicyService,
+    SessionIntentParserService,
+)
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
     InvalidStageTransitionError,
@@ -205,9 +213,17 @@ def save_session_story_brief(
     session_id: str,
     payload: SaveSessionStoryBriefRequest,
     db_session: Annotated[Session, Depends(get_db_session)],
+    brief_normalization_adapter: Annotated[
+        BriefNormalizationAdapter, Depends(get_brief_normalization_adapter)
+    ],
 ) -> SessionStoryBriefResponse:
     try:
-        return SessionService(db_session).save_story_brief(
+        return SessionService(
+            db_session,
+            brief_normalization_service=BriefNormalizationService(
+                adapter=brief_normalization_adapter
+            ),
+        ).save_story_brief(
             session_id,
             story_idea=payload.story_idea,
             desired_themes=payload.desired_themes,
@@ -216,9 +232,11 @@ def save_session_story_brief(
             must_have_elements=payload.must_have_elements,
             raw_brief=payload.raw_brief,
             normalized_summary=payload.normalized_summary,
+            normalized_preferences=payload.normalized_preferences,
             planning_notes=payload.planning_notes,
             edit_mode=payload.edit_mode,
             origin=payload.origin,
+            provided_fields=payload.model_fields_set,
         )
     except SessionNotFoundError as exc:
         raise HTTPException(

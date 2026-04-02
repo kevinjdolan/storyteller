@@ -393,6 +393,7 @@ class StoryBrief(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     must_have_elements: Mapped[str | None] = mapped_column(Text)
     raw_brief: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_summary: Mapped[str | None] = mapped_column(Text)
+    normalized_preferences: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     planning_notes: Mapped[str | None] = mapped_column(Text)
     model_output: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

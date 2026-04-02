@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.chat_actions import StoryBriefEditMode
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.workflow import WorkflowStage, WorkflowStageState
@@ -46,6 +47,7 @@ class StoryBriefView(BaseModel):
     must_have_elements: str | None = None
     raw_brief: str
     normalized_summary: str | None = None
+    normalized_preferences: NormalizedBriefPreferences | None = None
     planning_notes: str | None = None
     accepted_at: datetime | None = None
     updated_at: datetime
@@ -231,6 +233,7 @@ class SaveSessionStoryBriefRequest(BaseModel):
     must_have_elements: str | None = Field(default=None, min_length=1)
     raw_brief: str | None = Field(default=None, min_length=1)
     normalized_summary: str | None = Field(default=None, min_length=1)
+    normalized_preferences: NormalizedBriefPreferences | None = None
     planning_notes: str | None = Field(default=None, min_length=1)
     edit_mode: StoryBriefEditMode = StoryBriefEditMode.REPLACE
     origin: str = Field(default="workspace", min_length=1)
@@ -245,6 +248,7 @@ class SaveSessionStoryBriefRequest(BaseModel):
             self.must_have_elements,
             self.raw_brief,
             self.normalized_summary,
+            self.normalized_preferences,
             self.planning_notes,
         ]
         if all(value is None for value in values):

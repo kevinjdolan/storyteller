@@ -136,6 +136,14 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             normalized_summary=(
                 "A bedtime-safe quest about crossing the lake to find a glowing reed."
             ),
+            normalized_preferences={
+                "protagonist_type": "A sleepy fox",
+                "setting": "a moonlit lake",
+                "emotional_goal": "a safe return home",
+                "constraint_notes": ["End with the fox feeling safer than at the start."],
+                "bedtime_safety_concerns": ["Keep the lake mystery reassuring."],
+                "candidate_motifs": ["silver ripples", "lantern reeds"],
+            },
             is_active=True,
             accepted_at=now,
         )
@@ -332,6 +340,7 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "key_images",
             "audience_notes",
             "must_have_elements",
+            "normalized_preferences",
         } <= story_brief_columns
 
         tone_profile_foreign_keys = {

@@ -40,6 +40,7 @@ def build_session_agent_context_summary(
                 or snapshot.story_brief.raw_brief
             )
         )
+        lines.extend(_build_brief_preference_lines(snapshot.story_brief.normalized_preferences))
 
     if snapshot.selected_pitch is not None:
         lines.append(f"Selected pitch: {snapshot.selected_pitch.title}")
@@ -118,6 +119,43 @@ def _build_story_setup_summary(snapshot: SessionSnapshot) -> str | None:
         return None
 
     return "Story setup: " + ", ".join(setup_bits)
+
+
+def _build_brief_preference_lines(normalized_preferences) -> list[str]:
+    if normalized_preferences is None:
+        return []
+
+    lines: list[str] = []
+    if normalized_preferences.protagonist_type:
+        lines.append(f"Brief protagonist type: {normalized_preferences.protagonist_type}")
+    if normalized_preferences.setting:
+        lines.append(f"Brief setting: {normalized_preferences.setting}")
+    if normalized_preferences.emotional_goal:
+        lines.append(f"Brief emotional goal: {normalized_preferences.emotional_goal}")
+    if normalized_preferences.constraint_notes:
+        lines.append(
+            "Brief constraints: "
+            + "; ".join(
+                _truncate(note, limit=80) for note in normalized_preferences.constraint_notes
+            )
+        )
+    if normalized_preferences.bedtime_safety_concerns:
+        lines.append(
+            "Bedtime safety guardrails: "
+            + "; ".join(
+                _truncate(note, limit=80)
+                for note in normalized_preferences.bedtime_safety_concerns
+            )
+        )
+    if normalized_preferences.candidate_motifs:
+        lines.append(
+            "Brief motifs: "
+            + ", ".join(
+                _truncate(motif, limit=40) for motif in normalized_preferences.candidate_motifs
+            )
+        )
+
+    return lines
 
 
 def _build_latest_detail_summary(snapshot: SessionSnapshot) -> str | None:

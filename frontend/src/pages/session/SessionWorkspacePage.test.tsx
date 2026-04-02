@@ -126,6 +126,14 @@ const sampleSnapshot = {
       'A child follows floating lanterns across a harbor and helps a shy otter guardian bring them home.',
     normalized_summary:
       'A harbor bedtime quest where floating lanterns guide a child and an otter toward a calm reunion.',
+    normalized_preferences: {
+      protagonist_type: 'A child and an otter guardian',
+      setting: 'a moonlit harbor',
+      emotional_goal: 'belonging, gentle courage, and a calm reunion',
+      constraint_notes: ['Keep the ending restful.'],
+      bedtime_safety_concerns: ['Let any mystery resolve gently.'],
+      candidate_motifs: ['floating lanterns', 'moonlit docks', 'otter paws'],
+    },
     updated_at: '2026-04-01T05:14:00Z',
   },
   selected_pitch: {
@@ -646,6 +654,38 @@ function readStoryBriefText(body: Record<string, unknown>, key: string) {
     : null
 }
 
+function readNormalizedPreferenceList(
+  body: Record<string, unknown>,
+  key: string,
+): string[] {
+  const normalizedPreferences =
+    typeof body.normalized_preferences === 'object' &&
+    body.normalized_preferences !== null
+      ? (body.normalized_preferences as Record<string, unknown>)
+      : null
+  const value = normalizedPreferences?.[key]
+
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+function readNormalizedPreferenceText(
+  body: Record<string, unknown>,
+  key: string,
+) {
+  const normalizedPreferences =
+    typeof body.normalized_preferences === 'object' &&
+    body.normalized_preferences !== null
+      ? (body.normalized_preferences as Record<string, unknown>)
+      : null
+  const value = normalizedPreferences?.[key]
+
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null
+}
+
 function truncateStoryBriefText(value: string, limit = 160) {
   if (value.length <= limit) {
     return value
@@ -656,7 +696,8 @@ function truncateStoryBriefText(value: string, limit = 160) {
 
 function buildStoryBriefRawText(body: Record<string, unknown>) {
   const storyIdea =
-    readStoryBriefText(body, 'story_idea') ?? readStoryBriefText(body, 'raw_brief')
+    readStoryBriefText(body, 'story_idea') ??
+    readStoryBriefText(body, 'raw_brief')
 
   if (storyIdea == null) {
     return null
@@ -692,6 +733,28 @@ function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
   const rawBrief = buildStoryBriefRawText(body) ?? storyIdea
   const normalizedSummary =
     readStoryBriefText(body, 'normalized_summary') ?? storyIdea
+  const normalizedPreferences = {
+    protagonist_type:
+      readNormalizedPreferenceText(body, 'protagonist_type') ??
+      'A child protagonist',
+    setting:
+      readNormalizedPreferenceText(body, 'setting') ?? 'a moonlit harbor',
+    emotional_goal:
+      readNormalizedPreferenceText(body, 'emotional_goal') ??
+      'a calm return home',
+    constraint_notes:
+      readNormalizedPreferenceList(body, 'constraint_notes').length > 0
+        ? readNormalizedPreferenceList(body, 'constraint_notes')
+        : ['End in a clearly restful place.'],
+    bedtime_safety_concerns:
+      readNormalizedPreferenceList(body, 'bedtime_safety_concerns').length > 0
+        ? readNormalizedPreferenceList(body, 'bedtime_safety_concerns')
+        : ['Keep any mystery gentle and quickly repaired.'],
+    candidate_motifs:
+      readNormalizedPreferenceList(body, 'candidate_motifs').length > 0
+        ? readNormalizedPreferenceList(body, 'candidate_motifs')
+        : ['floating lanterns', 'still water'],
+  }
   const planningNotes = readStoryBriefText(body, 'planning_notes')
   const changedFields = [
     'story_idea',
@@ -700,6 +763,12 @@ function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
     'audience_notes',
     'must_have_elements',
   ].filter((field) => readStoryBriefText(body, field) != null)
+  if ('normalized_summary' in body) {
+    changedFields.push('normalized_summary')
+  }
+  if ('normalized_preferences' in body) {
+    changedFields.push('normalized_preferences')
+  }
   const summary = `Saved story brief: ${truncateStoryBriefText(rawBrief)}`
 
   return {
@@ -720,6 +789,7 @@ function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
         must_have_elements: mustHaveElements,
         raw_brief: rawBrief,
         normalized_summary: normalizedSummary,
+        normalized_preferences: normalizedPreferences,
         planning_notes: planningNotes,
         updated_at: '2026-04-01T05:18:00Z',
       },
@@ -810,6 +880,8 @@ function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
           key_images: keyImages,
           audience_notes: audienceNotes,
           must_have_elements: mustHaveElements,
+          normalized_summary: normalizedSummary,
+          normalized_preferences: normalizedPreferences,
         },
         summary_text: summary,
       },
@@ -1452,6 +1524,13 @@ describe('SessionWorkspacePage', () => {
     expect(screen.getByLabelText('Key images')).toBeInTheDocument()
     expect(screen.getByLabelText('Target audience notes')).toBeInTheDocument()
     expect(screen.getByLabelText('Must-have elements')).toBeInTheDocument()
+    expect(screen.getByLabelText('Normalized summary')).toBeInTheDocument()
+    expect(screen.getByLabelText('Protagonist type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Setting')).toBeInTheDocument()
+    expect(screen.getByLabelText('Emotional goal')).toBeInTheDocument()
+    expect(screen.getByLabelText('Constraint notes')).toBeInTheDocument()
+    expect(screen.getByLabelText('Bedtime-safety concerns')).toBeInTheDocument()
+    expect(screen.getByLabelText('Candidate motifs')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Story idea'), {
       target: {
@@ -1492,20 +1571,115 @@ describe('SessionWorkspacePage', () => {
         'For a sensitive five-year-old who likes rescue stories without villains.',
       must_have_elements: 'An otter friend and a restful final page.',
       raw_brief: null,
-      normalized_summary: null,
       planning_notes: null,
       edit_mode: 'replace',
       origin: 'workspace',
     })
+    expect(storyBriefSaveRequests[0]).not.toHaveProperty('normalized_summary')
+    expect(storyBriefSaveRequests[0]).not.toHaveProperty(
+      'normalized_preferences',
+    )
     expect(
       await screen.findByRole('heading', {
         level: 2,
         name: 'Review and select story pitches',
       }),
     ).toBeInTheDocument()
+    expect(await screen.findByText(/saved story brief:/i)).toBeInTheDocument()
+  })
+
+  it('persists manual overrides to the extracted brief interpretation', async () => {
+    const baseSnapshot = buildToneSelectionResponse({
+      tone_profile_id: 'tone-1',
+      origin: 'workspace',
+    }).snapshot
+    const savedBriefSnapshot = {
+      ...baseSnapshot,
+      furthest_completed_stage: 'brief',
+      story_brief: {
+        ...sampleSnapshot.story_brief,
+      },
+      stage_states: baseSnapshot.stage_states.map((stageState, index) => {
+        if (index === 2) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: 'Saved story brief: A harbor bedtime quest.',
+            last_event_summary: 'Saved story brief: A harbor bedtime quest.',
+            last_event_type: 'content.user_edit.recorded',
+            last_event_at: '2026-04-01T05:18:00Z',
+          }
+        }
+
+        return stageState
+      }),
+    } as const
+    const briefStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 4,
+      events: [
+        sampleHistory.events[0],
+        sampleHistory.events[1],
+        sampleHistory.events[2],
+        sampleHistory.events[3],
+      ],
+    } as const
+
+    const { storyBriefSaveRequests } = mockWorkspaceApi({
+      history: briefStageHistory,
+      hydration: {
+        snapshot: savedBriefSnapshot,
+        recent_history: briefStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 4,
+          history_event_count: 4,
+          materialized_through_sequence_number: 4,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
     expect(
-      await screen.findByText(/saved story brief:/i),
+      await screen.findByDisplayValue(/harbor bedtime quest/i),
     ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Normalized summary'), {
+      target: {
+        value:
+          'A calmer harbor quest where each lantern return helps the child and otter settle the night.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Bedtime-safety concerns'), {
+      target: {
+        value:
+          'Let any mystery resolve quickly and clearly.\nKeep every separation brief and reassuring.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Candidate motifs'), {
+      target: {
+        value: 'floating lanterns\notter paws\nmoonlit docks',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save brief' }))
+
+    expect(storyBriefSaveRequests).toHaveLength(1)
+    expect(storyBriefSaveRequests[0]).toMatchObject({
+      normalized_summary:
+        'A calmer harbor quest where each lantern return helps the child and otter settle the night.',
+      normalized_preferences: {
+        protagonist_type: 'A child and an otter guardian',
+        setting: 'a moonlit harbor',
+        emotional_goal: 'belonging, gentle courage, and a calm reunion',
+        constraint_notes: ['Keep the ending restful.'],
+        bedtime_safety_concerns: [
+          'Let any mystery resolve quickly and clearly.',
+          'Keep every separation brief and reassuring.',
+        ],
+        candidate_motifs: ['floating lanterns', 'otter paws', 'moonlit docks'],
+      },
+    })
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {
@@ -1778,10 +1952,8 @@ describe('SessionWorkspacePage', () => {
                   'A child and an otter guardian drift after runaway lanterns to bring each light home before the harbor sleeps.',
                 desired_themes:
                   'Gentle courage, belonging, and a calm return home.',
-                key_images:
-                  'Lantern reflections, otter paws, and quiet docks.',
-                audience_notes:
-                  'Keep it cozy for a sensitive five-year-old.',
+                key_images: 'Lantern reflections, otter paws, and quiet docks.',
+                audience_notes: 'Keep it cozy for a sensitive five-year-old.',
                 must_have_elements:
                   'A harbor reunion and a soft bedtime ending.',
                 edit_mode: 'replace',
@@ -1847,6 +2019,10 @@ describe('SessionWorkspacePage', () => {
       edit_mode: 'replace',
       origin: 'chat',
     })
+    expect(storyBriefSaveRequests[0]).not.toHaveProperty('normalized_summary')
+    expect(storyBriefSaveRequests[0]).not.toHaveProperty(
+      'normalized_preferences',
+    )
   })
 
   it('shows rejected chat-driven action echoes without mutating the visible workspace stage', async () => {

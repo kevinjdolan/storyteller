@@ -9,6 +9,7 @@ from app.models import (
     ConversationMemorySnapshotView,
     ConversationMemorySummaryData,
     ConversationMemoryWorkflow,
+    NormalizedBriefPreferences,
     WorkflowStageState,
     get_workflow_stage_definition,
 )
@@ -196,6 +197,11 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
     preferences: list[str] = []
     audio_job = _resolve_audio_resume_job(aggregate)
 
+    if aggregate.active_story_brief is not None:
+        preferences.extend(
+            _build_brief_preference_lines(aggregate.active_story_brief.normalized_preferences)
+        )
+
     if aggregate.selected_story_setup is not None:
         story_setup_summary = _build_story_setup_summary(aggregate)
         if story_setup_summary is not None:
@@ -222,6 +228,39 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
         preferences.append("Narration settings: " + ", ".join(audio_preferences))
 
     return preferences
+
+
+def _build_brief_preference_lines(raw_preferences) -> list[str]:
+    if raw_preferences is None:
+        return []
+
+    preferences = NormalizedBriefPreferences.model_validate(raw_preferences)
+    lines: list[str] = []
+    if preferences.protagonist_type:
+        lines.append(f"Brief protagonist type: {preferences.protagonist_type}")
+    if preferences.setting:
+        lines.append(f"Brief setting: {preferences.setting}")
+    if preferences.emotional_goal:
+        lines.append(f"Brief emotional goal: {preferences.emotional_goal}")
+    if preferences.constraint_notes:
+        lines.append(
+            "Brief constraints: "
+            + "; ".join(_truncate(note, limit=80) for note in preferences.constraint_notes)
+        )
+    if preferences.bedtime_safety_concerns:
+        lines.append(
+            "Bedtime safety guardrails: "
+            + "; ".join(
+                _truncate(note, limit=80) for note in preferences.bedtime_safety_concerns
+            )
+        )
+    if preferences.candidate_motifs:
+        lines.append(
+            "Brief motifs: "
+            + ", ".join(_truncate(motif, limit=40) for motif in preferences.candidate_motifs)
+        )
+
+    return lines
 
 
 def _build_unresolved_questions(

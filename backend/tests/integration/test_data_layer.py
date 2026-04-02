@@ -106,6 +106,7 @@ EXPECTED_STORY_BRIEF_COLUMNS = {
     "must_have_elements",
     "raw_brief",
     "normalized_summary",
+    "normalized_preferences",
     "planning_notes",
     "model_output",
     "is_active",

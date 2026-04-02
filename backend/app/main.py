@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        brief_normalization_adapter = getattr(app.state, "brief_normalization_adapter", None)
+        if brief_normalization_adapter is not None:
+            brief_normalization_adapter.close()
         intent_parser_adapter = getattr(app.state, "intent_parser_adapter", None)
         if intent_parser_adapter is not None:
             intent_parser_adapter.close()
