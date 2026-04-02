@@ -6,17 +6,20 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.db import CharacterSheet, Pitch, StoryBrief
+from app.db import BeatSheet, CharacterSheet, Pitch, StoryBrief
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     AIOutputKind,
+    BeatSheetGenerationResult,
     CharacterChangeImpact,
     ExistingCharacterSheetContext,
+    ExistingBeatSheetContext,
     ExistingSelectedPitchContext,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
+    SessionBeatSheetGenerationResponse,
     SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
@@ -43,6 +46,10 @@ from app.services.brief_normalization import (
     build_brief_normalization_result_from_existing,
 )
 from app.services.catalog import find_active_genre, find_active_tone_for_genre
+from app.services.beat_sheet_generation import (
+    BeatSheetGenerationService,
+    build_beat_sheet_model_output,
+)
 from app.services.character_generation import (
     CharacterGenerationService,
     build_character_model_output,
@@ -101,6 +108,14 @@ class SessionCharacterSheetGenerationError(SessionServiceError):
 
 class SessionCharacterSheetSelectionError(SessionServiceError):
     """Raised when a character-sheet selection request cannot be fulfilled."""
+
+
+class SessionBeatSheetGenerationError(SessionServiceError):
+    """Raised when a beat-sheet generation request cannot be fulfilled."""
+
+
+class SessionBeatSheetSelectionError(SessionServiceError):
+    """Raised when a beat-sheet selection request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -1630,6 +1645,548 @@ class SessionService:
             event=self._event_log.build_event_view(selection_event),
         )
 
+    def generate_beat_sheet(
+        self,
+        session_id: str,
+        *,
+        guidance: str | None = None,
+        focus_beats: list[str] | None = None,
+        bedtime_goal: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        beat_sheet_generation_service: BeatSheetGenerationService | None = None,
+    ) -> SessionBeatSheetGenerationResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_pitch = self._sessions.get_selected_pitch(session_id)
+        if selected_pitch is None:
+            raise SessionBeatSheetGenerationError(
+                "select a pitch before generating a beat sheet",
+            )
+
+        selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        if selected_character_sheet is None:
+            raise SessionBeatSheetGenerationError(
+                "select a character sheet before generating a beat sheet",
+            )
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        current_selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
+        raw_brief = (
+            active_brief.raw_brief
+            if active_brief is not None
+            else selected_pitch.logline
+        )
+        normalized_summary = (
+            active_brief.normalized_summary if active_brief is not None else None
+        )
+        generator = beat_sheet_generation_service or BeatSheetGenerationService()
+        generation_result = generator.generate_beat_sheet(
+            generation_goal="initial",
+            selected_pitch=_build_selected_pitch_context(selected_pitch),
+            selected_character_sheet=_build_existing_character_sheet_context(
+                selected_character_sheet
+            ),
+            raw_brief=raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=normalized_summary,
+            story_idea=active_brief.story_idea if active_brief is not None else None,
+            desired_themes=active_brief.desired_themes if active_brief is not None else None,
+            key_images=active_brief.key_images if active_brief is not None else None,
+            audience_notes=active_brief.audience_notes if active_brief is not None else None,
+            must_have_elements=(
+                active_brief.must_have_elements if active_brief is not None else None
+            ),
+            planning_notes=active_brief.planning_notes if active_brief is not None else None,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences if active_brief is not None else {}
+            ),
+            guidance=guidance,
+            focus_beats=_normalize_beat_name_list(focus_beats),
+            bedtime_goal=_normalize_optional_text(bedtime_goal),
+            existing_beat_sheet=(
+                _build_existing_beat_sheet_context(current_selected_beat_sheet)
+                if current_selected_beat_sheet is not None
+                and current_selected_beat_sheet.character_sheet_id == selected_character_sheet.id
+                else None
+            ),
+        )
+        if not generation_result.evaluation.passed:
+            raise SessionBeatSheetGenerationError(
+                "beat-sheet generation produced an invalid revision",
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            status=WorkflowStageState.IN_PROGRESS,
+        )
+        stage_snapshot = stage_map[WorkflowStage.BEATS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+        stage_snapshot.detail = _build_beat_sheet_generation_stage_detail(
+            generation_result.beat_sheet
+        )
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = None
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            detail=stage_snapshot.detail,
+        )
+
+        beat_sheet = BeatSheet(
+            session_id=story_session.id,
+            character_sheet_id=selected_character_sheet.id,
+            revision_number=_next_beat_sheet_revision_number(
+                self._sessions.list_beat_sheets(session_id)
+            ),
+            summary=generation_result.beat_sheet.summary,
+            beats=_build_beat_sheet_persistence_payload(
+                generation_result,
+                generation_kind="generated",
+                guidance=_normalize_optional_text(guidance),
+                focus_beats=_normalize_beat_name_list(focus_beats),
+                bedtime_goal=_normalize_optional_text(bedtime_goal),
+                selected_pitch=selected_pitch,
+                source_beat_sheet=current_selected_beat_sheet,
+            ),
+            bedtime_notes=generation_result.beat_sheet.bedtime_notes,
+            is_selected=False,
+        )
+        self._session.add(beat_sheet)
+        self._session.flush()
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.BEATS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        ai_event = self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.BEAT_SHEET,
+            stage=WorkflowStage.BEATS,
+            resource_id=beat_sheet.id,
+            candidate_count=1,
+            model_id=generation_result.model_id,
+            summary_text=_build_beat_sheet_generation_summary_text(
+                generation_result.beat_sheet
+            ),
+            actor=actor,
+        )
+        stage_snapshot.last_event = ai_event
+        self._session.commit()
+        return SessionBeatSheetGenerationResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(ai_event),
+        )
+
+    def refine_beat_sheet(
+        self,
+        session_id: str,
+        *,
+        instructions: str,
+        beat_sheet_id: str | None = None,
+        revision_number: int | None = None,
+        beat_names: list[str] | None = None,
+        bedtime_goal: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        beat_sheet_generation_service: BeatSheetGenerationService | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_pitch = self._sessions.get_selected_pitch(session_id)
+        if selected_pitch is None:
+            raise SessionBeatSheetGenerationError(
+                "select a pitch before refining the beat sheet",
+            )
+
+        selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        if selected_character_sheet is None:
+            raise SessionBeatSheetGenerationError(
+                "select a character sheet before refining the beat sheet",
+            )
+
+        normalized_instructions = _normalize_optional_text(instructions)
+        if normalized_instructions is None:
+            raise SessionBeatSheetGenerationError("beat-sheet refinement instructions are required")
+
+        source_beat_sheet = _resolve_source_beat_sheet(
+            self._sessions.list_beat_sheets(session_id),
+            selected_beat_sheet=self._sessions.get_selected_beat_sheet(session_id),
+            beat_sheet_id=beat_sheet_id,
+            revision_number=revision_number,
+        )
+        if source_beat_sheet is None:
+            raise SessionBeatSheetSelectionError(
+                "no beat sheet matched the requested refinement",
+            )
+        if (
+            source_beat_sheet.character_sheet_id is not None
+            and source_beat_sheet.character_sheet_id != selected_character_sheet.id
+        ):
+            raise SessionBeatSheetSelectionError(
+                "the requested beat sheet belongs to a different character sheet",
+            )
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        previous_selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
+        raw_brief = (
+            active_brief.raw_brief
+            if active_brief is not None
+            else selected_pitch.logline
+        )
+        normalized_summary = (
+            active_brief.normalized_summary if active_brief is not None else None
+        )
+        normalized_beat_names = _normalize_beat_name_list(beat_names)
+        normalized_bedtime_goal = _normalize_optional_text(bedtime_goal)
+        generator = beat_sheet_generation_service or BeatSheetGenerationService()
+        generation_result = generator.generate_beat_sheet(
+            generation_goal="refinement",
+            selected_pitch=_build_selected_pitch_context(selected_pitch),
+            selected_character_sheet=_build_existing_character_sheet_context(
+                selected_character_sheet
+            ),
+            raw_brief=raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=normalized_summary,
+            story_idea=active_brief.story_idea if active_brief is not None else None,
+            desired_themes=active_brief.desired_themes if active_brief is not None else None,
+            key_images=active_brief.key_images if active_brief is not None else None,
+            audience_notes=active_brief.audience_notes if active_brief is not None else None,
+            must_have_elements=(
+                active_brief.must_have_elements if active_brief is not None else None
+            ),
+            planning_notes=active_brief.planning_notes if active_brief is not None else None,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences if active_brief is not None else {}
+            ),
+            instructions=normalized_instructions,
+            focus_beats=normalized_beat_names,
+            bedtime_goal=normalized_bedtime_goal,
+            existing_beat_sheet=_build_existing_beat_sheet_context(source_beat_sheet),
+        )
+        if not generation_result.evaluation.passed:
+            raise SessionBeatSheetGenerationError(
+                "beat-sheet refinement produced an invalid revision",
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.BEATS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        for beat_sheet in self._sessions.list_beat_sheets(session_id):
+            beat_sheet.is_selected = False
+
+        refinement_rationale = _build_beat_sheet_refinement_rationale(
+            source_beat_sheet,
+            normalized_instructions,
+            beat_names=normalized_beat_names,
+            bedtime_goal=normalized_bedtime_goal,
+        )
+        refined_beat_sheet = BeatSheet(
+            session_id=story_session.id,
+            character_sheet_id=selected_character_sheet.id,
+            revision_number=_next_beat_sheet_revision_number(
+                self._sessions.list_beat_sheets(session_id)
+            ),
+            summary=generation_result.beat_sheet.summary,
+            beats=_build_beat_sheet_persistence_payload(
+                generation_result,
+                generation_kind="refinement",
+                guidance=normalized_instructions,
+                focus_beats=normalized_beat_names,
+                bedtime_goal=normalized_bedtime_goal,
+                selected_pitch=selected_pitch,
+                source_beat_sheet=source_beat_sheet,
+                selection_rationale=refinement_rationale,
+            ),
+            bedtime_notes=generation_result.beat_sheet.bedtime_notes,
+            is_selected=True,
+            accepted_at=now,
+        )
+        self._session.add(refined_beat_sheet)
+        self._session.flush()
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_beat_sheet_selection_detail(refined_beat_sheet)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            detail=_build_beat_sheet_invalidation_detail(refined_beat_sheet),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.BEATS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.BEAT_SHEET,
+            stage=WorkflowStage.BEATS,
+            resource_id=refined_beat_sheet.id,
+            candidate_count=1,
+            model_id=generation_result.model_id,
+            summary_text=_build_beat_sheet_refinement_summary_text(
+                refined_beat_sheet,
+                source_beat_sheet=source_beat_sheet,
+            ),
+            actor=actor,
+        )
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.BEAT_SHEET,
+            stage=WorkflowStage.BEATS,
+            label=_read_beat_sheet_label(refined_beat_sheet),
+            selection_id=refined_beat_sheet.id,
+            rationale=refinement_rationale,
+            previous_selection_id=(
+                previous_selected_beat_sheet.id
+                if previous_selected_beat_sheet is not None
+                else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
+    def select_beat_sheet(
+        self,
+        session_id: str,
+        *,
+        beat_sheet_id: str | None = None,
+        revision_number: int | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        if selected_character_sheet is None:
+            raise SessionBeatSheetSelectionError(
+                "select a character sheet before choosing a beat sheet"
+            )
+
+        matches = _find_matching_beat_sheets(
+            self._sessions.list_beat_sheets(session_id),
+            beat_sheet_id=beat_sheet_id,
+            revision_number=revision_number,
+        )
+        if not matches:
+            raise SessionBeatSheetSelectionError(
+                "no generated beat sheet matched the requested selection"
+            )
+        if len(matches) > 1:
+            raise SessionBeatSheetSelectionError(
+                "the requested beat-sheet selection matched more than one revision"
+            )
+
+        selected_beat_sheet = matches[0]
+        if (
+            selected_beat_sheet.character_sheet_id is not None
+            and selected_beat_sheet.character_sheet_id != selected_character_sheet.id
+        ):
+            raise SessionBeatSheetSelectionError(
+                "the requested beat sheet belongs to a different character sheet"
+            )
+
+        previous_selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
+        for beat_sheet in self._sessions.list_beat_sheets(session_id):
+            beat_sheet.is_selected = beat_sheet.id == selected_beat_sheet.id
+
+        now = utc_now()
+        selected_beat_sheet.accepted_at = now
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.BEATS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_beat_sheet_selection_detail(selected_beat_sheet)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.BEATS,
+            detail=_build_beat_sheet_invalidation_detail(selected_beat_sheet),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.BEATS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.BEAT_SHEET,
+            stage=WorkflowStage.BEATS,
+            label=_read_beat_sheet_label(selected_beat_sheet),
+            selection_id=selected_beat_sheet.id,
+            rationale=_read_beat_sheet_selection_rationale(selected_beat_sheet),
+            previous_selection_id=(
+                previous_selected_beat_sheet.id
+                if previous_selected_beat_sheet is not None
+                else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
     def apply_context_update(
         self,
         session_id: str,
@@ -2257,6 +2814,208 @@ def _read_character_sheet_label(character_sheet: CharacterSheet) -> str:
         or character_sheet.protagonist_name
         or f"Character sheet revision {character_sheet.revision_number}"
     )
+
+
+def _build_beat_sheet_persistence_payload(
+    result,
+    *,
+    generation_kind: str,
+    guidance: str | None = None,
+    focus_beats: list[str] | None = None,
+    bedtime_goal: str | None = None,
+    selected_pitch: Pitch,
+    source_beat_sheet: BeatSheet | None = None,
+    selection_rationale: str | None = None,
+) -> dict[str, Any]:
+    payload = build_beat_sheet_model_output(result)
+    payload["generation_kind"] = generation_kind
+    payload["guidance"] = guidance
+    payload["focus_beats"] = list(focus_beats or [])
+    payload["bedtime_goal"] = bedtime_goal
+    payload["beats"] = [
+        {
+            "key": beat.key,
+            "label": beat.label,
+            "order": index,
+            "summary": beat.summary,
+            "emotional_intent": beat.emotional_intent,
+            "bedtime_softening_note": beat.bedtime_softening_note,
+        }
+        for index, beat in enumerate(result.beat_sheet.beats, start=1)
+    ]
+    payload["pitch_context"] = {
+        "source_pitch_id": selected_pitch.id,
+        "source_pitch_title": selected_pitch.title,
+    }
+    if source_beat_sheet is not None:
+        payload["refinement"] = {
+            "source_beat_sheet_id": source_beat_sheet.id,
+            "source_beat_sheet_revision_number": source_beat_sheet.revision_number,
+            "refinement_instructions": guidance,
+            "selection_rationale": selection_rationale,
+        }
+    return payload
+
+
+def _build_existing_beat_sheet_context(beat_sheet: BeatSheet) -> ExistingBeatSheetContext:
+    return ExistingBeatSheetContext(
+        revision_number=beat_sheet.revision_number,
+        summary=beat_sheet.summary,
+        bedtime_notes=beat_sheet.bedtime_notes,
+        beats=_read_generated_beat_sheet_beats(beat_sheet),
+    )
+
+
+def _read_generated_beat_sheet_beats(beat_sheet: BeatSheet) -> list:
+    if not isinstance(beat_sheet.beats, Mapping):
+        return []
+
+    raw_beats = beat_sheet.beats.get("beats")
+    if not isinstance(raw_beats, list):
+        return []
+
+    generated_beats = []
+    for raw_beat in raw_beats:
+        if not isinstance(raw_beat, Mapping):
+            continue
+        generated_beats.append(
+            {
+                "key": raw_beat.get("key"),
+                "label": raw_beat.get("label"),
+                "summary": raw_beat.get("summary"),
+                "emotional_intent": raw_beat.get("emotional_intent"),
+                "bedtime_softening_note": raw_beat.get("bedtime_softening_note"),
+            }
+        )
+
+    return generated_beats
+
+
+def _next_beat_sheet_revision_number(beat_sheets: list[BeatSheet]) -> int:
+    if not beat_sheets:
+        return 1
+
+    return max(beat_sheet.revision_number for beat_sheet in beat_sheets) + 1
+
+
+def _build_beat_sheet_generation_stage_detail(
+    beat_sheet,
+) -> str:
+    beat_count = len(getattr(beat_sheet, "beats", []))
+    return (
+        f"Generated beat-sheet revision with {beat_count} Save-the-Cat beats. "
+        "Accept a revision to continue."
+    )
+
+
+def _build_beat_sheet_generation_summary_text(beat_sheet) -> str:
+    summary = getattr(beat_sheet, "summary", None)
+    if isinstance(summary, str) and summary:
+        return f"Generated beat sheet: {summary}"
+    return "Generated a fresh Save-the-Cat beat sheet."
+
+
+def _build_beat_sheet_refinement_rationale(
+    beat_sheet: BeatSheet,
+    instructions: str,
+    *,
+    beat_names: list[str],
+    bedtime_goal: str | None,
+) -> str:
+    focus_tail = f" Focus beats: {', '.join(beat_names)}." if beat_names else ""
+    bedtime_tail = f" Bedtime goal: {bedtime_goal}." if bedtime_goal else ""
+    return (
+        f'Refined from "{_read_beat_sheet_label(beat_sheet)}" with: {instructions}.'
+        f"{focus_tail}{bedtime_tail}"
+    )
+
+
+def _build_beat_sheet_refinement_summary_text(
+    refined_beat_sheet: BeatSheet,
+    *,
+    source_beat_sheet: BeatSheet,
+) -> str:
+    return (
+        "Generated refined beat sheet "
+        f"{_read_beat_sheet_label(refined_beat_sheet)} from "
+        f"{_read_beat_sheet_label(source_beat_sheet)}."
+    )
+
+
+def _build_beat_sheet_selection_detail(beat_sheet: BeatSheet) -> str:
+    summary = beat_sheet.summary or "Beat sheet accepted for downstream planning."
+    return f"Accepted beat sheet revision {beat_sheet.revision_number}. {summary}"
+
+
+def _build_beat_sheet_invalidation_detail(beat_sheet: BeatSheet) -> str:
+    return (
+        f"Beat sheet revision {beat_sheet.revision_number} was accepted. Refresh composition "
+        "and any downstream planning."
+    )
+
+
+def _find_matching_beat_sheets(
+    beat_sheets: list[BeatSheet],
+    *,
+    beat_sheet_id: str | None,
+    revision_number: int | None,
+) -> list[BeatSheet]:
+    matches: list[BeatSheet] = []
+
+    for beat_sheet in beat_sheets:
+        if beat_sheet_id is not None and beat_sheet.id != beat_sheet_id:
+            continue
+        if revision_number is not None and beat_sheet.revision_number != revision_number:
+            continue
+        matches.append(beat_sheet)
+
+    return matches
+
+
+def _resolve_source_beat_sheet(
+    beat_sheets: list[BeatSheet],
+    *,
+    selected_beat_sheet: BeatSheet | None,
+    beat_sheet_id: str | None,
+    revision_number: int | None,
+) -> BeatSheet | None:
+    if beat_sheet_id is None and revision_number is None:
+        return selected_beat_sheet
+
+    matches = _find_matching_beat_sheets(
+        beat_sheets,
+        beat_sheet_id=beat_sheet_id,
+        revision_number=revision_number,
+    )
+    if len(matches) != 1:
+        return None
+
+    return matches[0]
+
+
+def _read_beat_sheet_label(beat_sheet: BeatSheet) -> str:
+    return f"Beat sheet revision {beat_sheet.revision_number}"
+
+
+def _read_beat_sheet_selection_rationale(beat_sheet: BeatSheet) -> str | None:
+    if not isinstance(beat_sheet.beats, Mapping):
+        return None
+
+    refinement = beat_sheet.beats.get("refinement")
+    if not isinstance(refinement, Mapping):
+        return None
+
+    rationale = refinement.get("selection_rationale")
+    return rationale if isinstance(rationale, str) and rationale else None
+
+
+def _normalize_beat_name_list(values: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    for value in values or []:
+        normalized_value = _normalize_optional_text(value)
+        if normalized_value is not None:
+            normalized.append(normalized_value)
+    return normalized
 
 
 _STORY_BRIEF_TEXT_FIELDS = (

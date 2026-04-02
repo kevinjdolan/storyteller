@@ -6,8 +6,10 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.ai import (
+    BeatSheetGenerationAdapter,
     BriefNormalizationAdapter,
     CharacterGenerationAdapter,
+    GeminiBeatSheetGenerationAdapter,
     GeminiBriefNormalizationAdapter,
     GeminiCharacterGenerationAdapter,
     GeminiIntentParserAdapter,
@@ -57,6 +59,19 @@ def get_brief_normalization_adapter(request: Request) -> BriefNormalizationAdapt
             model_id=settings.gemini.planning_model,
         )
         request.app.state.brief_normalization_adapter = adapter
+
+    return adapter
+
+
+def get_beat_sheet_generation_adapter(request: Request) -> BeatSheetGenerationAdapter:
+    adapter = getattr(request.app.state, "beat_sheet_generation_adapter", None)
+    if adapter is None:
+        settings = get_app_settings(request)
+        adapter = GeminiBeatSheetGenerationAdapter(
+            credential=settings.gemini_api_key,
+            model_id=settings.gemini.planning_model,
+        )
+        request.app.state.beat_sheet_generation_adapter = adapter
 
     return adapter
 

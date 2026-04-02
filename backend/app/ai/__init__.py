@@ -1,6 +1,15 @@
 from app.ai.brief_normalization import (
     DEFAULT_GEMINI_API_BASE_URL as DEFAULT_GEMINI_BRIEF_NORMALIZATION_API_BASE_URL,
 )
+from app.ai.beat_sheet_generation import (
+    BeatSheetGenerationAdapter,
+    BeatSheetGenerationError,
+    BeatSheetGenerationTransportError,
+    GeminiBeatSheetGenerationAdapter,
+    build_beat_sheet_generation_invocation,
+    get_beat_sheet_generation_response_schema,
+    render_beat_sheet_generation_prompt,
+)
 from app.ai.brief_normalization import (
     BriefNormalizationAdapter,
     BriefNormalizationError,
@@ -42,9 +51,13 @@ from app.ai.pitch_generation import (
 __all__ = [
     "DEFAULT_GEMINI_BRIEF_NORMALIZATION_API_BASE_URL",
     "DEFAULT_GEMINI_API_BASE_URL",
+    "BeatSheetGenerationAdapter",
+    "BeatSheetGenerationError",
+    "BeatSheetGenerationTransportError",
     "BriefNormalizationAdapter",
     "BriefNormalizationError",
     "BriefNormalizationTransportError",
+    "GeminiBeatSheetGenerationAdapter",
     "CharacterGenerationAdapter",
     "CharacterGenerationError",
     "CharacterGenerationTransportError",
@@ -58,14 +71,17 @@ __all__ = [
     "PitchGenerationAdapter",
     "PitchGenerationError",
     "PitchGenerationTransportError",
+    "build_beat_sheet_generation_invocation",
     "build_brief_normalization_invocation",
     "build_character_generation_invocation",
     "build_intent_parser_invocation",
     "build_pitch_generation_invocation",
+    "get_beat_sheet_generation_response_schema",
     "get_brief_normalization_response_schema",
     "get_character_generation_response_schema",
     "get_intent_parser_response_schema",
     "get_pitch_generation_response_schema",
+    "render_beat_sheet_generation_prompt",
     "render_brief_normalization_prompt",
     "render_character_generation_prompt",
     "render_intent_parser_prompt",

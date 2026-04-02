@@ -9,6 +9,9 @@ from app.db import Base, StorySession
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.models import (
+    BeatSheetGenerationInvocation,
+    BeatSheetGenerationInvocationResult,
+    BeatSheetGenerationStructuredOutput,
     BriefNormalizationInvocation,
     BriefNormalizationInvocationResult,
     BriefNormalizationStructuredOutput,
@@ -17,6 +20,8 @@ from app.models import (
     CharacterGenerationStructuredOutput,
     GeneratedCharacterProfile,
     GeneratedCharacterSheetCandidate,
+    GeneratedBeatSheetBeat,
+    GeneratedBeatSheetCandidate,
     GeneratedPitchCandidate,
     NormalizedBriefPreferences,
     PitchGenerationInvocation,
@@ -298,6 +303,69 @@ class StubCharacterGenerationAdapter:
         return None
 
 
+class StubBeatSheetGenerationAdapter:
+    def __init__(self) -> None:
+        self.model_id = "gemini-3.1-pro"
+
+    def generate(
+        self,
+        invocation: BeatSheetGenerationInvocation,
+    ) -> BeatSheetGenerationInvocationResult:
+        return BeatSheetGenerationInvocationResult(
+            invocation=invocation,
+            structured_output=BeatSheetGenerationStructuredOutput(
+                beat_sheet=GeneratedBeatSheetCandidate(
+                    summary=(
+                        "A harbor Save-the-Cat arc where Mira's wonder turns into a restful "
+                        "sense of belonging."
+                    ),
+                    bedtime_notes=(
+                        "Each pressure beat is kept soft, visible, and quickly buffered by "
+                        "companionship."
+                    ),
+                    beats=[
+                        GeneratedBeatSheetBeat(
+                            key=key,
+                            label=label,
+                            summary=(
+                                f"{label} keeps the harbor story high level, concrete, and "
+                                "bedtime-ready."
+                            ),
+                            emotional_intent=(
+                                f"{label} should feel calm, clear, and emotionally readable."
+                            ),
+                            bedtime_softening_note=(
+                                f"{label} stays bedtime-safe by keeping tension gentle and "
+                                "quickly soothed."
+                            ),
+                        )
+                        for key, label in (
+                            ("opening_image", "Opening Image"),
+                            ("theme_stated", "Theme Stated"),
+                            ("set_up", "Set-Up"),
+                            ("catalyst", "Catalyst"),
+                            ("debate", "Debate"),
+                            ("break_into_two", "Break into Two"),
+                            ("b_story", "B Story"),
+                            ("fun_and_games", "Fun and Games"),
+                            ("midpoint", "Midpoint"),
+                            ("bad_guys_close_in", "Bad Guys Close In"),
+                            ("all_is_lost", "All Is Lost"),
+                            ("dark_night_of_the_soul", "Dark Night of the Soul"),
+                            ("break_into_three", "Break into Three"),
+                            ("finale", "Finale"),
+                            ("final_image", "Final Image"),
+                        )
+                    ],
+                )
+            ),
+            raw_response={"stub": True},
+        )
+
+    def close(self) -> None:
+        return None
+
+
 @pytest.fixture
 def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     database_path = tmp_path / "session-api.sqlite3"
@@ -311,6 +379,7 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     Base.metadata.create_all(engine)
 
     app = create_app()
+    app.state.beat_sheet_generation_adapter = StubBeatSheetGenerationAdapter()
     app.state.brief_normalization_adapter = StubBriefNormalizationAdapter()
     app.state.character_generation_adapter = StubCharacterGenerationAdapter()
     app.state.pitch_generation_adapter = StubPitchGenerationAdapter()
@@ -1167,6 +1236,186 @@ def test_refine_session_character_sheet_endpoint_creates_a_selected_refined_shee
     assert payload["snapshot"]["character_sheet_batches"][0][
         "source_character_sheet_title"
     ] == source_character_sheet["title"]
+
+
+def test_generate_session_beat_sheet_endpoint_persists_a_revisioned_candidate(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Beat Sheet API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_character_sheet_id = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+            json={
+                "character_sheet_id": selected_character_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/beats/generate",
+        json={
+            "guidance": "Keep the midpoint more awestruck than tense.",
+            "focus_beats": ["midpoint"],
+            "bedtime_goal": "land in a visibly sleepy ending",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "ai.output.recorded"
+    assert payload["event"]["payload"]["output_kind"] == "beat_sheet"
+    assert payload["snapshot"]["current_stage"] == "beats"
+    assert payload["snapshot"]["resume_stage"] == "beats"
+    assert payload["snapshot"]["selected_beat_sheet"] is None
+    assert payload["snapshot"]["beat_sheet_revisions"][0]["generation_kind"] == "generated"
+    assert len(payload["snapshot"]["beat_sheet_revisions"][0]["beats"]) == 15
+    assert payload["snapshot"]["stage_states"][5]["status"] == "in_progress"
+
+
+def test_select_session_beat_sheet_endpoint_marks_choice_and_advances_to_story_setup(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Beat Selection API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_character_sheet_id = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+            json={
+                "character_sheet_id": selected_character_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_beats = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/beats/generate",
+        json={"origin": "workspace"},
+    ).json()
+    first_beat_sheet_id = generated_beats["snapshot"]["beat_sheet_revisions"][0]["id"]
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/beat-sheet",
+        json={
+            "beat_sheet_id": first_beat_sheet_id,
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["payload"]["selection_kind"] == "beat_sheet"
+    assert payload["snapshot"]["current_stage"] == "story_setup"
+    assert payload["snapshot"]["resume_stage"] == "story_setup"
+    assert payload["snapshot"]["selected_beat_sheet"]["id"] == first_beat_sheet_id
+    assert payload["snapshot"]["selected_beat_sheet"]["is_selected"] is True
+    assert payload["snapshot"]["stage_states"][5]["status"] == "completed"
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(

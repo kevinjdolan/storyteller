@@ -41,6 +41,7 @@ class SessionAggregate:
     selected_pitch: Pitch | None
     character_sheets: list[CharacterSheet]
     selected_character_sheet: CharacterSheet | None
+    beat_sheets: list[BeatSheet]
     selected_beat_sheet: BeatSheet | None
     selected_story_setup: StorySetup | None
     latest_composition_job: CompositionJob | None
@@ -99,6 +100,7 @@ class StorySessionRepository:
             selected_pitch=self._get_selected_pitch(session_id),
             character_sheets=self._list_character_sheets(session_id),
             selected_character_sheet=self._get_selected_character_sheet(session_id),
+            beat_sheets=self._list_beat_sheets(session_id),
             selected_beat_sheet=self._get_selected_beat_sheet(session_id),
             selected_story_setup=self._get_selected_story_setup(session_id),
             latest_composition_job=self._get_latest_composition_job(session_id),
@@ -126,6 +128,9 @@ class StorySessionRepository:
 
     def get_selected_beat_sheet(self, session_id: str) -> BeatSheet | None:
         return self._get_selected_beat_sheet(session_id)
+
+    def list_beat_sheets(self, session_id: str) -> list[BeatSheet]:
+        return self._list_beat_sheets(session_id)
 
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
@@ -191,6 +196,14 @@ class StorySessionRepository:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _list_beat_sheets(self, session_id: str) -> list[BeatSheet]:
+        stmt: Select[tuple[BeatSheet]] = (
+            select(BeatSheet)
+            .where(BeatSheet.session_id == session_id)
+            .order_by(BeatSheet.created_at.asc(), BeatSheet.revision_number.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def _get_selected_story_setup(self, session_id: str) -> StorySetup | None:
         stmt: Select[tuple[StorySetup]] = (

@@ -146,13 +146,33 @@ class CharacterSheetBatchView(BaseModel):
     character_sheets: list[CharacterSheetView] = Field(default_factory=list)
 
 
+class BeatSheetBeatView(BaseModel):
+    key: str
+    label: str
+    order: int
+    summary: str
+    emotional_intent: str | None = None
+    bedtime_softening_note: str | None = None
+
+
 class BeatSheetView(BaseModel):
     id: str
     revision_number: int
+    generation_kind: str = "generated"
     summary: str | None = None
-    beats: dict[str, Any] | list[Any] | None = None
+    beats: list[BeatSheetBeatView] = Field(default_factory=list)
     bedtime_notes: str | None = None
+    source_beat_sheet_id: str | None = None
+    source_beat_sheet_revision_number: int | None = None
+    guidance: str | None = None
+    refinement_instructions: str | None = None
+    focus_beats: list[str] = Field(default_factory=list)
+    bedtime_goal: str | None = None
+    selection_rationale: str | None = None
+    is_selected: bool = False
     accepted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class StorySetupView(BaseModel):
@@ -319,6 +339,18 @@ class SessionCharacterSheetGenerationResponse(BaseModel):
     event: SessionEventView
 
 
+class GenerateSessionBeatSheetRequest(BaseModel):
+    guidance: str | None = Field(default=None, min_length=1)
+    focus_beats: list[str] = Field(default_factory=list)
+    bedtime_goal: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class SessionBeatSheetGenerationResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class SelectSessionPitchRequest(BaseModel):
     pitch_id: str | None = Field(default=None, min_length=1)
     generation_key: str | None = Field(default=None, min_length=1)
@@ -363,6 +395,24 @@ class SelectSessionCharacterSheetRequest(BaseModel):
         return self
 
 
+class SelectSessionBeatSheetRequest(BaseModel):
+    beat_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectSessionBeatSheetRequest":
+        selectors = [
+            self.beat_sheet_id,
+            self.revision_number,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count == 0:
+            raise ValueError("one of beat_sheet_id or revision_number is required")
+
+        return self
+
+
 class RefineSessionPitchRequest(BaseModel):
     pitch_id: str | None = Field(default=None, min_length=1)
     generation_key: str | None = Field(default=None, min_length=1)
@@ -394,6 +444,15 @@ class RefineSessionCharacterSheetRequest(BaseModel):
     focus_character_names: list[str] = Field(default_factory=list)
     change_summary: str | None = Field(default=None, min_length=1)
     change_impact: CharacterChangeImpact | None = None
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class RefineSessionBeatSheetRequest(BaseModel):
+    beat_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    instructions: str = Field(min_length=1)
+    beat_names: list[str] = Field(default_factory=list)
+    bedtime_goal: str | None = Field(default=None, min_length=1)
     origin: str = Field(default="workspace", min_length=1)
 
 
@@ -495,6 +554,7 @@ class SessionSnapshot(BaseModel):
     selected_pitch: PitchView | None = None
     character_sheet_batches: list[CharacterSheetBatchView] = Field(default_factory=list)
     selected_character_sheet: CharacterSheetView | None = None
+    beat_sheet_revisions: list[BeatSheetView] = Field(default_factory=list)
     selected_beat_sheet: BeatSheetView | None = None
     selected_story_setup: StorySetupView | None = None
     latest_composition_job: CompositionJobView | None = None
@@ -527,6 +587,7 @@ ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionBeatSheetGenerationResponse.model_rebuild()
 SessionCharacterSheetGenerationResponse.model_rebuild()
 SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()

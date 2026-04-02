@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.ai import (
+    BeatSheetGenerationAdapter,
     BriefNormalizationAdapter,
     CharacterGenerationAdapter,
     IntentParserAdapter,
     PitchGenerationAdapter,
 )
 from app.api.dependencies import (
+    get_beat_sheet_generation_adapter,
     get_brief_normalization_adapter,
     get_character_generation_adapter,
     get_db_session,
@@ -20,21 +22,25 @@ from app.api.dependencies import (
 )
 from app.models import (
     CreateSessionRequest,
+    GenerateSessionBeatSheetRequest,
     GenerateSessionCharacterSheetsRequest,
     GenerateSessionPitchesRequest,
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    RefineSessionBeatSheetRequest,
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
     SaveSessionStoryBriefRequest,
     SelectSessionCharacterSheetRequest,
+    SelectSessionBeatSheetRequest,
     SelectSessionGenreRequest,
     SelectSessionPitchRequest,
     SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
+    SessionBeatSheetGenerationResponse,
     SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
@@ -47,6 +53,7 @@ from app.models import (
     SessionStoryBriefResponse,
 )
 from app.services import (
+    BeatSheetGenerationService,
     BriefNormalizationService,
     CharacterGenerationService,
     PitchGenerationService,
@@ -58,6 +65,8 @@ from app.services.sessions import (
     InvalidStageTransitionError,
     SessionCharacterSheetGenerationError,
     SessionCharacterSheetSelectionError,
+    SessionBeatSheetGenerationError,
+    SessionBeatSheetSelectionError,
     SessionGenreSelectionError,
     SessionNotFoundError,
     SessionPitchGenerationError,
@@ -525,6 +534,129 @@ def select_session_character_sheet(
             detail=str(exc),
         ) from exc
     except SessionCharacterSheetSelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/beats/generate",
+    response_model=SessionBeatSheetGenerationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate a durable beat-sheet revision for a story session",
+)
+def generate_session_beat_sheet(
+    session_id: str,
+    payload: GenerateSessionBeatSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    beat_sheet_generation_adapter: Annotated[
+        BeatSheetGenerationAdapter,
+        Depends(get_beat_sheet_generation_adapter),
+    ],
+) -> SessionBeatSheetGenerationResponse:
+    try:
+        return SessionService(db_session).generate_beat_sheet(
+            session_id,
+            guidance=payload.guidance,
+            focus_beats=payload.focus_beats,
+            bedtime_goal=payload.bedtime_goal,
+            origin=payload.origin,
+            beat_sheet_generation_service=BeatSheetGenerationService(
+                adapter=beat_sheet_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionBeatSheetGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/beats/refine",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate and select a refined beat sheet for a story session",
+)
+def refine_session_beat_sheet(
+    session_id: str,
+    payload: RefineSessionBeatSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    beat_sheet_generation_adapter: Annotated[
+        BeatSheetGenerationAdapter,
+        Depends(get_beat_sheet_generation_adapter),
+    ],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).refine_beat_sheet(
+            session_id,
+            beat_sheet_id=payload.beat_sheet_id,
+            revision_number=payload.revision_number,
+            instructions=payload.instructions,
+            beat_names=payload.beat_names,
+            bedtime_goal=payload.bedtime_goal,
+            origin=payload.origin,
+            beat_sheet_generation_service=BeatSheetGenerationService(
+                adapter=beat_sheet_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (SessionBeatSheetSelectionError, SessionBeatSheetGenerationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/selections/beat-sheet",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist the selected beat sheet for a story session",
+)
+def select_session_beat_sheet(
+    session_id: str,
+    payload: SelectSessionBeatSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).select_beat_sheet(
+            session_id,
+            beat_sheet_id=payload.beat_sheet_id,
+            revision_number=payload.revision_number,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionBeatSheetSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

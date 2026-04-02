@@ -11,6 +11,7 @@ from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     AudioJobView,
     AudioProgressEventPayload,
+    BeatSheetBeatView,
     BeatSheetView,
     CharacterProfileView,
     CharacterSheetBatchView,
@@ -32,6 +33,8 @@ from app.models import (
     SessionStageStateView,
     StoryBriefView,
     StorySetupView,
+    SAVE_THE_CAT_BEAT_LABELS,
+    SAVE_THE_CAT_BEAT_SEQUENCE,
     WorkflowStage,
     WorkflowStageChangedEventPayload,
     WorkflowStageState,
@@ -201,6 +204,7 @@ def build_session_snapshot(
         selected_pitch=build_pitch_view(aggregate.selected_pitch),
         character_sheet_batches=build_character_sheet_batch_views(aggregate.character_sheets),
         selected_character_sheet=build_character_sheet_view(aggregate.selected_character_sheet),
+        beat_sheet_revisions=build_beat_sheet_views(aggregate.beat_sheets),
         selected_beat_sheet=build_beat_sheet_view(aggregate.selected_beat_sheet),
         selected_story_setup=build_story_setup_view(aggregate.selected_story_setup),
         latest_composition_job=build_composition_job_view(aggregate.latest_composition_job),
@@ -863,11 +867,96 @@ def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: s
     return value if isinstance(value, str) else None
 
 
+def _read_optional_mapping_int(data: Mapping[str, Any] | dict[str, Any], key: str) -> int | None:
+    value = data.get(key)
+    return value if isinstance(value, int) else None
+
+
 def _read_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
 
     return [entry for entry in value if isinstance(entry, str)]
+
+
+def _read_beat_sheet_payload(row) -> dict[str, Any]:
+    raw = getattr(row, "beats", None)
+    return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def _read_beat_sheet_refinement_metadata(row) -> dict[str, Any]:
+    payload = _read_beat_sheet_payload(row)
+    refinement = payload.get("refinement")
+    return dict(refinement) if isinstance(refinement, Mapping) else {}
+
+
+def build_beat_entries(row) -> list[BeatSheetBeatView]:
+    raw = getattr(row, "beats", None)
+    if isinstance(raw, Mapping):
+        nested_beats = raw.get("beats")
+        if isinstance(nested_beats, list):
+            return _build_beat_entries_from_list(nested_beats)
+        return _build_beat_entries_from_mapping(raw)
+    if isinstance(raw, list):
+        return _build_beat_entries_from_list(raw)
+    return []
+
+
+def _build_beat_entries_from_list(value: list[Any]) -> list[BeatSheetBeatView]:
+    beats: list[BeatSheetBeatView] = []
+    for fallback_order, raw_entry in enumerate(value, start=1):
+        if not isinstance(raw_entry, Mapping):
+            continue
+        key = (
+            raw_entry.get("key")
+            if isinstance(raw_entry.get("key"), str)
+            else f"beat-{fallback_order}"
+        )
+        label = (
+            raw_entry.get("label")
+            if isinstance(raw_entry.get("label"), str)
+            else SAVE_THE_CAT_BEAT_LABELS.get(key, key.replace("_", " ").title())
+        )
+        order = raw_entry.get("order") if isinstance(raw_entry.get("order"), int) else fallback_order
+        summary = raw_entry.get("summary") if isinstance(raw_entry.get("summary"), str) else ""
+        if not summary:
+            continue
+        beats.append(
+            BeatSheetBeatView(
+                key=key,
+                label=label,
+                order=order,
+                summary=summary,
+                emotional_intent=(
+                    raw_entry.get("emotional_intent")
+                    if isinstance(raw_entry.get("emotional_intent"), str)
+                    else None
+                ),
+                bedtime_softening_note=(
+                    raw_entry.get("bedtime_softening_note")
+                    if isinstance(raw_entry.get("bedtime_softening_note"), str)
+                    else None
+                ),
+            )
+        )
+    return sorted(beats, key=lambda beat: beat.order)
+
+
+def _build_beat_entries_from_mapping(value: Mapping[str, Any]) -> list[BeatSheetBeatView]:
+    beats: list[BeatSheetBeatView] = []
+    for order, (key, label) in enumerate(SAVE_THE_CAT_BEAT_SEQUENCE, start=1):
+        summary = value.get(key)
+        if not isinstance(summary, str) or not summary:
+            continue
+        beats.append(
+            BeatSheetBeatView(
+                key=key,
+                label=label,
+                order=order,
+                summary=summary,
+            )
+        )
+    return beats
 
 
 def _resolve_character_batch_key(row) -> str:
@@ -1092,14 +1181,57 @@ def build_beat_sheet_view(row) -> BeatSheetView | None:
     if row is None:
         return None
 
+    payload = _read_beat_sheet_payload(row)
+    refinement_metadata = _read_beat_sheet_refinement_metadata(row)
+
     return BeatSheetView(
         id=row.id,
         revision_number=row.revision_number,
+        generation_kind=_read_optional_mapping_text(payload, "generation_kind") or "generated",
         summary=row.summary,
-        beats=row.beats,
+        beats=build_beat_entries(row),
         bedtime_notes=row.bedtime_notes,
+        source_beat_sheet_id=_read_optional_mapping_text(refinement_metadata, "source_beat_sheet_id"),
+        source_beat_sheet_revision_number=_read_optional_mapping_int(
+            refinement_metadata,
+            "source_beat_sheet_revision_number",
+        ),
+        guidance=_read_optional_mapping_text(payload, "guidance"),
+        refinement_instructions=_read_optional_mapping_text(
+            refinement_metadata,
+            "refinement_instructions",
+        ),
+        focus_beats=_read_string_list(payload.get("focus_beats")),
+        bedtime_goal=_read_optional_mapping_text(payload, "bedtime_goal"),
+        selection_rationale=_read_optional_mapping_text(
+            refinement_metadata,
+            "selection_rationale",
+        ),
+        is_selected=row.is_selected,
         accepted_at=row.accepted_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
+
+
+def build_beat_sheet_views(rows) -> list[BeatSheetView]:
+    if rows is None:
+        return []
+
+    return [
+        view
+        for view in (
+            build_beat_sheet_view(row)
+            for row in sorted(
+                rows,
+                key=lambda beat_sheet: (
+                    getattr(beat_sheet, "revision_number", 0),
+                ),
+                reverse=True,
+            )
+        )
+        if view is not None
+    ]
 
 
 def build_story_setup_view(row) -> StorySetupView | None:

@@ -60,6 +60,7 @@ from app.models.story_tools import (
     UpdateSetupHeuristicsToolInput,
     UpdateSetupHeuristicsToolResult,
 )
+from app.services.beat_sheet_generation import BeatSheetGenerationService
 from app.services.character_generation import CharacterGenerationService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
@@ -594,6 +595,7 @@ class StoryWorkflowToolService:
         session: Session,
         registry: StoryWorkflowToolRegistry | None = None,
         *,
+        beat_sheet_generation_service: BeatSheetGenerationService | None = None,
         character_generation_service: CharacterGenerationService | None = None,
         pitch_generation_service: PitchGenerationService | None = None,
     ):
@@ -602,6 +604,9 @@ class StoryWorkflowToolService:
         self._sessions = SessionService(session)
         self._events = SessionEventLogService(session)
         self._jobs = BackgroundJobService(session)
+        self._beat_sheet_generation = (
+            beat_sheet_generation_service or BeatSheetGenerationService()
+        )
         self._character_generation = (
             character_generation_service or CharacterGenerationService()
         )
@@ -765,31 +770,46 @@ class StoryWorkflowToolService:
         request: GenerateBeatSheetToolInput,
         actor: SessionEventActor | None = None,
     ) -> StageOperationToolResult:
-        snapshot = self._sessions.load_session_snapshot(session_id)
-        if snapshot.selected_character_sheet is None:
-            raise StoryWorkflowToolServiceError(
-                "generate_beat_sheet requires a selected character sheet",
+        if request.instructions is not None:
+            response = self._sessions.refine_beat_sheet(
+                session_id,
+                instructions=request.instructions,
+                beat_names=request.focus_beats,
+                bedtime_goal=request.bedtime_goal,
+                origin="story_tool",
+                actor=actor,
+                beat_sheet_generation_service=self._beat_sheet_generation,
             )
-        detail = _join_detail_parts(
-            [
-                "Generating the next beat-sheet revision.",
-                _optional_detail("Guidance", request.guidance),
-                _optional_detail("Instructions", request.instructions),
-                ("Focus beats: " + ", ".join(request.focus_beats) if request.focus_beats else None),
-                _optional_detail("Bedtime goal", request.bedtime_goal),
-            ]
-        )
-        stage_snapshot = self._transition_stage_to_in_progress(
+            snapshot = response.snapshot
+            detail = snapshot.stage_states[
+                WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.BEATS)
+            ].detail
+            return StageOperationToolResult(
+                tool_name=StoryWorkflowToolName.GENERATE_BEAT_SHEET,
+                stage=WorkflowStage.BEATS,
+                summary="Generated and selected a refined beat-sheet revision.",
+                stage_status=_stage_status(snapshot, WorkflowStage.BEATS),
+                detail=detail,
+            )
+
+        response = self._sessions.generate_beat_sheet(
             session_id,
-            stage=WorkflowStage.BEATS,
-            detail=detail,
+            guidance=request.guidance,
+            focus_beats=request.focus_beats,
+            bedtime_goal=request.bedtime_goal,
+            origin="story_tool",
             actor=actor,
+            beat_sheet_generation_service=self._beat_sheet_generation,
         )
+        snapshot = response.snapshot
+        detail = snapshot.stage_states[
+            WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.BEATS)
+        ].detail
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.GENERATE_BEAT_SHEET,
             stage=WorkflowStage.BEATS,
-            summary="Queued beat-sheet generation from the current character plan.",
-            stage_status=_stage_status(stage_snapshot, WorkflowStage.BEATS),
+            summary="Generated a fresh beat-sheet revision from the current character plan.",
+            stage_status=_stage_status(snapshot, WorkflowStage.BEATS),
             detail=detail,
         )
 

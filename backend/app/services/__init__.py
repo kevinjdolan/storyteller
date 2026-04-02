@@ -11,6 +11,11 @@ from app.services.assets import (
     AssetSessionNotFoundError,
     SessionAssetService,
 )
+from app.services.beat_sheet_generation import (
+    BeatSheetGenerationService,
+    build_beat_sheet_model_output,
+    evaluate_beat_sheet,
+)
 from app.services.brief_normalization import (
     BriefNormalizationService,
     apply_brief_normalization_overrides,
@@ -72,6 +77,7 @@ __all__ = [
     "BackgroundJobRecord",
     "BackgroundJobService",
     "BackgroundJobServiceError",
+    "BeatSheetGenerationService",
     "BriefNormalizationService",
     "CharacterGenerationService",
     "ClaimedBackgroundJob",
@@ -96,11 +102,13 @@ __all__ = [
     "StoryWorkflowToolServiceError",
     "UnsupportedSessionContextUpdateError",
     "apply_brief_normalization_overrides",
+    "build_beat_sheet_model_output",
     "build_brief_model_output",
     "build_character_model_output",
     "build_brief_normalization_result_from_existing",
     "build_pitch_model_output",
     "evaluate_character_sheet_batch",
+    "evaluate_beat_sheet",
     "evaluate_pitch_batch",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
