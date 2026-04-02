@@ -242,6 +242,14 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
   }
 
   if (snapshot.active_audio_job) {
+    if (snapshot.active_audio_job.current_step) {
+      return snapshot.active_audio_job.current_step
+    }
+
+    if (snapshot.active_audio_job.progress_percent != null) {
+      return `Narration is ${Math.round(snapshot.active_audio_job.progress_percent)}% complete.`
+    }
+
     const duration =
       snapshot.active_audio_job.estimated_duration_seconds != null
         ? ` Estimated length ${Math.round(snapshot.active_audio_job.estimated_duration_seconds / 60)} min.`

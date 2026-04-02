@@ -419,9 +419,16 @@ export type AudioJobView = {
   playback_speed?: number
   include_background_music?: boolean
   music_profile?: string | null
+  progress_percent?: number
+  current_step?: string | null
+  current_step_index?: number | null
+  total_steps?: number | null
+  completed_segments?: number | null
   estimated_duration_seconds?: number | null
   total_segments?: number | null
   current_segment_index?: number | null
+  latest_asset_id?: string | null
+  latest_asset_kind?: string | null
   attempt_count?: number
   stop_reason?: string | null
   error_message?: string | null

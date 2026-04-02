@@ -694,6 +694,43 @@ def merge_audio_job_view(
             current_job.include_background_music if current_job is not None else False
         ),
         music_profile=current_job.music_profile if current_job is not None else None,
+        progress_percent=(
+            payload.progress_percent
+            if payload.progress_percent is not None
+            else current_job.progress_percent
+            if current_job is not None
+            else 0
+        ),
+        current_step=(
+            payload.current_step
+            if payload.current_step is not None
+            else payload.message
+            if payload.message is not None
+            else current_job.current_step
+            if current_job is not None
+            else None
+        ),
+        current_step_index=(
+            payload.current_step_index
+            if payload.current_step_index is not None
+            else current_job.current_step_index
+            if current_job is not None
+            else None
+        ),
+        total_steps=(
+            payload.total_steps
+            if payload.total_steps is not None
+            else current_job.total_steps
+            if current_job is not None
+            else None
+        ),
+        completed_segments=(
+            payload.completed_segments
+            if payload.completed_segments is not None
+            else current_job.completed_segments
+            if current_job is not None
+            else None
+        ),
         estimated_duration_seconds=(
             payload.estimated_duration_seconds
             if payload.estimated_duration_seconds is not None
@@ -712,6 +749,20 @@ def merge_audio_job_view(
             payload.current_segment_index
             if payload.current_segment_index is not None
             else current_job.current_segment_index
+            if current_job is not None
+            else None
+        ),
+        latest_asset_id=(
+            payload.latest_asset_id
+            if payload.latest_asset_id is not None
+            else current_job.latest_asset_id
+            if current_job is not None
+            else None
+        ),
+        latest_asset_kind=(
+            payload.latest_asset_kind
+            if payload.latest_asset_kind is not None
+            else current_job.latest_asset_kind
             if current_job is not None
             else None
         ),
@@ -815,6 +866,8 @@ def build_audio_job_detail(
         return job.error_message
     if job.stop_reason:
         return job.stop_reason
+    if job.current_step:
+        return job.current_step
     if job.status == JobStatus.COMPLETED.value:
         return "Narration finished and the latest audio is ready for review."
     if job.status == JobStatus.PAUSED.value:
@@ -1080,6 +1133,16 @@ def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: s
 def _read_optional_mapping_int(data: Mapping[str, Any] | dict[str, Any], key: str) -> int | None:
     value = data.get(key)
     return value if isinstance(value, int) else None
+
+
+def _read_optional_mapping_float(
+    data: Mapping[str, Any] | dict[str, Any],
+    key: str,
+) -> float | None:
+    value = data.get(key)
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _read_optional_mapping_bool(
@@ -2013,9 +2076,16 @@ def build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:
         playback_speed=row.playback_speed,
         include_background_music=row.include_background_music,
         music_profile=row.music_profile,
+        progress_percent=_read_optional_mapping_float(config, "progress_percent") or 0,
+        current_step=_read_optional_mapping_text(config, "current_step"),
+        current_step_index=_read_optional_mapping_int(config, "current_step_index"),
+        total_steps=_read_optional_mapping_int(config, "total_steps"),
+        completed_segments=_read_optional_mapping_int(config, "completed_segments"),
         estimated_duration_seconds=row.estimated_duration_seconds,
         total_segments=_read_optional_mapping_int(config, "total_segments"),
         current_segment_index=row.current_segment_index,
+        latest_asset_id=_read_optional_mapping_text(config, "latest_asset_id"),
+        latest_asset_kind=_read_optional_mapping_text(config, "latest_asset_kind"),
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
         error_message=row.error_message,

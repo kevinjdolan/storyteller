@@ -56,6 +56,10 @@ AUDIO_RUNTIME_JOB_TYPE = "story.run_audio_job"
 _AUDIO_SEGMENT_EXTENSION = "wav"
 _AUDIO_FINAL_EXTENSION = "wav"
 _AUDIO_FINAL_FILE_STEM = "story"
+_AUDIO_SEGMENT_PROGRESS_CEILING = 86.0
+_AUDIO_ASSEMBLY_PROGRESS = 90.0
+_AUDIO_MIX_PROGRESS = 96.0
+_AUDIO_PUBLISH_PROGRESS = 99.0
 
 
 class AudioJobServiceError(Exception):
@@ -154,21 +158,35 @@ class AudioJobService:
         job.config_json = {
             **_read_mapping(job.config_json),
             "total_segments": total_segments,
+            "total_steps": _build_total_steps(
+                total_segments,
+                include_mix_stage=mix_plan.should_mix,
+            ),
+            "completed_segments": 0,
+            "progress_percent": 0.0,
+            "current_step": _build_queued_audio_message(total_segments),
+            "current_step_index": 1,
             "planned_word_count": narration_plan.total_words,
             "compiled_text_length": narration_plan.compiled_text_length,
             "narration_plan_version": "narration_segments.v1",
             "current_segment_id": first_segment.id,
         }
         self._supersede_final_audio_assets(session_id)
-        self._events.record_audio_progress(
-            session_id,
-            job_id=job.id,
+        self._record_job_progress(
+            job=job,
             status=JobStatus.QUEUED,
             progress_percent=0,
+            current_step=_build_queued_audio_message(total_segments),
+            current_step_index=1,
+            total_steps=_build_total_steps(
+                total_segments,
+                include_mix_stage=mix_plan.should_mix,
+            ),
+            completed_segments=0,
             current_segment_index=first_segment.segment_index,
             total_segments=total_segments,
-            estimated_duration_seconds=estimated_duration_seconds,
-            voice_key=job.voice_key,
+            segment_id=first_segment.id,
+            message=_build_queued_audio_message(total_segments),
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         self._enqueue_runtime_job(session_id, job.id)
@@ -202,12 +220,20 @@ class AudioJobService:
         adapter, owns_adapter = self._resolve_tts_adapter()
         try:
             try:
+                if job.started_at is not None:
+                    job.attempt_count += 1
                 job.status = JobStatus.IN_PROGRESS
                 job.started_at = job.started_at or utc_now()
                 job.error_message = None
+                job.stop_reason = None
                 self._session.commit()
 
                 rendered_segments: list[_RenderedNarrationSegment] = []
+                mix_plan = self._read_audio_mix_plan(job)
+                total_steps = _read_total_steps(job) or _build_total_steps(
+                    total_segments,
+                    include_mix_stage=mix_plan.should_mix,
+                )
                 for segment in segments:
                     if segment.status == JobStatus.COMPLETED:
                         rendered_segments.append(
@@ -221,22 +247,33 @@ class AudioJobService:
                         continue
 
                     job.current_segment_index = segment.segment_index
+                    segment_attempt_count = _increment_segment_attempt_count(segment)
                     job.config_json = {
                         **_read_mapping(job.config_json),
                         "current_segment_id": segment.id,
                     }
                     segment.status = JobStatus.IN_PROGRESS
                     segment.error_message = None
-                    self._events.record_audio_progress(
-                        job.session_id,
-                        job_id=job.id,
+                    render_message = _build_rendering_segment_message(
+                        segment.segment_index,
+                        total_segments,
+                        attempt_count=segment_attempt_count,
+                    )
+                    self._record_job_progress(
+                        job=job,
                         status=JobStatus.IN_PROGRESS,
-                        progress_percent=_progress_percent(len(rendered_segments), total_segments),
+                        progress_percent=_segment_progress_percent(
+                            len(rendered_segments),
+                            total_segments,
+                        ),
+                        current_step=render_message,
+                        current_step_index=segment.segment_index,
+                        total_steps=total_steps,
+                        completed_segments=len(rendered_segments),
                         current_segment_index=segment.segment_index,
                         total_segments=total_segments,
                         segment_id=segment.id,
-                        estimated_duration_seconds=job.estimated_duration_seconds,
-                        voice_key=job.voice_key,
+                        message=render_message,
                         actor=actor or DEFAULT_SYSTEM_ACTOR,
                     )
                     self._session.commit()
@@ -277,21 +314,32 @@ class AudioJobService:
                     rendered_segments.append(
                         _RenderedNarrationSegment(segment=segment, synthesis=synthesis)
                     )
-                    self._persist_rendered_segment(
+                    segment_asset = self._persist_rendered_segment(
                         job=job,
                         segment=segment,
                         synthesis=synthesis,
                     )
-                    self._events.record_audio_progress(
-                        job.session_id,
-                        job_id=job.id,
+                    segment_ready_message = _build_segment_saved_message(
+                        segment.segment_index,
+                        total_segments,
+                    )
+                    self._record_job_progress(
+                        job=job,
                         status=JobStatus.IN_PROGRESS,
-                        progress_percent=_progress_percent(len(rendered_segments), total_segments),
+                        progress_percent=_segment_progress_percent(
+                            len(rendered_segments),
+                            total_segments,
+                        ),
+                        current_step=segment_ready_message,
+                        current_step_index=segment.segment_index,
+                        total_steps=total_steps,
+                        completed_segments=len(rendered_segments),
                         current_segment_index=segment.segment_index,
                         total_segments=total_segments,
                         segment_id=segment.id,
-                        estimated_duration_seconds=job.estimated_duration_seconds,
-                        voice_key=job.voice_key,
+                        latest_asset_id=segment_asset.id,
+                        latest_asset_kind=segment_asset.asset_kind,
+                        message=segment_ready_message,
                         actor=actor or DEFAULT_SYSTEM_ACTOR,
                     )
                     self._session.commit()
@@ -299,6 +347,9 @@ class AudioJobService:
                 final_result = self._persist_final_audio(
                     job=job,
                     rendered_segments=rendered_segments,
+                    total_steps=total_steps,
+                    total_segments=total_segments,
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
                 job.status = JobStatus.COMPLETED
                 job.completed_at = utc_now()
@@ -306,33 +357,38 @@ class AudioJobService:
                 job.config_json = {
                     **_read_mapping(job.config_json),
                     "completed_segments": len(rendered_segments),
+                    "progress_percent": 100.0,
+                    "current_step": final_result["message"],
+                    "current_step_index": total_steps,
                     "actual_duration_seconds": final_result["duration_seconds"],
                     "final_audio_asset_id": final_result["asset_id"],
                     "final_audio_object_path": final_result["object_path"],
                     "mix_strategy": final_result["mix_strategy"],
                     "mix_applied": final_result["mix_applied"],
                     "narration_master_object_path": final_result["narration_master_object_path"],
+                    "latest_asset_id": final_result["asset_id"],
+                    "latest_asset_kind": AssetKind.FINAL_AUDIO.value,
                 }
-                self._events.record_audio_progress(
-                    job.session_id,
-                    job_id=job.id,
+                self._record_job_progress(
+                    job=job,
                     status=JobStatus.COMPLETED,
                     progress_percent=100,
+                    current_step=final_result["message"],
+                    current_step_index=total_steps,
+                    total_steps=total_steps,
+                    completed_segments=len(rendered_segments),
                     current_segment_index=job.current_segment_index,
                     total_segments=total_segments,
-                    estimated_duration_seconds=job.estimated_duration_seconds,
-                    voice_key=job.voice_key,
+                    latest_asset_id=final_result["asset_id"],
+                    latest_asset_kind=AssetKind.FINAL_AUDIO.value,
+                    message=final_result["message"],
                     actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
                 self._sessions.update_stage_state(
                     job.session_id,
                     stage=WorkflowStage.AUDIO,
                     status=WorkflowStageState.COMPLETED,
-                    detail=(
-                        "Narration finished and a final mixed audio asset is ready."
-                        if final_result["mix_applied"]
-                        else "Narration finished and a final audio asset is ready."
-                    ),
+                    detail=final_result["message"],
                     actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
                 self._session.commit()
@@ -377,19 +433,23 @@ class AudioJobService:
         if current_segment is not None and current_segment.status == JobStatus.IN_PROGRESS:
             current_segment.status = JobStatus.FAILED
             current_segment.error_message = job.error_message
-        self._events.record_audio_progress(
-            job.session_id,
-            job_id=job.id,
+        failure_message = job.error_message
+        current_step_index = _read_current_step_index(job)
+        self._record_job_progress(
+            job=job,
             status=JobStatus.FAILED,
-            progress_percent=_progress_percent(
+            progress_percent=_segment_progress_percent(
                 self._completed_segment_count(job.id),
                 _read_total_segments(job) or 0,
             ),
+            current_step=failure_message,
+            current_step_index=current_step_index,
+            total_steps=_read_total_steps(job),
+            completed_segments=self._completed_segment_count(job.id),
             current_segment_index=job.current_segment_index,
             total_segments=_read_total_segments(job),
             segment_id=current_segment.id if current_segment is not None else None,
-            estimated_duration_seconds=job.estimated_duration_seconds,
-            voice_key=job.voice_key,
+            message=failure_message,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         self._sessions.update_stage_state(
@@ -407,7 +467,7 @@ class AudioJobService:
         job: AudioJob,
         segment: NarrationSegment,
         synthesis: NarrationSynthesisResult,
-    ) -> None:
+    ):
         wav_bytes = build_wav_bytes(
             synthesis.pcm_audio_bytes,
             sample_rate_hz=synthesis.sample_rate_hz,
@@ -426,7 +486,7 @@ class AudioJobService:
             content_type="audio/wav",
         )
         checksum = hashlib.sha256(wav_bytes).hexdigest()
-        self._assets.upsert_asset_record(
+        asset = self._assets.upsert_asset_record(
             session_id=job.session_id,
             asset_kind=AssetKind.AUDIO_SEGMENT,
             storage_bucket=location.bucket,
@@ -457,6 +517,7 @@ class AudioJobService:
         segment.error_message = None
         segment.metadata_json = {
             **_read_mapping(segment.metadata_json),
+            "latest_asset_id": asset.id,
             "audio_asset_path": location.key,
             "audio_asset_bucket": location.bucket,
             "provider": synthesis.provider,
@@ -467,17 +528,35 @@ class AudioJobService:
             "attempts_used": synthesis.attempts_used,
             "rendered_prompt": synthesis.rendered_prompt,
         }
+        return asset
 
     def _persist_final_audio(
         self,
         *,
         job: AudioJob,
         rendered_segments: Sequence[_RenderedNarrationSegment],
+        total_steps: int,
+        total_segments: int,
+        actor: SessionEventActor,
     ) -> dict[str, Any]:
         if not rendered_segments:
             raise AudioJobStateError("audio job completed without any rendered segments")
 
         first = rendered_segments[0].synthesis
+        assembly_message = _build_assembly_message(len(rendered_segments))
+        self._record_job_progress(
+            job=job,
+            status=JobStatus.IN_PROGRESS,
+            progress_percent=_AUDIO_ASSEMBLY_PROGRESS,
+            current_step=assembly_message,
+            current_step_index=total_segments + 1,
+            total_steps=total_steps,
+            completed_segments=len(rendered_segments),
+            current_segment_index=job.current_segment_index,
+            total_segments=total_segments,
+            message=assembly_message,
+            actor=actor,
+        )
         narration_master_wav_bytes = self._build_narration_master_wav(rendered_segments)
         mix_plan = self._read_audio_mix_plan(job)
         narration_master_location = None
@@ -492,6 +571,20 @@ class AudioJobService:
                 job=job,
                 narration_master_wav_bytes=narration_master_wav_bytes,
             )
+            mix_message = _build_mix_message(mix_plan.music_track_label)
+            self._record_job_progress(
+                job=job,
+                status=JobStatus.IN_PROGRESS,
+                progress_percent=_AUDIO_MIX_PROGRESS,
+                current_step=mix_message,
+                current_step_index=total_segments + 2,
+                total_steps=total_steps,
+                completed_segments=len(rendered_segments),
+                current_segment_index=job.current_segment_index,
+                total_segments=total_segments,
+                message=mix_message,
+                actor=actor,
+            )
             try:
                 mix_result = self._resolve_audio_mixer().mix(
                     narration_master_wav_bytes,
@@ -503,6 +596,20 @@ class AudioJobService:
         final_wav_bytes = mix_result.mixed_wav_bytes
         _, final_sample_rate_hz, final_channel_count, final_sample_width_bytes = read_wav_bytes(
             final_wav_bytes
+        )
+        publish_message = _build_publish_message()
+        self._record_job_progress(
+            job=job,
+            status=JobStatus.IN_PROGRESS,
+            progress_percent=_AUDIO_PUBLISH_PROGRESS,
+            current_step=publish_message,
+            current_step_index=total_steps,
+            total_steps=total_steps,
+            completed_segments=len(rendered_segments),
+            current_segment_index=job.current_segment_index,
+            total_segments=total_segments,
+            message=publish_message,
+            actor=actor,
         )
         location = self._storage().paths.final_audio(
             session_id=job.session_id,
@@ -574,6 +681,11 @@ class AudioJobService:
             "mix_strategy": mix_plan.strategy,
             "narration_master_object_path": (
                 narration_master_location.key if narration_master_location is not None else None
+            ),
+            "message": (
+                "Narration finished and the final mixed audio asset is ready."
+                if mix_plan.should_mix
+                else "Narration finished and the final audio asset is ready."
             ),
         }
 
@@ -797,6 +909,63 @@ class AudioJobService:
             asset.status = AssetStatus.SUPERSEDED
             asset.superseded_at = utc_now()
 
+    def _record_job_progress(
+        self,
+        *,
+        job: AudioJob,
+        status: JobStatus,
+        progress_percent: float | None,
+        current_step: str | None,
+        current_step_index: int | None,
+        total_steps: int | None,
+        completed_segments: int | None,
+        current_segment_index: int | None,
+        total_segments: int | None,
+        segment_id: str | None = None,
+        latest_asset_id: str | None = None,
+        latest_asset_kind: str | None = None,
+        message: str | None = None,
+        actor: SessionEventActor,
+    ) -> None:
+        job.current_segment_index = (
+            current_segment_index
+            if current_segment_index is not None
+            else job.current_segment_index
+        )
+        existing_config = _read_mapping(job.config_json)
+        job.config_json = {
+            **existing_config,
+            "progress_percent": progress_percent,
+            "current_step": current_step,
+            "current_step_index": current_step_index,
+            "total_steps": total_steps,
+            "completed_segments": completed_segments,
+            "latest_asset_id": latest_asset_id or existing_config.get("latest_asset_id"),
+            "latest_asset_kind": (
+                latest_asset_kind or existing_config.get("latest_asset_kind")
+            ),
+            "current_segment_id": segment_id or existing_config.get("current_segment_id"),
+        }
+        self._events.record_audio_progress(
+            job.session_id,
+            job_id=job.id,
+            status=status,
+            progress_percent=progress_percent,
+            current_step=current_step,
+            current_step_index=current_step_index,
+            total_steps=total_steps,
+            completed_segments=completed_segments,
+            current_segment_index=job.current_segment_index,
+            total_segments=total_segments,
+            segment_id=segment_id,
+            latest_asset_id=latest_asset_id,
+            latest_asset_kind=latest_asset_kind,
+            estimated_duration_seconds=job.estimated_duration_seconds,
+            voice_key=job.voice_key,
+            message=message,
+            actor=actor,
+        )
+
 
 def build_wav_bytes(
     pcm_audio_bytes: bytes,
@@ -878,10 +1047,93 @@ def _read_total_segments(job: AudioJob) -> int | None:
         return None
 
 
-def _progress_percent(completed_segments: int, total_segments: int) -> float:
+def _read_total_steps(job: AudioJob) -> int | None:
+    total = _read_mapping(job.config_json).get("total_steps")
+    if total is None:
+        return None
+    try:
+        return int(total)
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_current_step_index(job: AudioJob) -> int | None:
+    current_step_index = _read_mapping(job.config_json).get("current_step_index")
+    if current_step_index is None:
+        return None
+    try:
+        return int(current_step_index)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_total_steps(total_segments: int, *, include_mix_stage: bool) -> int:
+    base_steps = max(total_segments, 0) + 2
+    if include_mix_stage:
+        base_steps += 1
+    return max(base_steps, 1)
+
+
+def _segment_progress_percent(completed_segments: int, total_segments: int) -> float:
     if total_segments <= 0:
         return 0.0
-    return round(min(max((completed_segments / total_segments) * 100, 0.0), 100.0), 1)
+    ratio = min(max(completed_segments / total_segments, 0.0), 1.0)
+    return round(ratio * _AUDIO_SEGMENT_PROGRESS_CEILING, 1)
+
+
+def _build_queued_audio_message(total_segments: int) -> str:
+    return (
+        f"Queued narration for {total_segments} segment"
+        f"{'' if total_segments == 1 else 's'}."
+    )
+
+
+def _build_rendering_segment_message(
+    segment_index: int,
+    total_segments: int,
+    *,
+    attempt_count: int,
+) -> str:
+    attempt_suffix = f" (attempt {attempt_count})" if attempt_count > 1 else ""
+    return (
+        f"Rendering narration segment {segment_index} of {total_segments}"
+        f"{attempt_suffix}."
+    )
+
+
+def _build_segment_saved_message(segment_index: int, total_segments: int) -> str:
+    return f"Saved narration segment {segment_index} of {total_segments}."
+
+
+def _build_assembly_message(total_segments: int) -> str:
+    return (
+        f"Assembling the narration master from {total_segments} rendered segment"
+        f"{'' if total_segments == 1 else 's'}."
+    )
+
+
+def _build_mix_message(music_track_label: str | None) -> str:
+    if music_track_label:
+        return f"Mixing narration with {music_track_label.lower()}."
+    return "Mixing narration with the selected background bed."
+
+
+def _build_publish_message() -> str:
+    return "Publishing the final audio asset."
+
+
+def _increment_segment_attempt_count(segment: NarrationSegment) -> int:
+    metadata = _read_mapping(segment.metadata_json)
+    prior_attempts = metadata.get("render_attempt_count")
+    if isinstance(prior_attempts, int):
+        next_attempt = prior_attempts + 1
+    else:
+        next_attempt = 1
+    segment.metadata_json = {
+        **metadata,
+        "render_attempt_count": next_attempt,
+    }
+    return next_attempt
 
 
 def _elapsed_ms_since(started_at: float) -> int:

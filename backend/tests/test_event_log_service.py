@@ -96,11 +96,18 @@ def test_event_log_service_records_supported_event_categories(db_session) -> Non
         job_id="audio-job-1",
         status="queued",
         progress_percent=25.0,
+        current_step="Queued narration for 4 segments.",
+        current_step_index=1,
+        total_steps=6,
+        completed_segments=1,
         current_segment_index=1,
         total_segments=4,
         segment_id="audio-segment-1",
+        latest_asset_id="asset-1",
+        latest_asset_kind="audio_segment",
         estimated_duration_seconds=720,
         voice_key="gemini-soft-1",
+        message="Queued narration for 4 segments.",
     )
     event_log.append_event(
         story_session.id,
@@ -142,6 +149,8 @@ def test_event_log_service_records_supported_event_categories(db_session) -> Non
     assert history.events[6].stage == WorkflowStage.AUDIO
     assert history.events[6].payload is not None
     assert history.events[6].payload.voice_key == "gemini-soft-1"
+    assert history.events[6].payload.current_step == "Queued narration for 4 segments."
+    assert history.events[6].payload.latest_asset_kind == "audio_segment"
     assert history.events[7].actor.actor_type == EventActorType.SERVICE
     assert history.events[7].payload == {
         "schema_version": 1,

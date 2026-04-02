@@ -473,11 +473,31 @@ class SessionRealtimeService:
     ) -> SessionRealtimeEvent:
         job = self._session.get(AudioJob, payload.job_id)
         status = RealtimeJobStatus(payload.status)
-        total_segments = payload.total_segments or _read_metadata_int(job, "total_segments")
+        total_segments = payload.total_segments or _read_audio_config_int(job, "total_segments")
+        total_steps = payload.total_steps or _read_audio_config_int(job, "total_steps")
+        current_step = payload.current_step or _read_audio_config_text(job, "current_step")
+        current_step_index = (
+            payload.current_step_index or _read_audio_config_int(job, "current_step_index")
+        )
+        completed_segments = (
+            payload.completed_segments or _read_audio_config_int(job, "completed_segments")
+        )
+        latest_asset_id = payload.latest_asset_id or _read_audio_config_text(
+            job,
+            "latest_asset_id",
+        )
+        latest_asset_kind = payload.latest_asset_kind or _read_audio_config_text(
+            job,
+            "latest_asset_kind",
+        )
         message = _build_audio_message(
+            current_step=current_step,
             estimated_duration_seconds=payload.estimated_duration_seconds,
+            current_segment_index=payload.current_segment_index,
+            message=payload.message,
             progress_percent=payload.progress_percent,
             status=status,
+            total_segments=total_segments,
         )
 
         if status in _REPLAYABLE_JOB_STATUS_VALUES:
@@ -500,6 +520,8 @@ class SessionRealtimeService:
                     error_message=job.error_message if job is not None else None,
                     current_segment_index=payload.current_segment_index,
                     total_segments=total_segments,
+                    latest_asset_id=latest_asset_id,
+                    latest_asset_kind=latest_asset_kind,
                 ),
             )
 
@@ -518,12 +540,16 @@ class SessionRealtimeService:
                 job_kind=JobKind.AUDIO,
                 status=status,
                 progress_percent=payload.progress_percent,
-                current_step_index=payload.current_segment_index,
-                total_steps=total_segments,
+                current_step=current_step,
+                current_step_index=current_step_index,
+                total_steps=total_steps,
+                completed_segments=completed_segments,
                 current_segment_index=payload.current_segment_index,
                 total_segments=total_segments,
                 segment_id=payload.segment_id,
                 estimated_duration_seconds=payload.estimated_duration_seconds,
+                latest_asset_id=latest_asset_id,
+                latest_asset_kind=latest_asset_kind,
                 message=message,
             ),
         )
@@ -751,11 +777,24 @@ def _build_composition_message(
 
 def _build_audio_message(
     *,
+    current_step: str | None,
     estimated_duration_seconds: int | None,
+    current_segment_index: int | None,
+    message: str | None,
     progress_percent: float | None,
     status: RealtimeJobStatus,
+    total_segments: int | None,
 ) -> str:
+    if message:
+        return message
+    if current_step:
+        return current_step
     if status == RealtimeJobStatus.IN_PROGRESS and progress_percent is not None:
+        if current_segment_index is not None and total_segments is not None:
+            return (
+                f"Narration {round(progress_percent)}% complete. "
+                f"Segment {current_segment_index} of {total_segments} is active."
+            )
         return f"Narration {round(progress_percent)}% complete."
     if status == RealtimeJobStatus.COMPLETED:
         if estimated_duration_seconds is not None:
@@ -790,6 +829,20 @@ def _read_metadata_int(job: CompositionJob | None, key: str) -> int | None:
         return None
     value = job.metadata_json.get(key)
     return value if isinstance(value, int) and value >= 0 else None
+
+
+def _read_audio_config_int(job: AudioJob | None, key: str) -> int | None:
+    if job is None or not isinstance(job.config_json, dict):
+        return None
+    value = job.config_json.get(key)
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def _read_audio_config_text(job: AudioJob | None, key: str) -> str | None:
+    if job is None or not isinstance(job.config_json, dict):
+        return None
+    value = job.config_json.get(key)
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _count_words(text: str) -> int:

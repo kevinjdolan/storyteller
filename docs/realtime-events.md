@@ -230,6 +230,10 @@ Notes:
 - `job_kind` is `composition` or `audio`.
 - `status` mirrors the durable job states: `queued`, `in_progress`, `paused`,
   `completed`, `failed`, and `cancelled`.
+- Audio jobs should keep `current_step`, `current_step_index`, and
+  `completed_segments` in sync with the durable `AudioJob` row so refreshes can
+  rebuild whether the worker is rendering a segment, assembling the narration
+  master, mixing music, or publishing the final asset.
 - `estimated_duration_seconds` is mainly for audio UX, but it stays available on
   both job kinds so the transport stays uniform.
 - `latest_asset_id` and `latest_asset_kind` leave room for later preview UIs to

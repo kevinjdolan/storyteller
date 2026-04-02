@@ -516,6 +516,54 @@ function applyJobProgressEvent(
     ...(snapshot.latest_audio_job ?? snapshot.active_audio_job),
     id: event.payload.job_id,
     status: event.payload.status,
+    progress_percent:
+      event.type === 'job.progress'
+        ? (event.payload.progress_percent ??
+          snapshot.latest_audio_job?.progress_percent ??
+          snapshot.active_audio_job?.progress_percent ??
+          0)
+        : event.payload.status === 'completed'
+          ? 100
+          : (snapshot.latest_audio_job?.progress_percent ??
+            snapshot.active_audio_job?.progress_percent ??
+            0),
+    current_step:
+      event.payload.message ??
+      (event.type === 'job.progress'
+        ? (event.payload.current_step ??
+          snapshot.latest_audio_job?.current_step ??
+          snapshot.active_audio_job?.current_step ??
+          null)
+        : (snapshot.latest_audio_job?.current_step ??
+          snapshot.active_audio_job?.current_step ??
+          null)),
+    current_step_index:
+      event.type === 'job.progress'
+        ? (event.payload.current_step_index ??
+          snapshot.latest_audio_job?.current_step_index ??
+          snapshot.active_audio_job?.current_step_index ??
+          null)
+        : (snapshot.latest_audio_job?.current_step_index ??
+          snapshot.active_audio_job?.current_step_index ??
+          null),
+    total_steps:
+      event.type === 'job.progress'
+        ? (event.payload.total_steps ??
+          snapshot.latest_audio_job?.total_steps ??
+          snapshot.active_audio_job?.total_steps ??
+          null)
+        : (snapshot.latest_audio_job?.total_steps ??
+          snapshot.active_audio_job?.total_steps ??
+          null),
+    completed_segments:
+      event.type === 'job.progress'
+        ? (event.payload.completed_segments ??
+          snapshot.latest_audio_job?.completed_segments ??
+          snapshot.active_audio_job?.completed_segments ??
+          null)
+        : (snapshot.latest_audio_job?.completed_segments ??
+          snapshot.active_audio_job?.completed_segments ??
+          null),
     voice_key:
       snapshot.latest_audio_job?.voice_key ??
       snapshot.active_audio_job?.voice_key ??
@@ -538,6 +586,16 @@ function applyJobProgressEvent(
       event.payload.current_segment_index ??
       snapshot.latest_audio_job?.current_segment_index ??
       snapshot.active_audio_job?.current_segment_index ??
+      null,
+    latest_asset_id:
+      event.payload.latest_asset_id ??
+      snapshot.latest_audio_job?.latest_asset_id ??
+      snapshot.active_audio_job?.latest_asset_id ??
+      null,
+    latest_asset_kind:
+      event.payload.latest_asset_kind ??
+      snapshot.latest_audio_job?.latest_asset_kind ??
+      snapshot.active_audio_job?.latest_asset_kind ??
       null,
     updated_at: event.created_at,
   }

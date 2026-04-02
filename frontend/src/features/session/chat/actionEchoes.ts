@@ -245,6 +245,10 @@ function buildJobProgressEcho(event: SessionHistoryEvent) {
   if (interruptionMessage != null) {
     return interruptionMessage
   }
+  const explicitMessage = readString(event.payload, 'message')
+  if (explicitMessage != null) {
+    return explicitMessage
+  }
 
   const status = readString(event.payload, 'status')
   const progressPercent = readNumber(event.payload, 'progress_percent')

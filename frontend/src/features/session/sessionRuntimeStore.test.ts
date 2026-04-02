@@ -464,6 +464,66 @@ describe('sessionRuntimeStore', () => {
     })
   })
 
+  it('merges staged audio job progress into the snapshot', () => {
+    const store = createSessionRuntimeStore()
+
+    store.hydrateSessionSnapshot(buildSampleSnapshot())
+    store.applyRealtimeEvent({
+      schema_version: 1,
+      event_id: 'rt-audio-1',
+      type: 'job.progress',
+      session_id: 'session-123',
+      channel: 'session:session-123',
+      actor: {
+        actor_type: 'system',
+        actor_id: 'worker',
+      },
+      stage: 'audio',
+      created_at: '2026-04-01T08:15:00Z',
+      delivery: 'live',
+      replayable: true,
+      sequence_number: 19,
+      event_log_entry_id: 'event-log-19',
+      payload: {
+        schema_version: 1,
+        job_id: 'audio-job-1',
+        job_kind: 'audio',
+        status: 'in_progress',
+        progress_percent: 72,
+        current_step:
+          'Mixing narration with the selected background bed.',
+        current_step_index: 5,
+        total_steps: 6,
+        completed_segments: 3,
+        current_segment_index: 3,
+        total_segments: 3,
+        latest_asset_id: 'audio-segment-3',
+        latest_asset_kind: 'audio_segment',
+        estimated_duration_seconds: 840,
+        message: 'Mixing narration with the selected background bed.',
+      },
+    })
+
+    expect(store.getState().sessionSnapshot?.active_audio_job).toMatchObject({
+      id: 'audio-job-1',
+      status: 'in_progress',
+      progress_percent: 72,
+      current_step: 'Mixing narration with the selected background bed.',
+      current_step_index: 5,
+      total_steps: 6,
+      completed_segments: 3,
+      latest_asset_kind: 'audio_segment',
+      updated_at: '2026-04-01T08:15:00Z',
+    })
+    expect(
+      store.getState().sessionSnapshot?.stage_states.find((stage) => stage.stage === 'audio'),
+    ).toMatchObject({
+      status: 'in_progress',
+      detail: 'Mixing narration with the selected background bed.',
+      last_event_type: 'job.progress',
+    })
+  })
+
   it('hydrates and extends the live composition manuscript without duplicating snapshot text', () => {
     const store = createSessionRuntimeStore()
 

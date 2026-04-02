@@ -195,6 +195,43 @@ describe('AudioSettingsStage', () => {
     })
   })
 
+  it('renders active narration progress with the current durable step', () => {
+    const snapshotWithActiveAudio: SessionSnapshot = {
+      ...sampleSnapshot,
+      active_audio_job: {
+        id: 'audio-job-7',
+        status: 'in_progress',
+        progress_percent: 68,
+        current_step: 'Mixing narration with the selected background bed.',
+        current_step_index: 5,
+        total_steps: 6,
+        completed_segments: 3,
+        total_segments: 3,
+        current_segment_index: 3,
+        estimated_duration_seconds: 780,
+        updated_at: '2026-04-02T05:18:00Z',
+      },
+    }
+
+    renderWithAppProviders(
+      <AudioSettingsStage
+        onSaveAudioSettings={vi.fn()}
+        selectedStage={selectedStage}
+        snapshot={snapshotWithActiveAudio}
+      />,
+    )
+
+    expect(screen.getByText('68% rendered')).toBeInTheDocument()
+    expect(
+      screen.getByText('Mixing narration with the selected background bed.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText(
+        'Step 5 of 6. 3 of 3 narration segments are durable already. Estimated listening length 13 min.',
+      ),
+    ).toHaveLength(2)
+  })
+
   it('renders backend-provided music catalog guidance when music is enabled', () => {
     const snapshotWithMusic: SessionSnapshot = {
       ...sampleSnapshot,

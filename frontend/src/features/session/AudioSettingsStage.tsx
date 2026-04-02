@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import type {
+  AudioJobView,
   AudioMusicProfileOptionView,
   AudioSettingsView,
   SessionHistoryEvent,
   SessionSnapshot,
 } from '../../api/sessions.ts'
-import { Badge, Button, TextArea } from '../../shared/ui/primitives.tsx'
+import { Badge, Button, ProgressBar, TextArea } from '../../shared/ui/primitives.tsx'
 import {
   CardGrid,
   FormColumns,
@@ -209,6 +210,41 @@ function getSelectedOptionDescription<
   )
 }
 
+function buildAudioProgressLabel(audioJob: AudioJobView | null) {
+  if (audioJob?.current_step != null && audioJob.current_step.length > 0) {
+    return audioJob.current_step
+  }
+
+  if (audioJob?.status != null) {
+    return `Narration ${audioJob.status.replace(/_/g, ' ')}`
+  }
+
+  return 'Narration runtime'
+}
+
+function buildAudioProgressHint(audioJob: AudioJobView | null) {
+  if (audioJob == null) {
+    return null
+  }
+
+  const stepSummary =
+    audioJob.current_step_index != null && audioJob.total_steps != null
+      ? `Step ${audioJob.current_step_index} of ${audioJob.total_steps}.`
+      : audioJob.current_segment_index != null && audioJob.total_segments != null
+        ? `Segment ${audioJob.current_segment_index} of ${audioJob.total_segments}.`
+        : null
+  const completedSummary =
+    audioJob.completed_segments != null && audioJob.total_segments != null
+      ? `${audioJob.completed_segments} of ${audioJob.total_segments} narration segments are durable already.`
+      : null
+  const durationSummary =
+    audioJob.estimated_duration_seconds != null
+      ? `Estimated listening length ${Math.max(Math.round(audioJob.estimated_duration_seconds / 60), 1)} min.`
+      : null
+
+  return [stepSummary, completedSummary, durationSummary].filter(Boolean).join(' ')
+}
+
 export function AudioSettingsStage({
   onSaveAudioSettings,
   selectedStage,
@@ -259,6 +295,10 @@ export function AudioSettingsStage({
     formState.musicProfile === savedState.musicProfile &&
     formState.musicVolume === savedState.musicVolume &&
     formState.narrationVolume === savedState.narrationVolume
+  const activeAudioJob = snapshot.active_audio_job ?? null
+  const audioProgressPercent = activeAudioJob?.progress_percent ?? 0
+  const audioProgressLabel = buildAudioProgressLabel(activeAudioJob)
+  const audioProgressHint = buildAudioProgressHint(activeAudioJob)
 
   useEffect(() => {
     setFormState(buildFormState(snapshot))
@@ -316,6 +356,9 @@ export function AudioSettingsStage({
                 ? 'Narration approved'
                 : 'Narration in planning'}
             </Badge>
+            {activeAudioJob != null ? (
+              <Badge tone="accent">{Math.round(audioProgressPercent)}% rendered</Badge>
+            ) : null}
             {snapshot.latest_audio_asset != null ? (
               <Badge tone="success">Audio asset ready</Badge>
             ) : (
@@ -323,6 +366,18 @@ export function AudioSettingsStage({
             )}
           </div>
         </div>
+
+        {activeAudioJob != null ? (
+          <ProgressBar
+            aria-label="Narration render progress"
+            className="audio-stage__progress"
+            hint={audioProgressHint}
+            label={audioProgressLabel}
+            tone="accent"
+            value={audioProgressPercent}
+            valueText={`${Math.round(audioProgressPercent)}% complete`}
+          />
+        ) : null}
 
         <CardGrid className="audio-stage__cards" columns={3}>
           <SummaryPanel
@@ -419,12 +474,13 @@ export function AudioSettingsStage({
               </InlineHelp>
             ) : null}
 
-            {snapshot.active_audio_job != null ? (
+            {activeAudioJob != null ? (
               <InlineHelp title="Active render" tone="warning">
                 <p>
                   Saving new settings updates the durable plan for the next narration
                   pass and cancels the current audio job if one is still running.
                 </p>
+                {audioProgressHint != null ? <p>{audioProgressHint}</p> : null}
               </InlineHelp>
             ) : null}
 

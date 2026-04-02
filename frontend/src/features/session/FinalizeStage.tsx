@@ -34,6 +34,7 @@ export function FinalizeStage({
     : null
   const finalStoryReady = snapshot.latest_story_asset != null
   const finalAudioReady = snapshot.latest_audio_asset != null
+  const activeAudioJob = snapshot.active_audio_job ?? null
 
   async function runAction(
     nextActionState: 'acceptRewrite' | 'rejectRewrite' | 'restoreVersion',
@@ -108,11 +109,19 @@ export function FinalizeStage({
             description={
               finalAudioReady
                 ? 'A ready narration asset is attached to the accepted manuscript.'
+                : activeAudioJob?.current_step
+                  ? activeAudioJob.current_step
                 : 'Narration still depends on the currently accepted text version.'
             }
             label="Audio asset"
-            title={finalAudioReady ? 'Ready to listen' : 'Narration pending'}
-            tone={finalAudioReady ? 'accent' : 'default'}
+            title={
+              finalAudioReady
+                ? 'Ready to listen'
+                : activeAudioJob?.progress_percent != null
+                  ? `Narration ${Math.round(activeAudioJob.progress_percent)}% complete`
+                  : 'Narration pending'
+            }
+            tone={finalAudioReady ? 'accent' : activeAudioJob != null ? 'accent' : 'default'}
           />
         </CardGrid>
 

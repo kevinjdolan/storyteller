@@ -845,6 +845,7 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
                     )
                 ).scalars()
             )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
             snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
 
         final_audio_bytes = object_storage.download_bytes(
@@ -864,9 +865,21 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
             "job_completed": audio_job.status == JobStatus.COMPLETED,
             "all_segments_rendered": len(adapter.calls) == 3 and len(audio_segment_assets) == 3,
             "final_asset_ready": final_audio_asset.mime_type == "audio/wav",
+            "job_persists_progress_metadata": (
+                audio_job.config_json["progress_percent"] == 100.0
+                and audio_job.config_json["current_step"]
+                == "Narration finished and the final audio asset is ready."
+                and audio_job.config_json["latest_asset_kind"] == AssetKind.FINAL_AUDIO.value
+            ),
             "snapshot_exposes_latest_audio_asset": snapshot.latest_audio_asset is not None,
             "snapshot_marks_audio_stage_completed": (
                 _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.COMPLETED
+            ),
+            "snapshot_exposes_audio_runtime_detail": (
+                snapshot.latest_audio_job is not None
+                and snapshot.latest_audio_job.progress_percent == 100
+                and snapshot.latest_audio_job.current_step
+                == "Narration finished and the final audio asset is ready."
             ),
             "final_wav_uses_expected_sample_rate": sample_rate_hz == 24_000,
             "final_wav_mono": channel_count == 1,
@@ -874,6 +887,23 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
         }
 
         assert all(criteria.values()), criteria
+        audio_progress_payloads = [
+            event.payload
+            for event in history.events
+            if event.event_type == "audio.progress.recorded"
+        ]
+        assert any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Assembling the narration master from 3 rendered segments."
+            for payload in audio_progress_payloads
+        )
+        assert any(
+            payload is not None
+            and getattr(payload, "latest_asset_kind", None) == AssetKind.AUDIO_SEGMENT.value
+            for payload in audio_progress_payloads
+        )
+        assert audio_progress_payloads[-1].latest_asset_kind == AssetKind.FINAL_AUDIO.value
     finally:
         object_storage.close()
         client.close()
@@ -1001,6 +1031,75 @@ def test_audio_runtime_worker_marks_failures_durably(tmp_path: Path) -> None:
         }
 
         assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_audio_job_service_retries_from_saved_segments_after_failure(tmp_path: Path) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[220, 180],
+            )
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with pytest.raises(TextToSpeechTransportError):
+            with session_factory() as session:
+                AudioJobService(
+                    session,
+                    object_storage=object_storage,
+                    tts_adapter=RecordingTextToSpeechAdapter(fail_on_call=2),
+                ).run_job(result.audio_job_id)
+
+        recovery_adapter = RecordingTextToSpeechAdapter()
+        with session_factory() as session:
+            retry_result = AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=recovery_adapter,
+            ).run_job(result.audio_job_id)
+
+        with session_factory() as session:
+            audio_job = session.get(AudioJob, result.audio_job_id)
+            narration_segments = list(
+                session.execute(
+                    select(NarrationSegment)
+                    .where(NarrationSegment.audio_job_id == result.audio_job_id)
+                    .order_by(NarrationSegment.segment_index.asc())
+                ).scalars()
+            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
+
+        assert retry_result["status"] == "completed"
+        assert len(recovery_adapter.calls) == 1
+        assert audio_job is not None
+        assert audio_job.attempt_count == 2
+        assert audio_job.config_json["completed_segments"] == 2
+        assert narration_segments[0].status == JobStatus.COMPLETED
+        assert narration_segments[1].status == JobStatus.COMPLETED
+        assert narration_segments[0].metadata_json["render_attempt_count"] == 1
+        assert narration_segments[1].metadata_json["render_attempt_count"] == 2
+        audio_progress_payloads = [
+            event.payload
+            for event in history.events
+            if event.event_type == "audio.progress.recorded"
+        ]
+        assert any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Rendering narration segment 2 of 2 (attempt 2)."
+            for payload in audio_progress_payloads
+        )
     finally:
         object_storage.close()
         client.close()

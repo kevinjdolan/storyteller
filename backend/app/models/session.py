@@ -352,9 +352,16 @@ class AudioJobView(BaseModel):
     playback_speed: float
     include_background_music: bool
     music_profile: str | None = None
+    progress_percent: float = 0
+    current_step: str | None = None
+    current_step_index: int | None = None
+    total_steps: int | None = None
+    completed_segments: int | None = None
     estimated_duration_seconds: int | None = None
     total_segments: int | None = None
     current_segment_index: int | None = None
+    latest_asset_id: str | None = None
+    latest_asset_kind: str | None = None
     attempt_count: int
     stop_reason: str | None = None
     error_message: str | None = None

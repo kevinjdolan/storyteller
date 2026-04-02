@@ -180,11 +180,18 @@ class AudioProgressEventPayload(EventPayload):
     job_id: str
     status: str
     progress_percent: float | None = None
+    current_step: str | None = None
+    current_step_index: int | None = None
+    total_steps: int | None = None
+    completed_segments: int | None = None
     current_segment_index: int | None = None
     total_segments: int | None = None
     segment_id: str | None = None
+    latest_asset_id: str | None = None
+    latest_asset_kind: str | None = None
     estimated_duration_seconds: int | None = None
     voice_key: str | None = None
+    message: str | None = None
 
 
 SessionEventPayload: TypeAlias = (

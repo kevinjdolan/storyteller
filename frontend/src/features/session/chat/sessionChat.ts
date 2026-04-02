@@ -231,11 +231,17 @@ export function buildInitialSessionChatMessages(
       }),
     )
   } else if (snapshot.active_audio_job != null) {
+    const progressPrefix =
+      snapshot.active_audio_job.progress_percent != null
+        ? `Narration ${Math.round(snapshot.active_audio_job.progress_percent)}% complete. `
+        : ''
     messages.push(
       createSessionChatMessage({
         id: 'audio-progress',
         role: 'system',
-        body: `Audio is ${snapshot.active_audio_job.status.replace(/_/g, ' ')}.`,
+        body:
+          snapshot.active_audio_job.current_step ??
+          `${progressPrefix}Audio is ${snapshot.active_audio_job.status.replace(/_/g, ' ')}.`,
         createdAt: snapshot.updated_at,
       }),
     )
