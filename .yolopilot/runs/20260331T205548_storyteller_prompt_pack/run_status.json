@@ -60,9 +60,10 @@
     "57-composition-prompt-assembly.md",
     "58-usage-cost-and-latency-metrics.md",
     "59-planning-funnel-e2e-test.md",
-    "60-composition-job-orchestration.md"
+    "60-composition-job-orchestration.md",
+    "61-segmented-writing-engine.md"
   ],
-  "current_success_ref": "5cb4db9b731c0690643cb67a4a2e01cf4a13e2be",
+  "current_success_ref": "0d8d4a481bacfa205897b73b4da27d64f0b79287",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
