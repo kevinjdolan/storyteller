@@ -209,6 +209,110 @@ def test_story_workflow_tool_service_updates_setup_and_cancels_invalidated_jobs(
     assert _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.NEEDS_REGENERATION
 
 
+def test_story_workflow_tool_service_tracks_minor_outline_edits(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(
+        db_session,
+        composition_status=JobStatus.IN_PROGRESS,
+        audio_status=JobStatus.IN_PROGRESS,
+    )
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    assert snapshot.selected_story_outline is not None
+
+    cards = [
+        {
+            **card.model_dump(mode="json"),
+            "summary": (
+                "Open on a calmer harbor image, then let Mira follow the first drifting bell."
+                if card.card_key == "chapter-1"
+                else card.summary
+            ),
+            "purpose": (
+                "Set the moonlit harbor rhythm and launch the first gentle problem."
+                if card.card_key == "chapter-1"
+                else card.purpose
+            ),
+        }
+        for card in snapshot.selected_story_outline.cards
+    ]
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+        session_id=seeded["session_id"],
+        arguments={
+            "outline_id": snapshot.selected_story_outline.id,
+            "cards": cards,
+            "origin": "workspace",
+        },
+    )
+
+    updated_snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    composition_job = db_session.get(CompositionJob, seeded["composition_job_id"])
+    audio_job = db_session.get(AudioJob, seeded["audio_job_id"])
+
+    assert updated_snapshot.selected_story_outline is not None
+    assert result.summary == (
+        "Updated 1 outline card. Composition, audio, and finalize should refresh before reuse."
+    )
+    assert updated_snapshot.selected_story_outline.change_impact == "minor"
+    assert updated_snapshot.selected_story_outline.last_change_summary == result.summary
+    assert updated_snapshot.selected_story_outline.invalidated_stages == [
+        WorkflowStage.COMPOSITION,
+        WorkflowStage.AUDIO,
+        WorkflowStage.FINALIZE,
+    ]
+    assert updated_snapshot.selected_story_outline.edit_history[0].changed_card_keys == [
+        "chapter-1"
+    ]
+    assert composition_job is not None and composition_job.status == JobStatus.CANCELLED
+    assert audio_job is not None and audio_job.status == JobStatus.CANCELLED
+
+
+def test_story_workflow_tool_service_marks_reordered_outline_as_structural(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(
+        db_session,
+        composition_status=JobStatus.IN_PROGRESS,
+        audio_status=JobStatus.IN_PROGRESS,
+    )
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    assert snapshot.selected_story_outline is not None
+
+    reversed_cards = [
+        card.model_dump(mode="json")
+        for card in reversed(snapshot.selected_story_outline.cards)
+    ]
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+        session_id=seeded["session_id"],
+        arguments={
+            "outline_id": snapshot.selected_story_outline.id,
+            "cards": reversed_cards,
+            "regenerate_card_keys": ["chapter-1"],
+            "origin": "workspace",
+        },
+    )
+
+    updated_snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+
+    assert updated_snapshot.selected_story_outline is not None
+    assert result.summary == (
+        "Saved a structural outline revision after reordering 2 cards. "
+        "Composition, audio, and finalize need regeneration."
+    )
+    assert updated_snapshot.selected_story_outline.change_impact == "major"
+    assert updated_snapshot.selected_story_outline.edit_history[0].reordered is True
+    assert updated_snapshot.selected_story_outline.edit_history[0].regenerated_card_keys == [
+        "chapter-1"
+    ]
+    assert updated_snapshot.selected_story_outline.cards[0].card_key == "chapter-3"
+    assert updated_snapshot.selected_story_outline.cards[-1].card_key == "chapter-1"
+    assert updated_snapshot.selected_story_outline.cards[-1].purpose is not None
+
+
 def test_story_workflow_tool_service_estimates_audio_length_from_segments(db_session) -> None:
     seeded = _seed_story_setup_session(
         db_session,

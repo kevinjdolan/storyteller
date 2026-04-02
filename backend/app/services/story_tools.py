@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -26,6 +28,7 @@ from app.models import (
     SelectionKind,
     SessionEventActor,
     StoryOutlineBeatInput,
+    StoryOutlineCard,
     StoryOutlinePlanningContext,
     UserEditTargetKind,
     WorkflowStage,
@@ -68,9 +71,14 @@ from app.services.character_generation import CharacterGenerationService
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
 from app.services.outline_generation import StoryOutlineGenerationService
-from app.services.planning_heuristics import estimate_narration_duration_seconds
 from app.services.pitch_generation import PitchGenerationService
+from app.services.planning_heuristics import estimate_narration_duration_seconds
 from app.services.sessions import SessionNotFoundError, SessionService
+from app.services.story_outline_editor import (
+    assess_story_outline_edit,
+    normalize_story_outline_cards,
+    regenerate_story_outline_cards,
+)
 
 
 class StoryWorkflowToolServiceError(Exception):
@@ -1014,7 +1022,26 @@ class StoryWorkflowToolService:
             session_id=session_id,
             outline_id=request.outline_id,
         )
-        if _story_outline_matches(current_outline, request):
+        setup = self._get_selected_story_setup_row(session_id)
+        if setup is None:
+            raise StoryWorkflowToolServiceError(
+                "update_story_outline requires a selected story setup row",
+            )
+
+        requested_cards = normalize_story_outline_cards(request.cards)
+        if request.regenerate_card_keys:
+            requested_cards = regenerate_story_outline_cards(
+                cards=requested_cards,
+                regenerate_card_keys=request.regenerate_card_keys,
+                context=_build_story_outline_planning_context(setup),
+                generator=self._outline_generation,
+            )
+
+        if _story_outline_matches(
+            current_outline,
+            request,
+            requested_cards=requested_cards,
+        ):
             return UpdateStoryOutlineToolResult(
                 tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
                 stage=WorkflowStage.STORY_SETUP,
@@ -1023,6 +1050,12 @@ class StoryWorkflowToolService:
                 story_outline_id=current_outline.id,
                 revision_number=current_outline.revision_number,
             )
+
+        assessment = assess_story_outline_edit(
+            current_cards=_read_story_outline_cards(current_outline),
+            requested_cards=requested_cards,
+            regenerate_card_keys=request.regenerate_card_keys,
+        )
 
         self._cancel_active_composition_jobs(
             session_id,
@@ -1034,12 +1067,6 @@ class StoryWorkflowToolService:
         )
         current_outline.is_selected = False
 
-        setup = self._get_selected_story_setup_row(session_id)
-        if setup is None:
-            raise StoryWorkflowToolServiceError(
-                "update_story_outline requires a selected story setup row",
-            )
-
         outline = StoryOutline(
             session_id=session_id,
             beat_sheet_id=snapshot.selected_beat_sheet.id,
@@ -1047,8 +1074,14 @@ class StoryWorkflowToolService:
             revision_number=self._next_revision_number(StoryOutline, session_id),
             outline_kind=current_outline.outline_kind,
             summary=request.summary or current_outline.summary,
-            cards=[card.model_dump(mode="json") for card in request.cards],
-            metadata_json=_merge_story_outline_metadata(current_outline.metadata_json, setup),
+            cards=[card.model_dump(mode="json") for card in requested_cards],
+            metadata_json=_merge_story_outline_metadata(
+                current_outline.metadata_json,
+                setup,
+                assessment=assessment,
+                created_at=utc_now(),
+                origin=request.origin,
+            ),
             is_selected=True,
             accepted_at=utc_now(),
         )
@@ -1061,23 +1094,36 @@ class StoryWorkflowToolService:
             stage=WorkflowStage.STORY_SETUP,
             target_id=outline.id,
             revision_number=outline.revision_number,
-            changed_fields=["cards", "summary"],
+            changed_fields=assessment.changed_fields,
+            changed_item_keys=assessment.changed_card_keys,
+            regenerated_item_keys=assessment.regenerated_card_keys,
+            change_impact=assessment.change_impact,
+            reordered=assessment.reordered,
+            refreshes_downstream=assessment.refreshes_downstream,
+            invalidated_stages=assessment.invalidated_stages,
             source=request.origin,
-            field_values=request.model_dump(mode="json", exclude_none=True),
-            summary_text="Updated story outline cards.",
+            field_values={
+                **request.model_dump(mode="json", exclude_none=True),
+                "cards": [card.model_dump(mode="json") for card in requested_cards],
+            },
+            summary_text=assessment.summary_text,
             actor=actor,
         )
         stage_snapshot = self._sessions.update_stage_state(
             session_id,
             stage=WorkflowStage.STORY_SETUP,
             status=WorkflowStageState.COMPLETED,
-            detail=_story_setup_stage_detail(setup, outline),
+            detail=_story_setup_stage_detail(
+                setup,
+                outline,
+                outline_change_summary=assessment.summary_text,
+            ),
             actor=actor,
         )
         return UpdateStoryOutlineToolResult(
             tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
             stage=WorkflowStage.STORY_SETUP,
-            summary="Saved a new story-outline revision.",
+            summary=assessment.summary_text,
             stage_status=_stage_status(stage_snapshot, WorkflowStage.STORY_SETUP),
             story_outline_id=outline.id,
             revision_number=outline.revision_number,
@@ -1409,21 +1455,7 @@ class StoryWorkflowToolService:
             current_outline.is_selected = False
 
         plan = self._outline_generation.generate_outline(
-            StoryOutlinePlanningContext(
-                genre_label=getattr(setup.session.selected_genre, "label", None),
-                tone_label=getattr(setup.session.selected_tone_profile, "label", None),
-                tone_description=getattr(setup.session.selected_tone_profile, "description", None),
-                beat_sheet_summary=getattr(setup.beat_sheet, "summary", None),
-                beats=_build_outline_beat_inputs(setup.beat_sheet),
-                target_word_count=setup.target_word_count,
-                target_runtime_minutes=setup.target_runtime_minutes,
-                chapter_count=setup.chapter_count,
-                approximate_scene_count=setup.approximate_scene_count,
-                chapter_style=setup.chapter_style,
-                guidance_notes=setup.guidance_notes,
-                bedtime_goal=_read_bedtime_goal(setup.beat_sheet),
-                preferences=setup.preferences,
-            )
+            _build_story_outline_planning_context(setup)
         )
         outline = StoryOutline(
             session_id=session_id,
@@ -1684,7 +1716,12 @@ def _story_setup_matches(current: StorySetup, merged_values: dict[str, Any]) -> 
     )
 
 
-def _story_setup_stage_detail(setup: StorySetup, outline: StoryOutline | None) -> str:
+def _story_setup_stage_detail(
+    setup: StorySetup,
+    outline: StoryOutline | None,
+    *,
+    outline_change_summary: str | None = None,
+) -> str:
     return _join_detail_parts(
         [
             _story_setup_label(setup),
@@ -1694,8 +1731,27 @@ def _story_setup_stage_detail(setup: StorySetup, outline: StoryOutline | None) -
                 if outline is not None
                 else None
             ),
+            outline_change_summary,
         ]
     ) or _story_setup_label(setup)
+
+
+def _build_story_outline_planning_context(setup: StorySetup) -> StoryOutlinePlanningContext:
+    return StoryOutlinePlanningContext(
+        genre_label=getattr(setup.session.selected_genre, "label", None),
+        tone_label=getattr(setup.session.selected_tone_profile, "label", None),
+        tone_description=getattr(setup.session.selected_tone_profile, "description", None),
+        beat_sheet_summary=getattr(setup.beat_sheet, "summary", None),
+        beats=_build_outline_beat_inputs(setup.beat_sheet),
+        target_word_count=setup.target_word_count,
+        target_runtime_minutes=setup.target_runtime_minutes,
+        chapter_count=setup.chapter_count,
+        approximate_scene_count=setup.approximate_scene_count,
+        chapter_style=setup.chapter_style,
+        guidance_notes=setup.guidance_notes,
+        bedtime_goal=_read_bedtime_goal(setup.beat_sheet),
+        preferences=setup.preferences,
+    )
 
 
 def _build_outline_beat_inputs(beat_sheet) -> list[StoryOutlineBeatInput]:
@@ -1738,17 +1794,37 @@ def _read_bedtime_goal(beat_sheet) -> str | None:
 def _story_outline_matches(
     current: StoryOutline,
     request: UpdateStoryOutlineToolInput,
+    *,
+    requested_cards: Sequence[StoryOutlineCard] | None = None,
 ) -> bool:
-    current_cards = current.cards if isinstance(current.cards, list) else []
-    requested_cards = [card.model_dump(mode="json") for card in request.cards]
+    current_cards = [card.model_dump(mode="json") for card in _read_story_outline_cards(current)]
+    normalized_requested_cards = normalize_story_outline_cards(
+        requested_cards if requested_cards is not None else request.cards
+    )
+    requested_payload = [
+        card.model_dump(mode="json") for card in normalized_requested_cards
+    ]
     current_summary = _read_optional_text(current.summary)
     requested_summary = _read_optional_text(request.summary) or current_summary
-    return current_summary == requested_summary and current_cards == requested_cards
+    return current_summary == requested_summary and current_cards == requested_payload
+
+
+def _read_story_outline_cards(current: StoryOutline) -> list[StoryOutlineCard]:
+    raw_cards = current.cards if isinstance(current.cards, list) else []
+    return [
+        StoryOutlineCard.model_validate(card)
+        for card in raw_cards
+        if isinstance(card, dict)
+    ]
 
 
 def _merge_story_outline_metadata(
     current_metadata: dict[str, Any] | list[Any] | None,
     setup: StorySetup,
+    *,
+    assessment=None,
+    created_at=None,
+    origin: str = "workspace",
 ) -> dict[str, Any]:
     metadata = dict(current_metadata) if isinstance(current_metadata, dict) else {}
     metadata.update(
@@ -1766,6 +1842,32 @@ def _merge_story_outline_metadata(
             "bedtime_goal": _read_bedtime_goal(setup.beat_sheet),
         }
     )
+    if assessment is not None and created_at is not None:
+        raw_history = metadata.get("edit_history")
+        history = list(raw_history) if isinstance(raw_history, list) else []
+        history.append(
+            {
+                "summary_text": assessment.summary_text,
+                "origin": origin,
+                "changed_fields": list(assessment.changed_fields),
+                "changed_card_keys": list(assessment.changed_card_keys),
+                "regenerated_card_keys": list(assessment.regenerated_card_keys),
+                "change_impact": assessment.change_impact,
+                "reordered": assessment.reordered,
+                "refreshes_downstream": assessment.refreshes_downstream,
+                "invalidated_stages": [
+                    stage.value for stage in assessment.invalidated_stages
+                ],
+                "created_at": created_at.isoformat(),
+            }
+        )
+        metadata["edit_history"] = history[-12:]
+        metadata["last_change_summary"] = assessment.summary_text
+        metadata["change_impact"] = assessment.change_impact
+        metadata["refreshes_downstream"] = assessment.refreshes_downstream
+        metadata["invalidated_stages"] = [
+            stage.value for stage in assessment.invalidated_stages
+        ]
     return metadata
 
 

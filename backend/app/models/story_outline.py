@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 OutlineCardKind = Literal["chapter", "scene"]
+StoryOutlineChangeImpact = Literal["minor", "major"]
 
 
 class StoryOutlineBeatInput(BaseModel):
@@ -43,6 +44,7 @@ class StoryOutlineCard(BaseModel):
     card_type: OutlineCardKind
     position: int = Field(ge=1)
     title: str = Field(min_length=1)
+    purpose: str | None = Field(default=None, min_length=1)
     summary: str = Field(min_length=1)
     beat_keys: list[str] = Field(default_factory=list)
     beat_labels: list[str] = Field(default_factory=list)

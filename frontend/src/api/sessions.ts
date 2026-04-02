@@ -223,6 +223,7 @@ export type StoryOutlineCard = {
   card_type: 'chapter' | 'scene'
   position: number
   title: string
+  purpose?: string | null
   summary: string
   beat_keys: string[]
   beat_labels: string[]
@@ -233,6 +234,19 @@ export type StoryOutlineCard = {
   tone_direction?: string | null
   bedtime_guardrail?: string | null
   drafting_brief?: string | null
+}
+
+export type StoryOutlineEditView = {
+  summary_text: string
+  origin: string
+  changed_fields: string[]
+  changed_card_keys: string[]
+  regenerated_card_keys: string[]
+  change_impact?: 'minor' | 'major' | null
+  reordered: boolean
+  refreshes_downstream: boolean
+  invalidated_stages: WorkflowStageId[]
+  created_at: string
 }
 
 export type StoryOutlineView = {
@@ -250,6 +264,11 @@ export type StoryOutlineView = {
   chapter_style?: string | null
   guidance_notes?: string | null
   bedtime_goal?: string | null
+  last_change_summary?: string | null
+  change_impact?: 'minor' | 'major' | null
+  refreshes_downstream?: boolean
+  invalidated_stages?: WorkflowStageId[]
+  edit_history?: StoryOutlineEditView[]
   is_selected?: boolean
   accepted_at?: string | null
   created_at?: string | null
@@ -528,6 +547,7 @@ export type SaveSessionStoryOutlineRequest = {
   outline_id?: string | null
   summary?: string | null
   cards: StoryOutlineCard[]
+  regenerate_card_keys?: string[]
   origin?: string
 }
 

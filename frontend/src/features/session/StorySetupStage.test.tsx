@@ -75,6 +75,135 @@ const selectedStage: SessionWorkspaceStageView = {
   scaffoldTitle: 'Story setup',
 }
 
+function buildOutlineSnapshot(): SessionSnapshot {
+  return {
+    ...sampleSnapshot,
+    selected_story_setup: {
+      id: 'setup-1',
+      revision_number: 1,
+      target_word_count: 1800,
+      target_runtime_minutes: 13,
+      chapter_count: 3,
+      approximate_scene_count: 8,
+      chapter_style: 'three gentle chapters',
+      guidance_notes: 'Keep each chapter ending softer than it began.',
+      accepted_at: '2026-04-02T05:20:00Z',
+    },
+    selected_story_outline: {
+      id: 'outline-1',
+      revision_number: 1,
+      outline_kind: 'chapter',
+      summary: 'Three draftable chapters mapped from the beat sheet.',
+      cards: [
+        {
+          card_key: 'chapter-1',
+          card_type: 'chapter',
+          position: 1,
+          title: 'Chapter 1: Opening Image to Catalyst',
+          purpose:
+            'Set the harbor mood and launch the first bedtime-safe problem.',
+          summary:
+            'Set the harbor mood and launch Mira after the drifting bell.',
+          beat_keys: ['opening_image', 'catalyst'],
+          beat_labels: ['Opening Image', 'Catalyst'],
+          emotional_shift: 'Move from stillness toward gentle motion.',
+          target_word_count: 600,
+          target_runtime_minutes: 4,
+          target_scene_count: 3,
+          tone_direction:
+            'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+          bedtime_guardrail:
+            'Keep the problem small, visible, and quickly reassuring.',
+          drafting_brief:
+            'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
+        },
+        {
+          card_key: 'chapter-2',
+          card_type: 'chapter',
+          position: 2,
+          title: 'Chapter 2: Midpoint',
+          purpose: 'Let wonder peak while the bedtime tone stays intact.',
+          summary:
+            "Let Mira discover the hidden cove and feel the bell's meaning open up.",
+          beat_keys: ['midpoint'],
+          beat_labels: ['Midpoint'],
+          emotional_shift:
+            'Lift wonder without breaking the bedtime reassurance.',
+          target_word_count: 600,
+          target_runtime_minutes: 4,
+          target_scene_count: 3,
+          tone_direction:
+            'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+          bedtime_guardrail:
+            'Keep the surprise luminous and quickly reassuring.',
+          drafting_brief:
+            'Chapter 2 should center the midpoint reveal and keep the wonder soft.',
+        },
+      ],
+      genre_label: 'Quest Fantasy',
+      tone_label: 'Hushed Wonder',
+      accepted_at: '2026-04-02T05:20:00Z',
+    },
+    story_outline_revisions: [
+      {
+        id: 'outline-1',
+        revision_number: 1,
+        outline_kind: 'chapter',
+        summary: 'Three draftable chapters mapped from the beat sheet.',
+        cards: [
+          {
+            card_key: 'chapter-1',
+            card_type: 'chapter',
+            position: 1,
+            title: 'Chapter 1: Opening Image to Catalyst',
+            purpose:
+              'Set the harbor mood and launch the first bedtime-safe problem.',
+            summary:
+              'Set the harbor mood and launch Mira after the drifting bell.',
+            beat_keys: ['opening_image', 'catalyst'],
+            beat_labels: ['Opening Image', 'Catalyst'],
+            emotional_shift: 'Move from stillness toward gentle motion.',
+            target_word_count: 600,
+            target_runtime_minutes: 4,
+            target_scene_count: 3,
+            tone_direction:
+              'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+            bedtime_guardrail:
+              'Keep the problem small, visible, and quickly reassuring.',
+            drafting_brief:
+              'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
+          },
+          {
+            card_key: 'chapter-2',
+            card_type: 'chapter',
+            position: 2,
+            title: 'Chapter 2: Midpoint',
+            purpose: 'Let wonder peak while the bedtime tone stays intact.',
+            summary:
+              "Let Mira discover the hidden cove and feel the bell's meaning open up.",
+            beat_keys: ['midpoint'],
+            beat_labels: ['Midpoint'],
+            emotional_shift:
+              'Lift wonder without breaking the bedtime reassurance.',
+            target_word_count: 600,
+            target_runtime_minutes: 4,
+            target_scene_count: 3,
+            tone_direction:
+              'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+            bedtime_guardrail:
+              'Keep the surprise luminous and quickly reassuring.',
+            drafting_brief:
+              'Chapter 2 should center the midpoint reveal and keep the wonder soft.',
+          },
+        ],
+        genre_label: 'Quest Fantasy',
+        tone_label: 'Hushed Wonder',
+        accepted_at: '2026-04-02T05:20:00Z',
+      },
+    ],
+  }
+}
+
 describe('StorySetupStage', () => {
   it('applies an explicit runtime suggestion and carries it into save', async () => {
     const onSaveStorySetup = vi.fn().mockResolvedValue({
@@ -205,84 +334,7 @@ describe('StorySetupStage', () => {
   })
 
   it('saves an edited outline card as a new revision', async () => {
-    const outlineSnapshot: SessionSnapshot = {
-      ...sampleSnapshot,
-      selected_story_setup: {
-        id: 'setup-1',
-        revision_number: 1,
-        target_word_count: 1800,
-        target_runtime_minutes: 13,
-        chapter_count: 3,
-        approximate_scene_count: 8,
-        chapter_style: 'three gentle chapters',
-        guidance_notes: 'Keep each chapter ending softer than it began.',
-        accepted_at: '2026-04-02T05:20:00Z',
-      },
-      selected_story_outline: {
-        id: 'outline-1',
-        revision_number: 1,
-        outline_kind: 'chapter',
-        summary: 'Three draftable chapters mapped from the beat sheet.',
-        cards: [
-          {
-            card_key: 'chapter-1',
-            card_type: 'chapter',
-            position: 1,
-            title: 'Chapter 1: Opening Image to Catalyst',
-            summary:
-              'Set the harbor mood and launch Mira after the drifting bell.',
-            beat_keys: ['opening_image', 'catalyst'],
-            beat_labels: ['Opening Image', 'Catalyst'],
-            emotional_shift: 'Move from stillness toward gentle motion.',
-            target_word_count: 600,
-            target_runtime_minutes: 4,
-            target_scene_count: 3,
-            tone_direction:
-              'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
-            bedtime_guardrail:
-              'Keep the problem small, visible, and quickly reassuring.',
-            drafting_brief:
-              'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
-          },
-        ],
-        genre_label: 'Quest Fantasy',
-        tone_label: 'Hushed Wonder',
-        accepted_at: '2026-04-02T05:20:00Z',
-      },
-      story_outline_revisions: [
-        {
-          id: 'outline-1',
-          revision_number: 1,
-          outline_kind: 'chapter',
-          summary: 'Three draftable chapters mapped from the beat sheet.',
-          cards: [
-            {
-              card_key: 'chapter-1',
-              card_type: 'chapter',
-              position: 1,
-              title: 'Chapter 1: Opening Image to Catalyst',
-              summary:
-                'Set the harbor mood and launch Mira after the drifting bell.',
-              beat_keys: ['opening_image', 'catalyst'],
-              beat_labels: ['Opening Image', 'Catalyst'],
-              emotional_shift: 'Move from stillness toward gentle motion.',
-              target_word_count: 600,
-              target_runtime_minutes: 4,
-              target_scene_count: 3,
-              tone_direction:
-                'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
-              bedtime_guardrail:
-                'Keep the problem small, visible, and quickly reassuring.',
-              drafting_brief:
-                'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
-            },
-          ],
-          genre_label: 'Quest Fantasy',
-          tone_label: 'Hushed Wonder',
-          accepted_at: '2026-04-02T05:20:00Z',
-        },
-      ],
-    }
+    const outlineSnapshot = buildOutlineSnapshot()
     const onSaveStoryOutline = vi.fn().mockResolvedValue({
       event: {
         id: 'event-outline-1',
@@ -327,7 +379,9 @@ describe('StorySetupStage', () => {
           'Open with a calmer harbor image, then let Mira follow the first drifting bell.',
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save outline revision' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save outline revision' }),
+    )
 
     await waitFor(() => {
       expect(onSaveStoryOutline).toHaveBeenCalledWith({
@@ -336,12 +390,142 @@ describe('StorySetupStage', () => {
         cards: [
           expect.objectContaining({
             card_key: 'chapter-1',
+            purpose:
+              'Set the harbor mood and launch the first bedtime-safe problem.',
             summary:
               'Open with a calmer harbor image, then let Mira follow the first drifting bell.',
           }),
+          expect.objectContaining({
+            card_key: 'chapter-2',
+          }),
         ],
+        regenerateCardKeys: [],
         origin: 'workspace',
       })
+    })
+  })
+
+  it('shows structural invalidation messaging and saves reordered cards', async () => {
+    const outlineSnapshot = buildOutlineSnapshot()
+    const onSaveStoryOutline = vi.fn().mockResolvedValue({
+      event: {
+        id: 'event-outline-2',
+        session_id: 'moonlit-harbor',
+        sequence_number: 3,
+        actor: { actor_type: 'user' },
+        event_type: 'content.user_edit.recorded',
+        stage: 'story_setup',
+        summary: 'Saved a structural outline revision.',
+        payload: null,
+        created_at: '2026-04-02T05:35:00Z',
+      },
+      snapshot: outlineSnapshot,
+    })
+
+    renderWithAppProviders(
+      <StorySetupStage
+        onPreviewStage={vi.fn()}
+        onSaveStorySetup={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-setup-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 1,
+            actor: { actor_type: 'user' },
+            event_type: 'selection.recorded',
+            stage: 'story_setup',
+            summary: 'Accepted story setup.',
+            payload: null,
+            created_at: '2026-04-02T05:20:00Z',
+          },
+          snapshot: outlineSnapshot,
+        })}
+        onSaveStoryOutline={onSaveStoryOutline}
+        selectedStage={selectedStage}
+        snapshot={outlineSnapshot}
+      />,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move later' })[0])
+
+    expect(
+      screen.getAllByText(
+        'This becomes a structural outline revision because card order changed. Composition, Audio, Finalize will need regeneration after save.',
+      ),
+    ).toHaveLength(2)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save outline revision' }),
+    )
+
+    await waitFor(() => {
+      expect(onSaveStoryOutline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cards: [
+            expect.objectContaining({
+              card_key: 'chapter-2',
+              position: 1,
+            }),
+            expect.objectContaining({
+              card_key: 'chapter-1',
+              position: 2,
+            }),
+          ],
+          regenerateCardKeys: [],
+        }),
+      )
+    })
+  })
+
+  it('regenerates only the selected card through the save callback', async () => {
+    const outlineSnapshot = buildOutlineSnapshot()
+    const onSaveStoryOutline = vi.fn().mockResolvedValue({
+      event: {
+        id: 'event-outline-3',
+        session_id: 'moonlit-harbor',
+        sequence_number: 4,
+        actor: { actor_type: 'user' },
+        event_type: 'content.user_edit.recorded',
+        stage: 'story_setup',
+        summary: 'Regenerated a card.',
+        payload: null,
+        created_at: '2026-04-02T05:40:00Z',
+      },
+      snapshot: outlineSnapshot,
+    })
+
+    renderWithAppProviders(
+      <StorySetupStage
+        onPreviewStage={vi.fn()}
+        onSaveStorySetup={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-setup-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 1,
+            actor: { actor_type: 'user' },
+            event_type: 'selection.recorded',
+            stage: 'story_setup',
+            summary: 'Accepted story setup.',
+            payload: null,
+            created_at: '2026-04-02T05:20:00Z',
+          },
+          snapshot: outlineSnapshot,
+        })}
+        onSaveStoryOutline={onSaveStoryOutline}
+        selectedStage={selectedStage}
+        snapshot={outlineSnapshot}
+      />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Regenerate this card' }),
+    )
+
+    await waitFor(() => {
+      expect(onSaveStoryOutline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          regenerateCardKeys: ['chapter-1'],
+        }),
+      )
     })
   })
 })

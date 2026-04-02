@@ -1170,12 +1170,14 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     outlineId?: string | null
     summary?: string | null
     cards: NonNullable<SessionSnapshot['selected_story_outline']>['cards']
+    regenerateCardKeys?: string[]
     origin: string
   }) {
     const result = await saveSessionStoryOutline(sessionId, {
       outline_id: options.outlineId ?? null,
       summary: options.summary ?? null,
       cards: options.cards,
+      regenerate_card_keys: options.regenerateCardKeys ?? [],
       origin: options.origin,
     })
 
@@ -1337,8 +1339,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     if (action.action_type === 'update_story_setup') {
       await applyStorySetupSave({
         targetWordCount: action.extracted_values.target_word_count,
-        targetRuntimeMinutes:
-          action.extracted_values.target_runtime_minutes,
+        targetRuntimeMinutes: action.extracted_values.target_runtime_minutes,
         chapterCount: action.extracted_values.chapter_count,
         guidanceNotes: action.extracted_values.guidance_notes,
         origin: 'chat',

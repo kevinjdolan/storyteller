@@ -136,6 +136,7 @@ def test_generate_outline_uses_chapter_count_to_build_chapter_cards() -> None:
     assert len(plan.cards) == 3
     assert all(card.card_type == "chapter" for card in plan.cards)
     assert all(card.beat_keys for card in plan.cards)
+    assert all(card.purpose is not None for card in plan.cards)
     assert plan.cards[0].target_scene_count is not None
     assert plan.cards[0].tone_direction == (
         "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane."
@@ -160,6 +161,7 @@ def test_generate_outline_falls_back_to_scene_cards_when_no_chapter_count_exists
     assert len(plan.cards) == 5
     assert all(card.card_type == "scene" for card in plan.cards)
     assert all(card.target_scene_count == 1 for card in plan.cards)
+    assert all(card.purpose is not None for card in plan.cards)
     assert all(card.drafting_brief is not None for card in plan.cards)
 
 
@@ -201,6 +203,7 @@ def test_eval_outline_chapter_plan_preserves_targets_tone_and_guardrails() -> No
     assert sum(card.target_word_count or 0 for card in plan.cards) == 1800
     assert sum(card.target_runtime_minutes or 0 for card in plan.cards) == 12
     assert all(card.tone_direction is not None for card in plan.cards)
+    assert all(card.purpose is not None for card in plan.cards)
     assert all(card.drafting_brief is not None for card in plan.cards)
     assert all(card.bedtime_guardrail is not None for card in plan.cards)
     assert any(

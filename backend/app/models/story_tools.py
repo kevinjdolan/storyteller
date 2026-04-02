@@ -207,6 +207,7 @@ class UpdateStoryOutlineToolInput(StoryWorkflowToolModel):
     outline_id: str | None = Field(default=None, min_length=1)
     summary: str | None = Field(default=None, min_length=1)
     cards: list[StoryOutlineCard] = Field(default_factory=list)
+    regenerate_card_keys: list[str] = Field(default_factory=list)
     origin: str = Field(default="workspace", min_length=1)
 
     @model_validator(mode="after")

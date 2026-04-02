@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.models.brief_normalization import NormalizedBriefPreferences
 from app.models.chat_actions import CharacterChangeImpact, StoryBriefEditMode
 from app.models.events import SessionEventView, SessionHistoryView
-from app.models.story_outline import StoryOutlineCard
+from app.models.story_outline import StoryOutlineCard, StoryOutlineChangeImpact
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -201,6 +201,19 @@ class StorySetupView(BaseModel):
     accepted_at: datetime | None = None
 
 
+class StoryOutlineEditView(BaseModel):
+    summary_text: str
+    origin: str
+    changed_fields: list[str] = Field(default_factory=list)
+    changed_card_keys: list[str] = Field(default_factory=list)
+    regenerated_card_keys: list[str] = Field(default_factory=list)
+    change_impact: StoryOutlineChangeImpact | None = None
+    reordered: bool = False
+    refreshes_downstream: bool = False
+    invalidated_stages: list[WorkflowStage] = Field(default_factory=list)
+    created_at: datetime
+
+
 class StoryOutlineView(BaseModel):
     id: str
     revision_number: int
@@ -216,6 +229,11 @@ class StoryOutlineView(BaseModel):
     chapter_style: str | None = None
     guidance_notes: str | None = None
     bedtime_goal: str | None = None
+    last_change_summary: str | None = None
+    change_impact: StoryOutlineChangeImpact | None = None
+    refreshes_downstream: bool = False
+    invalidated_stages: list[WorkflowStage] = Field(default_factory=list)
+    edit_history: list[StoryOutlineEditView] = Field(default_factory=list)
     is_selected: bool = False
     accepted_at: datetime | None = None
     created_at: datetime | None = None
@@ -419,6 +437,7 @@ class EditSessionStoryOutlineCardRequest(BaseModel):
     card_type: str = Field(min_length=1)
     position: int = Field(ge=1)
     title: str = Field(min_length=1)
+    purpose: str | None = Field(default=None, min_length=1)
     summary: str = Field(min_length=1)
     beat_keys: list[str] = Field(default_factory=list)
     beat_labels: list[str] = Field(default_factory=list)
@@ -441,6 +460,7 @@ class SaveSessionStoryOutlineRequest(BaseModel):
     outline_id: str | None = Field(default=None, min_length=1)
     summary: str | None = Field(default=None, min_length=1)
     cards: list[EditSessionStoryOutlineCardRequest] = Field(default_factory=list)
+    regenerate_card_keys: list[str] = Field(default_factory=list)
     origin: str = Field(default="workspace", min_length=1)
 
     @model_validator(mode="after")

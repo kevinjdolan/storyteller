@@ -8,6 +8,7 @@ from typing import Any, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.intent_parser import ParsedChatIntentResponse
+from app.models.story_outline import StoryOutlineChangeImpact
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -120,6 +121,12 @@ class UserEditRecordedEventPayload(EventPayload):
     target_id: str | None = None
     revision_number: int | None = None
     changed_fields: list[str] = Field(default_factory=list)
+    changed_item_keys: list[str] = Field(default_factory=list)
+    regenerated_item_keys: list[str] = Field(default_factory=list)
+    change_impact: StoryOutlineChangeImpact | None = None
+    reordered: bool = False
+    refreshes_downstream: bool = False
+    invalidated_stages: list[WorkflowStage] = Field(default_factory=list)
     source: str = "unknown"
     field_values: dict[str, Any] | None = None
     summary_text: str | None = None

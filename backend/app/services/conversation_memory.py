@@ -224,6 +224,11 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
         ]
         if aggregate.selected_story_outline.summary:
             outline_bits.append(_truncate(aggregate.selected_story_outline.summary))
+        last_change_summary = _read_story_outline_last_change_summary(
+            aggregate.selected_story_outline
+        )
+        if last_change_summary is not None:
+            outline_bits.append(_truncate(last_change_summary))
         preferences.append("Story outline: " + ", ".join(outline_bits))
 
     if audio_job is not None:
@@ -253,6 +258,14 @@ def _read_selected_pitch_rationale(pitch) -> str | None:
 
     rationale = refinement.get("selection_rationale")
     return rationale if isinstance(rationale, str) and rationale else None
+
+
+def _read_story_outline_last_change_summary(story_outline) -> str | None:
+    if not isinstance(getattr(story_outline, "metadata_json", None), Mapping):
+        return None
+
+    summary = story_outline.metadata_json.get("last_change_summary")
+    return summary if isinstance(summary, str) and summary else None
 
 
 def _build_brief_preference_lines(raw_preferences) -> list[str]:

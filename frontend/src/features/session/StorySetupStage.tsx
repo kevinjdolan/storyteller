@@ -16,7 +16,6 @@ import {
   FormColumns,
   InlineHelp,
   NumberField,
-  SelectField,
   StickySummaryLayout,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
@@ -28,7 +27,10 @@ import {
   type PlanningFieldId,
 } from './planningHeuristics.ts'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
-import { getWorkflowStageLabel } from './workflowStages.ts'
+import {
+  getWorkflowStageLabel,
+  type WorkflowStageId,
+} from './workflowStages.ts'
 
 type StorySetupStageProps = {
   onPreviewStage: (stageId: 'beats' | 'composition') => void
@@ -48,6 +50,7 @@ type StorySetupStageProps = {
     outlineId?: string | null
     summary?: string | null
     cards: StoryOutlineCard[]
+    regenerateCardKeys?: string[]
     origin: string
   }) => Promise<{
     event: SessionHistoryEvent
@@ -72,10 +75,27 @@ type ParsedNumberField = {
 
 type StoryOutlineEditorCardState = {
   cardKey: string
+  cardType: StoryOutlineCard['card_type']
+  position: number
   title: string
+  purpose: string
   summary: string
+  beatKeys: string[]
+  beatLabels: string[]
   emotionalShift: string
+  targetWordCount?: number | null
+  targetRuntimeMinutes?: number | null
+  targetSceneCount?: number | null
+  toneDirection?: string | null
+  bedtimeGuardrail?: string | null
   draftingBrief: string
+}
+
+type OutlineEditPreview = {
+  changeImpact: 'minor' | 'major'
+  changedCardKeys: string[]
+  reordered: boolean
+  summary: string
 }
 
 type HeuristicSuggestionCalloutProps = {
@@ -122,9 +142,33 @@ function buildFormState(snapshot: SessionSnapshot): StorySetupFormState {
   }
 }
 
+function getOutlineCardLabel(
+  card:
+    | Pick<StoryOutlineCard, 'card_type' | 'position'>
+    | Pick<StoryOutlineEditorCardState, 'cardType' | 'position'>,
+) {
+  const cardType = 'card_type' in card ? card.card_type : card.cardType
+
+  return `${cardType === 'chapter' ? 'Chapter' : 'Scene'} ${card.position}`
+}
+
+function buildFallbackOutlinePurpose(card: StoryOutlineCard) {
+  if (card.beat_labels.length > 1) {
+    return `Bridge ${card.beat_labels[0]} into ${card.beat_labels.at(-1)} without losing the bedtime rhythm.`
+  }
+
+  if (card.beat_labels.length === 1) {
+    return `Deliver the ${card.beat_labels[0]} turn clearly enough that composition can keep moving.`
+  }
+
+  return 'Clarify the main story turn this card needs to carry before composition begins.'
+}
+
 function getSelectedStoryOutline(snapshot: SessionSnapshot) {
   return (
-    snapshot.selected_story_outline ?? snapshot.story_outline_revisions?.[0] ?? null
+    snapshot.selected_story_outline ??
+    snapshot.story_outline_revisions?.[0] ??
+    null
   )
 }
 
@@ -133,9 +177,19 @@ function buildOutlineEditorState(
 ): StoryOutlineEditorCardState[] {
   return (getSelectedStoryOutline(snapshot)?.cards ?? []).map((card) => ({
     cardKey: card.card_key,
+    cardType: card.card_type,
+    position: card.position,
     title: card.title,
+    purpose: card.purpose ?? buildFallbackOutlinePurpose(card),
     summary: card.summary,
+    beatKeys: [...card.beat_keys],
+    beatLabels: [...card.beat_labels],
     emotionalShift: card.emotional_shift,
+    targetWordCount: card.target_word_count,
+    targetRuntimeMinutes: card.target_runtime_minutes,
+    targetSceneCount: card.target_scene_count,
+    toneDirection: card.tone_direction ?? null,
+    bedtimeGuardrail: card.bedtime_guardrail ?? null,
     draftingBrief: card.drafting_brief ?? '',
   }))
 }
@@ -143,9 +197,19 @@ function buildOutlineEditorState(
 function buildOutlineComparableState(values: StoryOutlineEditorCardState[]) {
   return values.map((card) => ({
     cardKey: card.cardKey,
+    cardType: card.cardType,
+    position: card.position,
     title: normalizeText(card.title),
+    purpose: normalizeText(card.purpose),
     summary: normalizeText(card.summary),
+    beatKeys: [...card.beatKeys],
+    beatLabels: [...card.beatLabels],
     emotionalShift: normalizeText(card.emotionalShift),
+    targetWordCount: card.targetWordCount ?? null,
+    targetRuntimeMinutes: card.targetRuntimeMinutes ?? null,
+    targetSceneCount: card.targetSceneCount ?? null,
+    toneDirection: card.toneDirection ?? null,
+    bedtimeGuardrail: card.bedtimeGuardrail ?? null,
     draftingBrief: normalizeText(card.draftingBrief),
   }))
 }
@@ -158,6 +222,109 @@ function storyOutlineStatesMatch(
     JSON.stringify(buildOutlineComparableState(current)) ===
     JSON.stringify(buildOutlineComparableState(saved))
   )
+}
+
+function moveOutlineDraftCard(
+  cards: StoryOutlineEditorCardState[],
+  cardKey: string,
+  direction: -1 | 1,
+) {
+  const currentIndex = cards.findIndex((card) => card.cardKey === cardKey)
+  const nextIndex = currentIndex + direction
+
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= cards.length) {
+    return cards
+  }
+
+  const reordered = [...cards]
+  const [movedCard] = reordered.splice(currentIndex, 1)
+  reordered.splice(nextIndex, 0, movedCard)
+
+  return reordered.map((card, index) => {
+    const nextPosition = index + 1
+    const prefix = card.cardType === 'chapter' ? 'Chapter' : 'Scene'
+
+    return {
+      ...card,
+      position: nextPosition,
+      title: card.title.replace(
+        new RegExp(`^${prefix} \\d+:\\s+`),
+        `${prefix} ${nextPosition}: `,
+      ),
+    }
+  })
+}
+
+function buildOutlineEditPreview(
+  draft: StoryOutlineEditorCardState[],
+  saved: StoryOutlineEditorCardState[],
+  invalidatedStages: ReadonlyArray<WorkflowStageId>,
+): OutlineEditPreview | null {
+  if (storyOutlineStatesMatch(draft, saved)) {
+    return null
+  }
+
+  const savedByKey = new Map(saved.map((card) => [card.cardKey, card]))
+  const changedCardKeys = draft
+    .filter((card) => {
+      const savedCard = savedByKey.get(card.cardKey)
+
+      return (
+        savedCard == null ||
+        JSON.stringify(buildOutlineComparableState([card])[0]) !==
+          JSON.stringify(buildOutlineComparableState([savedCard])[0])
+      )
+    })
+    .map((card) => card.cardKey)
+  const reordered =
+    draft.map((card) => card.cardKey).join('|') !==
+    saved.map((card) => card.cardKey).join('|')
+  const invalidatedLabels = invalidatedStages.map(getWorkflowStageLabel)
+  const impact = reordered || changedCardKeys.length > 1 ? 'major' : 'minor'
+  const stagesLabel =
+    invalidatedLabels.length > 0
+      ? invalidatedLabels.join(', ')
+      : 'No downstream stages'
+
+  if (impact === 'major') {
+    return {
+      changeImpact: impact,
+      changedCardKeys,
+      reordered,
+      summary: reordered
+        ? `This becomes a structural outline revision because card order changed. ${stagesLabel} will need regeneration after save.`
+        : `This revision changes ${changedCardKeys.length} cards at once. ${stagesLabel} will need regeneration after save.`,
+    }
+  }
+
+  return {
+    changeImpact: impact,
+    changedCardKeys,
+    reordered,
+    summary: `This is a light outline revision. ${stagesLabel} should refresh before reuse after save.`,
+  }
+}
+
+function validateOutlineDraft(cards: StoryOutlineEditorCardState[]) {
+  for (const card of cards) {
+    if (normalizeText(card.title).length === 0) {
+      return `${getOutlineCardLabel(card)} needs a title before it can be saved.`
+    }
+
+    if (normalizeText(card.purpose).length === 0) {
+      return `${getOutlineCardLabel(card)} needs a purpose before it can be saved.`
+    }
+
+    if (normalizeText(card.summary).length === 0) {
+      return `${getOutlineCardLabel(card)} needs a summary before it can be saved.`
+    }
+
+    if (normalizeText(card.emotionalShift).length === 0) {
+      return `${getOutlineCardLabel(card)} needs an emotional shift before it can be saved.`
+    }
+  }
+
+  return null
 }
 
 function parseOptionalInteger(
@@ -216,7 +383,9 @@ function toComparableNumericString(value: string) {
 function buildComparableState(values: StorySetupFormState) {
   return {
     targetWordCount: toComparableNumericString(values.targetWordCount),
-    targetRuntimeMinutes: toComparableNumericString(values.targetRuntimeMinutes),
+    targetRuntimeMinutes: toComparableNumericString(
+      values.targetRuntimeMinutes,
+    ),
     chapterCount: toComparableNumericString(values.chapterCount),
     approximateSceneCount: toComparableNumericString(
       values.approximateSceneCount,
@@ -290,14 +459,40 @@ function buildDraftTargetSummary(values: {
   return parts.length > 0 ? parts.join(', ') : 'No targets drafted yet'
 }
 
-function buildOutlineCardScope(card: StoryOutlineCard) {
+function isSavedOutlineCard(
+  card:
+    | StoryOutlineCard
+    | Pick<
+        StoryOutlineEditorCardState,
+        'targetWordCount' | 'targetRuntimeMinutes' | 'targetSceneCount'
+      >,
+): card is StoryOutlineCard {
+  return 'target_word_count' in card
+}
+
+function buildOutlineCardScope(
+  card:
+    | StoryOutlineCard
+    | Pick<
+        StoryOutlineEditorCardState,
+        'targetWordCount' | 'targetRuntimeMinutes' | 'targetSceneCount'
+      >,
+) {
+  const targetWordCount = isSavedOutlineCard(card)
+    ? card.target_word_count
+    : card.targetWordCount
+  const targetRuntimeMinutes = isSavedOutlineCard(card)
+    ? card.target_runtime_minutes
+    : card.targetRuntimeMinutes
+  const targetSceneCount = isSavedOutlineCard(card)
+    ? card.target_scene_count
+    : card.targetSceneCount
+
   return [
-    card.target_word_count != null ? `${card.target_word_count} words` : null,
-    card.target_runtime_minutes != null
-      ? `~${card.target_runtime_minutes} min`
-      : null,
-    card.target_scene_count != null
-      ? `${card.target_scene_count} scene${card.target_scene_count === 1 ? '' : 's'}`
+    targetWordCount != null ? `${targetWordCount} words` : null,
+    targetRuntimeMinutes != null ? `~${targetRuntimeMinutes} min` : null,
+    targetSceneCount != null
+      ? `${targetSceneCount} scene${targetSceneCount === 1 ? '' : 's'}`
       : null,
   ]
     .filter((part): part is string => part != null)
@@ -388,19 +583,20 @@ export function StorySetupStage({
   const [formState, setFormState] = useState<StorySetupFormState>(() =>
     buildFormState(snapshot),
   )
-  const [outlineDraft, setOutlineDraft] = useState<StoryOutlineEditorCardState[]>(
-    () => buildOutlineEditorState(snapshot),
-  )
+  const [outlineDraft, setOutlineDraft] = useState<
+    StoryOutlineEditorCardState[]
+  >(() => buildOutlineEditorState(snapshot))
   const [selectedOutlineCardKey, setSelectedOutlineCardKey] = useState<
     string | null
   >(() => buildOutlineEditorState(snapshot)[0]?.cardKey ?? null)
   const [formError, setFormError] = useState<string | null>(null)
   const [outlineError, setOutlineError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [isSavingOutline, setIsSavingOutline] = useState(false)
-  const [lastEditedField, setLastEditedField] = useState<PlanningFieldId | null>(
-    null,
-  )
+  const [outlineAction, setOutlineAction] = useState<
+    'save' | 'regenerate' | null
+  >(null)
+  const [lastEditedField, setLastEditedField] =
+    useState<PlanningFieldId | null>(null)
 
   useEffect(() => {
     setFormState(buildFormState(snapshot))
@@ -409,6 +605,7 @@ export function StorySetupStage({
     setSelectedOutlineCardKey(nextOutlineState[0]?.cardKey ?? null)
     setFormError(null)
     setOutlineError(null)
+    setOutlineAction(null)
     setLastEditedField(null)
   }, [snapshot])
 
@@ -451,7 +648,11 @@ export function StorySetupStage({
     approximateSceneCount.error,
   ].filter((error): error is string => error != null)
   const isDirty = !storySetupStatesMatch(formState, savedState)
-  const isOutlineDirty = !storyOutlineStatesMatch(outlineDraft, savedOutlineState)
+  const isOutlineDirty = !storyOutlineStatesMatch(
+    outlineDraft,
+    savedOutlineState,
+  )
+  const outlineValidationError = validateOutlineDraft(outlineDraft)
   const hasSavedSetup = snapshot.selected_story_setup != null
   const hasSavedOutline = selectedOutline != null
   const hasAnyConfiguredTarget =
@@ -466,17 +667,28 @@ export function StorySetupStage({
     !isDirty ||
     fieldErrors.length > 0 ||
     (!hasAnyConfiguredTarget && !hasSavedSetup)
-  const activeOutlineCard =
-    selectedOutline?.cards.find((card) => card.card_key === selectedOutlineCardKey) ??
-    selectedOutline?.cards[0] ??
-    null
   const activeOutlineDraft =
     outlineDraft.find((card) => card.cardKey === selectedOutlineCardKey) ??
     outlineDraft[0] ??
     null
+  const outlineEditPreview = buildOutlineEditPreview(
+    outlineDraft,
+    savedOutlineState,
+    selectedStage.invalidatesOnEdit,
+  )
   const downstreamLabels = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
   )
+  const saveOutlineDisabled =
+    selectedOutline == null ||
+    outlineAction != null ||
+    !isOutlineDirty ||
+    outlineValidationError != null
+  const regenerateOutlineDisabled =
+    selectedOutline == null ||
+    activeOutlineDraft == null ||
+    outlineAction != null ||
+    outlineValidationError != null
   const runtimeHeuristic = buildRuntimeHeuristicSummary({
     lastEditedField,
     targetWordCount: targetWordCount.value,
@@ -506,6 +718,33 @@ export function StorySetupStage({
       current.map((card) =>
         card.cardKey === cardKey ? { ...card, ...updates } : card,
       ),
+    )
+    setOutlineError(null)
+  }
+
+  function buildOutlineSavePayload() {
+    return outlineDraft.map((card) => ({
+      card_key: card.cardKey,
+      card_type: card.cardType,
+      position: card.position,
+      title: normalizeText(card.title),
+      purpose: toNullableText(card.purpose),
+      summary: normalizeText(card.summary),
+      beat_keys: [...card.beatKeys],
+      beat_labels: [...card.beatLabels],
+      emotional_shift: normalizeText(card.emotionalShift),
+      target_word_count: card.targetWordCount ?? null,
+      target_runtime_minutes: card.targetRuntimeMinutes ?? null,
+      target_scene_count: card.targetSceneCount ?? null,
+      tone_direction: card.toneDirection ?? null,
+      bedtime_guardrail: card.bedtimeGuardrail ?? null,
+      drafting_brief: toNullableText(card.draftingBrief),
+    }))
+  }
+
+  function handleMoveOutlineCard(cardKey: string, direction: -1 | 1) {
+    setOutlineDraft((current) =>
+      moveOutlineDraftCard(current, cardKey, direction),
     )
     setOutlineError(null)
   }
@@ -562,41 +801,25 @@ export function StorySetupStage({
     }
   }
 
-  async function handleSaveOutline() {
+  async function handleSaveOutline(regenerateCardKeys: string[] = []) {
     if (
       selectedOutline == null ||
-      activeOutlineCard == null ||
-      activeOutlineDraft == null ||
-      isSavingOutline ||
-      !isOutlineDirty
+      outlineAction != null ||
+      outlineValidationError != null ||
+      (regenerateCardKeys.length === 0 && !isOutlineDirty)
     ) {
       return
     }
 
-    setIsSavingOutline(true)
+    setOutlineAction(regenerateCardKeys.length > 0 ? 'regenerate' : 'save')
     setOutlineError(null)
 
     try {
-      const cards = selectedOutline.cards.map((card) => {
-        const draft = outlineDraft.find(
-          (draftCard) => draftCard.cardKey === card.card_key,
-        )
-
-        return {
-          ...card,
-          title: draft?.title ?? card.title,
-          summary: draft?.summary ?? card.summary,
-          emotional_shift: draft?.emotionalShift ?? card.emotional_shift,
-          drafting_brief:
-            toNullableText(draft?.draftingBrief ?? card.drafting_brief ?? '') ??
-            null,
-        }
-      })
-
       await onSaveStoryOutline({
         outlineId: selectedOutline.id,
         summary: selectedOutline.summary ?? null,
-        cards,
+        cards: buildOutlineSavePayload(),
+        regenerateCardKeys,
         origin: 'workspace',
       })
     } catch (error) {
@@ -606,7 +829,7 @@ export function StorySetupStage({
           : 'The story outline could not be saved right now.',
       )
     } finally {
-      setIsSavingOutline(false)
+      setOutlineAction(null)
     }
   }
 
@@ -743,7 +966,9 @@ export function StorySetupStage({
               </div>
               <div>
                 <dt>Saved state</dt>
-                <dd>{formatSavedAt(snapshot.selected_story_setup?.accepted_at)}</dd>
+                <dd>
+                  {formatSavedAt(snapshot.selected_story_setup?.accepted_at)}
+                </dd>
               </div>
               <div>
                 <dt>Outline</dt>
@@ -955,7 +1180,7 @@ export function StorySetupStage({
             </div>
             <Badge tone={hasSavedOutline ? 'success' : 'warning'}>
               {hasSavedOutline
-                ? `${selectedOutline?.cards.length ?? 0} cards ready`
+                ? `${outlineDraft.length} cards ready`
                 : 'Outline pending'}
             </Badge>
           </div>
@@ -981,74 +1206,337 @@ export function StorySetupStage({
                         ? 'Chapter cards'
                         : 'Scene cards'}
                     </Badge>
+                    {selectedOutline.change_impact != null ? (
+                      <Badge
+                        tone={
+                          selectedOutline.change_impact === 'major'
+                            ? 'warning'
+                            : 'accent'
+                        }
+                      >
+                        {selectedOutline.change_impact === 'major'
+                          ? 'Structural revision'
+                          : 'Light revision'}
+                      </Badge>
+                    ) : null}
                   </div>
                 </SummaryPanel>
 
                 <SummaryPanel
                   description="Each card keeps beat coverage explicit so later segment writing can stay grounded in the accepted arc."
                   label="Beat coverage"
-                  title={`${selectedOutline.cards.reduce((count, card) => count + card.beat_keys.length, 0)} beats mapped`}
+                  title={`${outlineDraft.reduce((count, card) => count + card.beatKeys.length, 0)} beats mapped`}
                 />
 
                 <SummaryPanel
                   description={
-                    selectedOutline.guidance_notes ??
-                    snapshot.selected_story_setup?.guidance_notes ??
-                    'No extra pacing note is attached beyond the saved targets.'
+                    outlineEditPreview?.summary ??
+                    selectedOutline.last_change_summary ??
+                    'Reordering or editing multiple cards at once becomes a structural revision and makes downstream invalidation explicit before composition starts.'
                   }
-                  label="Planner carry-through"
+                  label="Change propagation"
                   title={
-                    selectedOutline.tone_label != null
-                      ? `${selectedOutline.genre_label ?? 'Story lane'} / ${selectedOutline.tone_label}`
-                      : 'Lane context'
+                    outlineEditPreview != null
+                      ? outlineEditPreview.changeImpact === 'major'
+                        ? 'Structural draft pending save'
+                        : 'Light draft pending save'
+                      : selectedOutline.refreshes_downstream
+                        ? 'Saved outline refreshes downstream work'
+                        : 'No unsaved outline changes'
                   }
                 />
               </CardGrid>
 
-              <ol className="story-outline-stage__cards">
-                {selectedOutline.cards.map((card) => (
-                  <li key={card.card_key} className="story-outline-stage__card">
-                    <div className="story-outline-stage__card-header">
+              {outlineEditPreview != null ? (
+                <InlineHelp
+                  title={
+                    outlineEditPreview.changeImpact === 'major'
+                      ? 'Structural outline revision'
+                      : 'Light outline revision'
+                  }
+                  tone={
+                    outlineEditPreview.changeImpact === 'major'
+                      ? 'warning'
+                      : 'info'
+                  }
+                >
+                  {outlineEditPreview.summary}
+                </InlineHelp>
+              ) : selectedOutline.last_change_summary != null ? (
+                <InlineHelp
+                  title="Latest saved outline change"
+                  tone={
+                    selectedOutline.change_impact === 'major'
+                      ? 'warning'
+                      : 'info'
+                  }
+                >
+                  {selectedOutline.last_change_summary}
+                </InlineHelp>
+              ) : null}
+
+              {outlineValidationError != null ? (
+                <InlineHelp
+                  title="Outline draft needs attention"
+                  tone="warning"
+                >
+                  {outlineValidationError}
+                </InlineHelp>
+              ) : null}
+
+              {outlineError != null ? (
+                <InlineHelp title="Outline save failed" tone="warning">
+                  {outlineError}
+                </InlineHelp>
+              ) : null}
+
+              <div className="story-outline-stage__editor">
+                <ol className="story-outline-stage__cards">
+                  {outlineDraft.map((card, index) => {
+                    const isActive =
+                      activeOutlineDraft?.cardKey === card.cardKey
+                    const isChanged =
+                      savedOutlineState.find(
+                        (savedCard) => savedCard.cardKey === card.cardKey,
+                      ) == null ||
+                      JSON.stringify(buildOutlineComparableState([card])[0]) !==
+                        JSON.stringify(
+                          buildOutlineComparableState(
+                            savedOutlineState.filter(
+                              (savedCard) => savedCard.cardKey === card.cardKey,
+                            ),
+                          )[0],
+                        )
+
+                    return (
+                      <li key={card.cardKey}>
+                        <article
+                          className={`story-outline-stage__card${isActive ? ' story-outline-stage__card--active' : ''}${isChanged ? ' story-outline-stage__card--changed' : ''}`}
+                        >
+                          <div className="story-outline-stage__card-header">
+                            <div>
+                              <div className="workspace-stage-detail__badges">
+                                <Badge tone={isActive ? 'accent' : 'neutral'}>
+                                  {getOutlineCardLabel(card)}
+                                </Badge>
+                                {isChanged ? (
+                                  <Badge tone="warning">Draft changed</Badge>
+                                ) : null}
+                              </div>
+                              <h4>
+                                <button
+                                  className="story-outline-stage__card-select"
+                                  onClick={() => {
+                                    setSelectedOutlineCardKey(card.cardKey)
+                                    setOutlineError(null)
+                                  }}
+                                  type="button"
+                                >
+                                  {card.title}
+                                </button>
+                              </h4>
+                            </div>
+                            <div className="workspace-stage-detail__badges">
+                              {buildOutlineCardScope(card).length > 0 ? (
+                                <Badge tone="brand">
+                                  {buildOutlineCardScope(card)}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <p>
+                            <strong>Purpose.</strong> {card.purpose}
+                          </p>
+                          <p>{card.summary}</p>
+                          <p>
+                            <strong>Linked beats.</strong>{' '}
+                            {card.beatLabels.join(', ')}
+                          </p>
+                          <p>
+                            <strong>Emotional shift.</strong>{' '}
+                            {card.emotionalShift}
+                          </p>
+
+                          <div className="cta-row">
+                            <Button
+                              disabled={outlineAction != null || index === 0}
+                              onClick={() => {
+                                handleMoveOutlineCard(card.cardKey, -1)
+                              }}
+                              size="compact"
+                              tone="ghost"
+                            >
+                              Move earlier
+                            </Button>
+                            <Button
+                              disabled={
+                                outlineAction != null ||
+                                index === outlineDraft.length - 1
+                              }
+                              onClick={() => {
+                                handleMoveOutlineCard(card.cardKey, 1)
+                              }}
+                              size="compact"
+                              tone="ghost"
+                            >
+                              Move later
+                            </Button>
+                          </div>
+                        </article>
+                      </li>
+                    )
+                  })}
+                </ol>
+
+                {activeOutlineDraft != null ? (
+                  <section className="story-outline-stage__editor-panel">
+                    <div className="panel-heading">
                       <div>
-                        <Badge tone="neutral">
-                          {card.card_type === 'chapter' ? 'Chapter' : 'Scene'}{' '}
-                          {card.position}
-                        </Badge>
-                        <h4>{card.title}</h4>
+                        <h3>Outline editor</h3>
+                        <p>
+                          Adjust one card at a time, or reorder the full list.
+                          Saving creates a new outline revision without wiping
+                          the accepted beat sheet.
+                        </p>
                       </div>
-                      <div className="workspace-stage-detail__badges">
-                        {buildOutlineCardScope(card).length > 0 ? (
-                          <Badge tone="brand">{buildOutlineCardScope(card)}</Badge>
-                        ) : null}
-                      </div>
+                      <Badge tone={isOutlineDirty ? 'warning' : 'success'}>
+                        {isOutlineDirty ? 'Unsaved card edits' : 'Saved'}
+                      </Badge>
                     </div>
-                    <p>{card.summary}</p>
-                    <p>
-                      <strong>Supports beats.</strong>{' '}
-                      {card.beat_labels.join(', ')}
-                    </p>
-                    <p>
-                      <strong>Emotional shift.</strong> {card.emotional_shift}
-                    </p>
-                    {card.tone_direction != null ? (
-                      <p>
-                        <strong>Tone direction.</strong> {card.tone_direction}
-                      </p>
-                    ) : null}
-                    {card.bedtime_guardrail != null ? (
-                      <p>
-                        <strong>Bedtime guardrail.</strong>{' '}
-                        {card.bedtime_guardrail}
-                      </p>
-                    ) : null}
-                    {card.drafting_brief != null ? (
-                      <p>
-                        <strong>Drafting brief.</strong> {card.drafting_brief}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
+
+                    <CardGrid
+                      className="workspace-stage-detail__cards"
+                      columns={2}
+                    >
+                      <SummaryPanel
+                        description={activeOutlineDraft.beatLabels.join(', ')}
+                        label="Linked beats"
+                        title={`${activeOutlineDraft.beatLabels.length} beats`}
+                      />
+                      <SummaryPanel
+                        description={
+                          buildOutlineCardScope(activeOutlineDraft) ||
+                          'No explicit target length is attached to this card.'
+                        }
+                        label="Target length"
+                        title={getOutlineCardLabel(activeOutlineDraft)}
+                      />
+                    </CardGrid>
+
+                    <FormColumns>
+                      <TextInput
+                        description="Use a concise title that still reads clearly in the card rail."
+                        label="Card title"
+                        onChange={(event) => {
+                          updateOutlineDraft(activeOutlineDraft.cardKey, {
+                            title: event.currentTarget.value,
+                          })
+                        }}
+                        value={activeOutlineDraft.title}
+                      />
+
+                      <TextArea
+                        description="Purpose should explain why this card exists in the composition plan."
+                        label="Card purpose"
+                        onChange={(event) => {
+                          updateOutlineDraft(activeOutlineDraft.cardKey, {
+                            purpose: event.currentTarget.value,
+                          })
+                        }}
+                        rows={3}
+                        value={activeOutlineDraft.purpose}
+                      />
+                    </FormColumns>
+
+                    <TextArea
+                      description="Keep the summary practical enough that composition can draft from it."
+                      label="Card summary"
+                      onChange={(event) => {
+                        updateOutlineDraft(activeOutlineDraft.cardKey, {
+                          summary: event.currentTarget.value,
+                        })
+                      }}
+                      rows={4}
+                      value={activeOutlineDraft.summary}
+                    />
+
+                    <TextArea
+                      description="Capture the emotional movement this card needs to carry."
+                      label="Emotional shift"
+                      onChange={(event) => {
+                        updateOutlineDraft(activeOutlineDraft.cardKey, {
+                          emotionalShift: event.currentTarget.value,
+                        })
+                      }}
+                      rows={3}
+                      value={activeOutlineDraft.emotionalShift}
+                    />
+
+                    <TextArea
+                      description="This is the segment-ready brief composition will inherit if no custom redirect overrides it."
+                      label="Drafting brief"
+                      onChange={(event) => {
+                        updateOutlineDraft(activeOutlineDraft.cardKey, {
+                          draftingBrief: event.currentTarget.value,
+                        })
+                      }}
+                      rows={4}
+                      value={activeOutlineDraft.draftingBrief}
+                    />
+
+                    <InlineHelp title="Locked structure" tone="info">
+                      Beat coverage and target length stay fixed here so this
+                      remains a structured card editor rather than turning into
+                      a free-form outliner.
+                    </InlineHelp>
+
+                    <InlineHelp title="Regenerate this card" tone="info">
+                      Regenerating saves the current outline draft as a new
+                      revision, then rebuilds only this card from its linked
+                      beats and saved targets.
+                    </InlineHelp>
+
+                    <div className="cta-row">
+                      <Button
+                        disabled={saveOutlineDisabled}
+                        onClick={() => {
+                          void handleSaveOutline()
+                        }}
+                        tone="primary"
+                      >
+                        {outlineAction === 'save'
+                          ? 'Saving outline...'
+                          : 'Save outline revision'}
+                      </Button>
+                      <Button
+                        disabled={regenerateOutlineDisabled}
+                        onClick={() => {
+                          void handleSaveOutline([activeOutlineDraft.cardKey])
+                        }}
+                        tone="secondary"
+                      >
+                        {outlineAction === 'regenerate'
+                          ? 'Regenerating card...'
+                          : 'Regenerate this card'}
+                      </Button>
+                      <Button
+                        disabled={outlineAction != null || !isOutlineDirty}
+                        onClick={() => {
+                          setOutlineDraft(savedOutlineState)
+                          setSelectedOutlineCardKey(
+                            savedOutlineState[0]?.cardKey ?? null,
+                          )
+                          setOutlineError(null)
+                        }}
+                        tone="ghost"
+                      >
+                        Reset outline edits
+                      </Button>
+                    </div>
+                  </section>
+                ) : null}
+              </div>
             </>
           ) : (
             <EmptyStateBlock
@@ -1061,123 +1549,6 @@ export function StorySetupStage({
             />
           )}
         </section>
-
-        {selectedOutline != null &&
-        activeOutlineCard != null &&
-        activeOutlineDraft != null ? (
-          <section className="workspace-stage-panel">
-            <div className="panel-heading">
-              <div>
-                <h3>Outline editor</h3>
-                <p>
-                  Edit the saved cards directly. Saving creates a new outline
-                  revision and refreshes later production work without wiping
-                  the accepted beat sheet.
-                </p>
-              </div>
-              <Badge tone={isOutlineDirty ? 'warning' : 'success'}>
-                {isOutlineDirty ? 'Unsaved card edits' : 'Saved'}
-              </Badge>
-            </div>
-
-            <FormColumns>
-              <SelectField
-                description="Choose which draftable card to edit."
-                label="Outline card"
-                onChange={(event) => {
-                  setSelectedOutlineCardKey(event.currentTarget.value)
-                  setOutlineError(null)
-                }}
-                options={selectedOutline.cards.map((card) => ({
-                  label: `${card.card_type === 'chapter' ? 'Chapter' : 'Scene'} ${card.position}: ${card.title}`,
-                  value: card.card_key,
-                }))}
-                value={activeOutlineCard.card_key}
-              />
-
-              <TextInput
-                description="Use a concise title that still reads well in the card rail."
-                label="Card title"
-                onChange={(event) => {
-                  updateOutlineDraft(activeOutlineCard.card_key, {
-                    title: event.currentTarget.value,
-                  })
-                }}
-                value={activeOutlineDraft.title}
-              />
-            </FormColumns>
-
-            <TextArea
-              description="Keep the card summary practical enough that composition can draft from it."
-              label="Card summary"
-              onChange={(event) => {
-                updateOutlineDraft(activeOutlineCard.card_key, {
-                  summary: event.currentTarget.value,
-                })
-              }}
-              rows={4}
-              value={activeOutlineDraft.summary}
-            />
-
-            <TextArea
-              description="Capture the emotional movement this card needs to carry."
-              label="Emotional shift"
-              onChange={(event) => {
-                updateOutlineDraft(activeOutlineCard.card_key, {
-                  emotionalShift: event.currentTarget.value,
-                })
-              }}
-              rows={3}
-              value={activeOutlineDraft.emotionalShift}
-            />
-
-            <TextArea
-              description="This is the segment-ready brief composition will inherit if no custom redirect overrides it."
-              label="Drafting brief"
-              onChange={(event) => {
-                updateOutlineDraft(activeOutlineCard.card_key, {
-                  draftingBrief: event.currentTarget.value,
-                })
-              }}
-              rows={4}
-              value={activeOutlineDraft.draftingBrief}
-            />
-
-            <InlineHelp title="Locked structure" tone="info">
-              Beat coverage and card targets stay fixed here so edits can stay
-              focused on clearer drafting direction rather than reshuffling the
-              whole plan.
-            </InlineHelp>
-
-            {outlineError != null ? (
-              <InlineHelp title="Outline save failed" tone="warning">
-                {outlineError}
-              </InlineHelp>
-            ) : null}
-
-            <div className="cta-row">
-              <Button
-                disabled={isSavingOutline || !isOutlineDirty}
-                onClick={() => {
-                  void handleSaveOutline()
-                }}
-                tone="primary"
-              >
-                {isSavingOutline ? 'Saving outline...' : 'Save outline revision'}
-              </Button>
-              <Button
-                disabled={isSavingOutline || !isOutlineDirty}
-                onClick={() => {
-                  setOutlineDraft(savedOutlineState)
-                  setOutlineError(null)
-                }}
-                tone="ghost"
-              >
-                Reset outline edits
-              </Button>
-            </div>
-          </section>
-        ) : null}
       </StickySummaryLayout>
     </section>
   )

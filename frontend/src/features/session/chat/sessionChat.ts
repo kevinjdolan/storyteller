@@ -186,11 +186,16 @@ export function buildInitialSessionChatMessages(
       snapshot.selected_story_outline.outline_kind === 'chapter'
         ? 'chapters'
         : 'scenes'
+    const latestOutlineChange =
+      snapshot.selected_story_outline.last_change_summary
     messages.push(
       createSessionChatMessage({
         id: 'selected-story-outline',
         role: 'assistant',
-        body: `Outline ready: ${snapshot.selected_story_outline.cards.length} ${cardLabel} are mapped to the beat sheet for drafting.`,
+        body:
+          latestOutlineChange != null
+            ? `Outline ready: ${snapshot.selected_story_outline.cards.length} ${cardLabel} are mapped to the beat sheet for drafting. ${latestOutlineChange}`
+            : `Outline ready: ${snapshot.selected_story_outline.cards.length} ${cardLabel} are mapped to the beat sheet for drafting.`,
         createdAt: getStageTimestamp(snapshot, 'story_setup'),
       }),
     )

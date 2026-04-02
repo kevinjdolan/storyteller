@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 from app.models.story_outline import (
     OutlineCardKind,
@@ -98,6 +97,41 @@ class StoryOutlineGenerationService:
                 "preferences": context.preferences,
             },
         )
+
+    def regenerate_card(
+        self,
+        *,
+        context: StoryOutlinePlanningContext,
+        card: StoryOutlineCard,
+        position: int | None = None,
+    ) -> StoryOutlineCard:
+        beats_by_key = {
+            beat.key: beat
+            for beat in sorted(context.beats, key=lambda beat: beat.order)
+        }
+        group = [
+            beats_by_key[beat_key]
+            for beat_key in card.beat_keys
+            if beat_key in beats_by_key
+        ]
+        if not group:
+            raise StoryOutlineGenerationServiceError(
+                "story outline card regeneration requires matching supporting beats",
+            )
+
+        regenerated = _build_card(
+            outline_kind=card.card_type,
+            position=position or card.position,
+            group=group,
+            genre_label=context.genre_label,
+            tone_label=context.tone_label,
+            target_word_count=card.target_word_count,
+            target_runtime_minutes=card.target_runtime_minutes,
+            target_scene_count=card.target_scene_count,
+            chapter_style=context.chapter_style,
+            guidance_notes=context.guidance_notes,
+        )
+        return regenerated.model_copy(update={"card_key": card.card_key})
 
 
 def _resolve_outline_kind(context: StoryOutlinePlanningContext) -> OutlineCardKind:
@@ -225,6 +259,7 @@ def _build_card(
         card_type=outline_kind,
         position=position,
         title=f"{card_label} {position}: {title_range}",
+        purpose=_build_card_purpose(group),
         summary=_build_card_summary(group),
         beat_keys=[beat.key for beat in group],
         beat_labels=[beat.label for beat in group],
@@ -247,6 +282,21 @@ def _build_card(
             chapter_style=chapter_style,
             guidance_notes=guidance_notes,
         ),
+    )
+
+
+def _build_card_purpose(group: Sequence[StoryOutlineBeatInput]) -> str:
+    start = group[0]
+    end = group[-1]
+    if start.key == end.key:
+        return (
+            f"Deliver the {start.label.lower()} turn clearly enough that the next card "
+            "can draft forward without re-explaining the beat."
+        )
+
+    return (
+        f"Bridge the story from {start.label.lower()} into {end.label.lower()} as one "
+        "readable stretch of forward motion."
     )
 
 
@@ -333,7 +383,8 @@ def _build_drafting_brief(
     return (
         f"{'Chapter' if outline_kind == 'chapter' else 'Scene'} {position} should cover {beats}."
         f" Keep the lane aligned with {lane_bits or 'the accepted plan'}."
-        f" Draft for {scope_bits or 'a compact writing segment'} and protect this bedtime guardrail:"
+        " Draft for "
+        f"{scope_bits or 'a compact writing segment'} and protect this bedtime guardrail:"
         f" {bedtime_guardrail or 'resolve any spike in tension quickly and visibly.'}"
         f"{guidance_suffix}"
     )
