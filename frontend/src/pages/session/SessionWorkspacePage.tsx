@@ -13,6 +13,7 @@ import {
   refineSessionPitch,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  saveSessionStoryOutline,
   saveSessionStorySetup,
   selectSessionBeatSheet,
   selectSessionCharacterSheet,
@@ -1165,6 +1166,25 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyStoryOutlineSave(options: {
+    outlineId?: string | null
+    summary?: string | null
+    cards: NonNullable<SessionSnapshot['selected_story_outline']>['cards']
+    origin: string
+  }) {
+    const result = await saveSessionStoryOutline(sessionId, {
+      outline_id: options.outlineId ?? null,
+      summary: options.summary ?? null,
+      cards: options.cards,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1749,6 +1769,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               ) : selectedStage.stage === 'story_setup' ? (
                 <StorySetupStage
                   onPreviewStage={setPreviewStage}
+                  onSaveStoryOutline={applyStoryOutlineSave}
                   onSaveStorySetup={applyStorySetupSave}
                   selectedStage={selectedStage}
                   snapshot={snapshot}

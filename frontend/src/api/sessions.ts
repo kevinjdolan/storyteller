@@ -218,6 +218,44 @@ export type StorySetupView = {
   accepted_at?: string | null
 }
 
+export type StoryOutlineCard = {
+  card_key: string
+  card_type: 'chapter' | 'scene'
+  position: number
+  title: string
+  summary: string
+  beat_keys: string[]
+  beat_labels: string[]
+  emotional_shift: string
+  target_word_count?: number | null
+  target_runtime_minutes?: number | null
+  target_scene_count?: number | null
+  tone_direction?: string | null
+  bedtime_guardrail?: string | null
+  drafting_brief?: string | null
+}
+
+export type StoryOutlineView = {
+  id: string
+  revision_number: number
+  outline_kind: 'chapter' | 'scene'
+  summary?: string | null
+  cards: StoryOutlineCard[]
+  genre_label?: string | null
+  tone_label?: string | null
+  target_word_count?: number | null
+  target_runtime_minutes?: number | null
+  chapter_count?: number | null
+  approximate_scene_count?: number | null
+  chapter_style?: string | null
+  guidance_notes?: string | null
+  bedtime_goal?: string | null
+  is_selected?: boolean
+  accepted_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 export type CompositionJobView = {
   id: string
   job_kind?: string
@@ -401,6 +439,8 @@ export type SessionSnapshot = RecentSessionSummary & {
   beat_sheet_revisions?: BeatSheetView[] | null
   selected_beat_sheet?: BeatSheetView | null
   selected_story_setup?: StorySetupView | null
+  story_outline_revisions?: StoryOutlineView[] | null
+  selected_story_outline?: StoryOutlineView | null
   latest_composition_job?: CompositionJobView | null
   latest_audio_job?: AudioJobView | null
   active_composition_job?: CompositionJobView | null
@@ -484,6 +524,13 @@ export type SaveSessionStorySetupRequest = {
   origin?: string
 }
 
+export type SaveSessionStoryOutlineRequest = {
+  outline_id?: string | null
+  summary?: string | null
+  cards: StoryOutlineCard[]
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
@@ -554,6 +601,11 @@ export type SessionStorySetupResponse = {
   event: SessionHistoryEvent
 }
 
+export type SessionStoryOutlineResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
 export function fetchRecentSessions(limit = 20) {
@@ -608,6 +660,16 @@ export function saveSessionStorySetup(
 ) {
   return postJson<SessionStorySetupResponse>(
     `/api/v1/sessions/${sessionId}/story-setup`,
+    body,
+  )
+}
+
+export function saveSessionStoryOutline(
+  sessionId: string,
+  body: SaveSessionStoryOutlineRequest,
+) {
+  return postJson<SessionStoryOutlineResponse>(
+    `/api/v1/sessions/${sessionId}/story-outline`,
     body,
   )
 }

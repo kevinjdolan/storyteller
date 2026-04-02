@@ -181,6 +181,21 @@ export function buildInitialSessionChatMessages(
     )
   }
 
+  if (snapshot.selected_story_outline != null) {
+    const cardLabel =
+      snapshot.selected_story_outline.outline_kind === 'chapter'
+        ? 'chapters'
+        : 'scenes'
+    messages.push(
+      createSessionChatMessage({
+        id: 'selected-story-outline',
+        role: 'assistant',
+        body: `Outline ready: ${snapshot.selected_story_outline.cards.length} ${cardLabel} are mapped to the beat sheet for drafting.`,
+        createdAt: getStageTimestamp(snapshot, 'story_setup'),
+      }),
+    )
+  }
+
   const currentStage = snapshot.stage_states.find(
     (stage) => stage.stage === snapshot.current_stage,
   )

@@ -52,6 +52,7 @@ const sampleSnapshot: SessionSnapshot = {
     accepted_at: '2026-04-02T04:45:00Z',
   },
   selected_story_setup: null,
+  selected_story_outline: null,
   active_composition_job: null,
   active_audio_job: null,
   latest_story_asset: null,
@@ -95,6 +96,20 @@ describe('StorySetupStage', () => {
       <StorySetupStage
         onPreviewStage={vi.fn()}
         onSaveStorySetup={onSaveStorySetup}
+        onSaveStoryOutline={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-outline-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 2,
+            actor: { actor_type: 'user' },
+            event_type: 'content.user_edit.recorded',
+            stage: 'story_setup',
+            summary: 'Updated story outline cards.',
+            payload: null,
+            created_at: '2026-04-02T05:25:00Z',
+          },
+          snapshot: sampleSnapshot,
+        })}
         selectedStage={selectedStage}
         snapshot={sampleSnapshot}
       />,
@@ -151,6 +166,20 @@ describe('StorySetupStage', () => {
           },
           snapshot: sampleSnapshot,
         })}
+        onSaveStoryOutline={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-outline-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 2,
+            actor: { actor_type: 'user' },
+            event_type: 'content.user_edit.recorded',
+            stage: 'story_setup',
+            summary: 'Updated story outline cards.',
+            payload: null,
+            created_at: '2026-04-02T05:25:00Z',
+          },
+          snapshot: sampleSnapshot,
+        })}
         selectedStage={selectedStage}
         snapshot={sampleSnapshot}
       />,
@@ -173,5 +202,146 @@ describe('StorySetupStage', () => {
         'Read-aloud estimates assume about 140 words per minute, with most bedtime narration landing between 120 and 160. Chapter sizing assumes individual chapters can drift by about 15% around the average rather than matching perfectly.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('saves an edited outline card as a new revision', async () => {
+    const outlineSnapshot: SessionSnapshot = {
+      ...sampleSnapshot,
+      selected_story_setup: {
+        id: 'setup-1',
+        revision_number: 1,
+        target_word_count: 1800,
+        target_runtime_minutes: 13,
+        chapter_count: 3,
+        approximate_scene_count: 8,
+        chapter_style: 'three gentle chapters',
+        guidance_notes: 'Keep each chapter ending softer than it began.',
+        accepted_at: '2026-04-02T05:20:00Z',
+      },
+      selected_story_outline: {
+        id: 'outline-1',
+        revision_number: 1,
+        outline_kind: 'chapter',
+        summary: 'Three draftable chapters mapped from the beat sheet.',
+        cards: [
+          {
+            card_key: 'chapter-1',
+            card_type: 'chapter',
+            position: 1,
+            title: 'Chapter 1: Opening Image to Catalyst',
+            summary:
+              'Set the harbor mood and launch Mira after the drifting bell.',
+            beat_keys: ['opening_image', 'catalyst'],
+            beat_labels: ['Opening Image', 'Catalyst'],
+            emotional_shift: 'Move from stillness toward gentle motion.',
+            target_word_count: 600,
+            target_runtime_minutes: 4,
+            target_scene_count: 3,
+            tone_direction:
+              'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+            bedtime_guardrail:
+              'Keep the problem small, visible, and quickly reassuring.',
+            drafting_brief:
+              'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
+          },
+        ],
+        genre_label: 'Quest Fantasy',
+        tone_label: 'Hushed Wonder',
+        accepted_at: '2026-04-02T05:20:00Z',
+      },
+      story_outline_revisions: [
+        {
+          id: 'outline-1',
+          revision_number: 1,
+          outline_kind: 'chapter',
+          summary: 'Three draftable chapters mapped from the beat sheet.',
+          cards: [
+            {
+              card_key: 'chapter-1',
+              card_type: 'chapter',
+              position: 1,
+              title: 'Chapter 1: Opening Image to Catalyst',
+              summary:
+                'Set the harbor mood and launch Mira after the drifting bell.',
+              beat_keys: ['opening_image', 'catalyst'],
+              beat_labels: ['Opening Image', 'Catalyst'],
+              emotional_shift: 'Move from stillness toward gentle motion.',
+              target_word_count: 600,
+              target_runtime_minutes: 4,
+              target_scene_count: 3,
+              tone_direction:
+                'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+              bedtime_guardrail:
+                'Keep the problem small, visible, and quickly reassuring.',
+              drafting_brief:
+                'Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.',
+            },
+          ],
+          genre_label: 'Quest Fantasy',
+          tone_label: 'Hushed Wonder',
+          accepted_at: '2026-04-02T05:20:00Z',
+        },
+      ],
+    }
+    const onSaveStoryOutline = vi.fn().mockResolvedValue({
+      event: {
+        id: 'event-outline-1',
+        session_id: 'moonlit-harbor',
+        sequence_number: 2,
+        actor: { actor_type: 'user' },
+        event_type: 'content.user_edit.recorded',
+        stage: 'story_setup',
+        summary: 'Updated story outline cards.',
+        payload: null,
+        created_at: '2026-04-02T05:25:00Z',
+      },
+      snapshot: outlineSnapshot,
+    })
+
+    renderWithAppProviders(
+      <StorySetupStage
+        onPreviewStage={vi.fn()}
+        onSaveStorySetup={vi.fn().mockResolvedValue({
+          event: {
+            id: 'event-setup-1',
+            session_id: 'moonlit-harbor',
+            sequence_number: 1,
+            actor: { actor_type: 'user' },
+            event_type: 'selection.recorded',
+            stage: 'story_setup',
+            summary: 'Accepted story setup.',
+            payload: null,
+            created_at: '2026-04-02T05:20:00Z',
+          },
+          snapshot: outlineSnapshot,
+        })}
+        onSaveStoryOutline={onSaveStoryOutline}
+        selectedStage={selectedStage}
+        snapshot={outlineSnapshot}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Card summary'), {
+      target: {
+        value:
+          'Open with a calmer harbor image, then let Mira follow the first drifting bell.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save outline revision' }))
+
+    await waitFor(() => {
+      expect(onSaveStoryOutline).toHaveBeenCalledWith({
+        outlineId: 'outline-1',
+        summary: 'Three draftable chapters mapped from the beat sheet.',
+        cards: [
+          expect.objectContaining({
+            card_key: 'chapter-1',
+            summary:
+              'Open with a calmer harbor image, then let Mira follow the first drifting bell.',
+          }),
+        ],
+        origin: 'workspace',
+      })
+    })
   })
 })

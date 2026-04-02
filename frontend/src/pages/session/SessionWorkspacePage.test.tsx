@@ -739,6 +739,50 @@ function buildStorySetupSaveResponse(
   ].filter((value): value is string => value != null)
   const selectionLabel =
     detailBits.length > 0 ? detailBits.join(', ') : 'Story setup preferences'
+  const outlineKind = savedSetup.chapter_count != null ? 'chapter' : 'scene'
+  const outlineCardCount = Math.max(
+    savedSetup.chapter_count ?? 0,
+    savedSetup.approximate_scene_count != null ? 1 : 0,
+    1,
+  )
+  const savedOutline: NonNullable<SessionSnapshot['selected_story_outline']> = {
+    id: 'story-outline-2',
+    revision_number: 1,
+    outline_kind: outlineKind,
+    summary: `${outlineCardCount} draftable ${outlineKind === 'chapter' ? 'chapters' : 'scenes'} mapped from the beat sheet.`,
+    cards: Array.from({ length: outlineCardCount }).map((_, index) => ({
+      card_key: `${outlineKind}-${index + 1}`,
+      card_type: outlineKind,
+      position: index + 1,
+      title: `${outlineKind === 'chapter' ? 'Chapter' : 'Scene'} ${index + 1}: Draftable card`,
+      summary: `Draftable card ${index + 1} carries the next slice of the harbor outline.`,
+      beat_keys: ['opening_image'],
+      beat_labels: ['Opening Image'],
+      emotional_shift: 'Move from calm curiosity toward visible reassurance.',
+      target_word_count: savedSetup.target_word_count
+        ? Math.round(savedSetup.target_word_count / outlineCardCount)
+        : null,
+      target_runtime_minutes: savedSetup.target_runtime_minutes
+        ? Math.max(1, Math.round(savedSetup.target_runtime_minutes / outlineCardCount))
+        : null,
+      target_scene_count: savedSetup.approximate_scene_count
+        ? Math.max(1, Math.round(savedSetup.approximate_scene_count / outlineCardCount))
+        : null,
+      tone_direction:
+        'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
+      bedtime_guardrail:
+        'Keep tension brief, readable, and quickly repaired before the next turn.',
+      drafting_brief: `Draft card ${index + 1} as a calm segment from the saved outline.`,
+    })),
+    genre_label: 'Quest Fantasy',
+    tone_label: 'Hushed Wonder',
+    target_word_count: savedSetup.target_word_count,
+    target_runtime_minutes: savedSetup.target_runtime_minutes,
+    chapter_count: savedSetup.chapter_count,
+    approximate_scene_count: savedSetup.approximate_scene_count,
+    guidance_notes: savedSetup.guidance_notes,
+    accepted_at: savedAt,
+  }
 
   return {
     snapshot: {
@@ -748,6 +792,8 @@ function buildStorySetupSaveResponse(
       furthest_completed_stage: 'story_setup',
       updated_at: savedAt,
       selected_story_setup: savedSetup,
+      selected_story_outline: savedOutline,
+      story_outline_revisions: [savedOutline],
       progress: {
         total_stages: 10,
         completed_stages: 7,
@@ -5384,7 +5430,9 @@ describe('SessionWorkspacePage', () => {
         origin: 'workspace',
       },
     ])
-    expect(screen.getByText('Composition can use this plan')).toBeInTheDocument()
+    expect(
+      screen.getByText('Composition can use this outline'),
+    ).toBeInTheDocument()
   })
 
   it('applies accepted chat-driven story setup updates through the new save path', async () => {
