@@ -51,7 +51,11 @@ from app.services import (
     get_story_workflow_tool_schema_bundle,
 )
 from app.services.composition_jobs import GeneratedCompositionSegmentDraft
-from app.services.composition_streaming import split_text_for_streaming
+from app.services.composition_streaming import (
+    STREAMING_MAX_CHUNK_WORDS,
+    STREAMING_MIN_CHUNK_WORDS,
+    split_text_for_streaming,
+)
 from app.settings import load_settings
 from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
@@ -895,6 +899,28 @@ def test_split_text_for_streaming_preserves_exact_story_text() -> None:
     assert len(chunks) > 1
     assert "".join(chunks) == text
     assert all(chunk for chunk in chunks)
+
+
+def test_split_text_for_streaming_targets_readable_live_chunks() -> None:
+    text = (
+        "Mira stepped carefully between the lantern posts while Otis counted each ripple along "
+        "the dock. Every silver reflection carried a small reminder that the harbor was calm, "
+        "watched, and already leaning toward sleep. When the drifting bell paused near the last "
+        "mooring rope, Mira slowed down enough to hear the water answer in gentle, even taps. "
+        "Otis kept beside her so the next step felt guided instead of hurried, and the path home "
+        "stayed bright without ever turning loud."
+    )
+
+    chunks = split_text_for_streaming("", text)
+    non_terminal_counts = [len(chunk.split()) for chunk in chunks[:-1]]
+
+    assert len(chunks) >= 2
+    assert "".join(chunks) == text
+    assert non_terminal_counts
+    assert all(
+        STREAMING_MIN_CHUNK_WORDS <= word_count <= STREAMING_MAX_CHUNK_WORDS
+        for word_count in non_terminal_counts
+    )
 
 
 def test_composition_job_service_carries_forward_structured_segment_summaries(
