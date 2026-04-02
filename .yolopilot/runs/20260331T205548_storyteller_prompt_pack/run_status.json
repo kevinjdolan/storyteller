@@ -64,9 +64,10 @@
     "61-segmented-writing-engine.md",
     "62-composition-streaming-events.md",
     "63-composition-main-pane-ui.md",
-    "64-agent-summary-messages-during-composition.md"
+    "64-agent-summary-messages-during-composition.md",
+    "65-interrupt-and-redirect-composition.md"
   ],
-  "current_success_ref": "9f36be460b682bdedd84fd2e3bbc40ac05dd2cd5",
+  "current_success_ref": "bf2510eede41fdbd6fdeeff77306245cdec688e3",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
