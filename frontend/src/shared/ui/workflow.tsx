@@ -422,7 +422,7 @@ export function InlineHelp({
         <strong className="inline-help__title">{title}</strong>
       ) : null}
       {children != null ? (
-        <p className="inline-help__body">{children}</p>
+        <div className="inline-help__body">{children}</div>
       ) : null}
     </aside>
   )

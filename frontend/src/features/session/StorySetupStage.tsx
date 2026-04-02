@@ -13,6 +13,13 @@ import {
   StickySummaryLayout,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
+import {
+  buildPlanningAssumptionsText,
+  buildRuntimeHeuristicSummary,
+  buildStructureHeuristicSummary,
+  type HeuristicSuggestion,
+  type PlanningFieldId,
+} from './planningHeuristics.ts'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
 import { getWorkflowStageLabel } from './workflowStages.ts'
 
@@ -45,6 +52,12 @@ type StorySetupFormState = {
 type ParsedNumberField = {
   value: number | null
   error: string | null
+}
+
+type HeuristicSuggestionCalloutProps = {
+  disabled: boolean
+  onApply: (suggestion: HeuristicSuggestion) => void
+  suggestion: HeuristicSuggestion | null
 }
 
 const savedAtFormatter = new Intl.DateTimeFormat(undefined, {
@@ -222,64 +235,6 @@ function buildTargetSummaryParts(values: {
   ].filter((part): part is string => part != null)
 }
 
-function buildCorrelationHint(values: {
-  targetWordCount: number | null
-  targetRuntimeMinutes: number | null
-}) {
-  const { targetRuntimeMinutes, targetWordCount } = values
-
-  if (targetWordCount != null && targetRuntimeMinutes != null) {
-    const wordsPerMinute = Math.round(targetWordCount / targetRuntimeMinutes)
-
-    if (wordsPerMinute > 170) {
-      return `That pairing implies about ${wordsPerMinute} words per minute, which may feel brisk aloud.`
-    }
-
-    if (wordsPerMinute < 110) {
-      return `That pairing implies about ${wordsPerMinute} words per minute, which leaves a very roomy read-aloud pace.`
-    }
-
-    return `That pairing implies about ${wordsPerMinute} words per minute, which fits a calm read-aloud rhythm.`
-  }
-
-  if (targetRuntimeMinutes != null) {
-    return `At a calm read-aloud pace, ${targetRuntimeMinutes} minutes often lands near ${targetRuntimeMinutes * 140} words.`
-  }
-
-  if (targetWordCount != null) {
-    return `${targetWordCount} words often reads aloud in about ${Math.max(1, Math.round(targetWordCount / 140))} minutes.`
-  }
-
-  return 'Word count and runtime can stay approximate. The goal is a believable bedtime pace, not exact numeric compliance.'
-}
-
-function buildStructureHint(values: {
-  chapterCount: number | null
-  approximateSceneCount: number | null
-}) {
-  const { approximateSceneCount, chapterCount } = values
-
-  if (chapterCount != null && approximateSceneCount != null) {
-    const scenesPerChapter = approximateSceneCount / chapterCount
-    const rounded =
-      Number.isInteger(scenesPerChapter) || Math.abs(scenesPerChapter) >= 10
-        ? String(Math.round(scenesPerChapter))
-        : scenesPerChapter.toFixed(1)
-
-    return `That works out to about ${rounded} scene${rounded === '1' ? '' : 's'} per chapter.`
-  }
-
-  if (chapterCount != null) {
-    return 'Chapter count sets the broad pacing shape; chapter lengths can still breathe a little.'
-  }
-
-  if (approximateSceneCount != null) {
-    return 'Scene count can stay loose. Chapters can be grouped later once the writing finds its rhythm.'
-  }
-
-  return 'Chapters and scenes are planning containers. They help shape pacing without locking the story into equal slices.'
-}
-
 function buildRevisionHelp(
   selectedStage: SessionWorkspaceStageView,
   snapshot: SessionSnapshot,
@@ -310,6 +265,32 @@ function buildRevisionHelp(
   }
 }
 
+function HeuristicSuggestionCallout({
+  disabled,
+  onApply,
+  suggestion,
+}: HeuristicSuggestionCalloutProps) {
+  if (suggestion == null) {
+    return null
+  }
+
+  return (
+    <div className="story-setup-stage__suggestion">
+      <p>{suggestion.helpText}</p>
+      <Button
+        disabled={disabled}
+        onClick={() => {
+          onApply(suggestion)
+        }}
+        size="compact"
+        tone="secondary"
+      >
+        {suggestion.label}
+      </Button>
+    </div>
+  )
+}
+
 export function StorySetupStage({
   onPreviewStage,
   onSaveStorySetup,
@@ -321,10 +302,14 @@ export function StorySetupStage({
   )
   const [formError, setFormError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [lastEditedField, setLastEditedField] = useState<PlanningFieldId | null>(
+    null,
+  )
 
   useEffect(() => {
     setFormState(buildFormState(snapshot))
     setFormError(null)
+    setLastEditedField(null)
   }, [snapshot])
 
   const savedState = buildFormState(snapshot)
@@ -380,6 +365,26 @@ export function StorySetupStage({
   const downstreamLabels = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
   )
+  const runtimeHeuristic = buildRuntimeHeuristicSummary({
+    lastEditedField,
+    targetWordCount: targetWordCount.value,
+    targetRuntimeMinutes: targetRuntimeMinutes.value,
+  })
+  const structureHeuristic = buildStructureHeuristicSummary({
+    approximateSceneCount: approximateSceneCount.value,
+    chapterCount: chapterCount.value,
+    targetRuntimeMinutes: targetRuntimeMinutes.value,
+    targetWordCount: targetWordCount.value,
+  })
+
+  function applyHeuristicSuggestion(suggestion: HeuristicSuggestion) {
+    setFormState((current) => ({
+      ...current,
+      [suggestion.field]: String(suggestion.value),
+    }))
+    setLastEditedField(null)
+    setFormError(null)
+  }
 
   async function handleSave() {
     if (saveDisabled) {
@@ -569,17 +574,26 @@ export function StorySetupStage({
             </dl>
 
             <InlineHelp title="Word count and runtime" tone="info">
-              {buildCorrelationHint({
-                targetWordCount: targetWordCount.value,
-                targetRuntimeMinutes: targetRuntimeMinutes.value,
-              })}
+              <div className="story-setup-stage__heuristic">
+                <p>{runtimeHeuristic.body}</p>
+                <HeuristicSuggestionCallout
+                  disabled={isLocked}
+                  onApply={applyHeuristicSuggestion}
+                  suggestion={runtimeHeuristic.suggestion}
+                />
+              </div>
             </InlineHelp>
 
-            <InlineHelp title="Chapter and scene shape" tone="info">
-              {buildStructureHint({
-                chapterCount: chapterCount.value,
-                approximateSceneCount: approximateSceneCount.value,
-              })}
+            <InlineHelp title="Chapter sizing" tone="info">
+              <div className="story-setup-stage__heuristic">
+                <p>{structureHeuristic}</p>
+              </div>
+            </InlineHelp>
+
+            <InlineHelp title="Assumptions" tone="info">
+              <div className="story-setup-stage__heuristic">
+                <p>{buildPlanningAssumptionsText()}</p>
+              </div>
             </InlineHelp>
           </SummaryPanel>
         }
@@ -625,6 +639,8 @@ export function StorySetupStage({
                   ...current,
                   targetWordCount: value,
                 }))
+                setLastEditedField('targetWordCount')
+                setFormError(null)
               }}
               step={100}
               value={formState.targetWordCount}
@@ -643,6 +659,8 @@ export function StorySetupStage({
                   ...current,
                   targetRuntimeMinutes: value,
                 }))
+                setLastEditedField('targetRuntimeMinutes')
+                setFormError(null)
               }}
               step={1}
               value={formState.targetRuntimeMinutes}
@@ -661,6 +679,8 @@ export function StorySetupStage({
                   ...current,
                   chapterCount: value,
                 }))
+                setLastEditedField('chapterCount')
+                setFormError(null)
               }}
               step={1}
               value={formState.chapterCount}
@@ -679,6 +699,8 @@ export function StorySetupStage({
                   ...current,
                   approximateSceneCount: value,
                 }))
+                setLastEditedField('approximateSceneCount')
+                setFormError(null)
               }}
               step={1}
               value={formState.approximateSceneCount}
@@ -696,6 +718,8 @@ export function StorySetupStage({
                 ...current,
                 guidanceNotes: value,
               }))
+              setLastEditedField('guidanceNotes')
+              setFormError(null)
             }}
             rows={5}
             value={formState.guidanceNotes}
@@ -722,6 +746,7 @@ export function StorySetupStage({
               onClick={() => {
                 setFormState(savedState)
                 setFormError(null)
+                setLastEditedField(null)
               }}
               tone="ghost"
             >
