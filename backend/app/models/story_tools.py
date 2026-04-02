@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -151,7 +151,23 @@ class ComposeNextSegmentToolInput(StoryWorkflowToolModel):
 class RewriteSegmentsToolInput(StoryWorkflowToolModel):
     instructions: str = Field(min_length=1)
     rewrite_from_segment_index: int = Field(ge=1)
+    rewrite_to_segment_index: int | None = Field(default=None, ge=1)
+    downstream_regeneration_mode: (
+        Literal["none", "auto_regenerate", "require_confirmation"] | None
+    ) = None
     preserve_completed_segments: bool = True
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "RewriteSegmentsToolInput":
+        if (
+            self.rewrite_to_segment_index is not None
+            and self.rewrite_to_segment_index < self.rewrite_from_segment_index
+        ):
+            raise ValueError(
+                "rewrite_to_segment_index cannot be earlier than "
+                "rewrite_from_segment_index"
+            )
+        return self
 
 
 class EstimateAudioLengthToolInput(StoryWorkflowToolModel):

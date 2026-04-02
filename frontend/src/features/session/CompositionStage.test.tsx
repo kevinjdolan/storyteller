@@ -138,6 +138,64 @@ const sampleSnapshot: SessionSnapshot = {
     updated_at: '2026-04-02T05:16:00Z',
   },
   active_audio_job: null,
+  composition_segments: [
+    {
+      segment_index: 1,
+      outline_card_title: 'Opening harbor',
+      outline_card_summary: 'Bring Mira to the first lantern.',
+      current_version_id: 'segment-1-rev-1',
+      current_revision_number: 1,
+      is_stale: false,
+      versions: [
+        {
+          id: 'segment-1-rev-1',
+          composition_job_id: 'composition-job-0',
+          job_kind: 'draft',
+          segment_index: 1,
+          revision_number: 1,
+          status: 'completed',
+          acceptance_state: 'accepted',
+          is_current: true,
+          is_stale: false,
+          accepted_summary: 'Draft segment 1 settles the harbor.',
+          text_content: 'Draft segment 1 settles the harbor.',
+          word_count: 6,
+          created_at: '2026-04-02T05:05:00Z',
+          updated_at: '2026-04-02T05:06:00Z',
+          completed_at: '2026-04-02T05:06:00Z',
+        },
+      ],
+    },
+    {
+      segment_index: 2,
+      outline_card_title: 'Lantern cove',
+      outline_card_summary:
+        'Mira follows the drifting bell into the lantern cove.',
+      current_version_id: 'segment-2-rev-1',
+      current_revision_number: 1,
+      is_stale: false,
+      versions: [
+        {
+          id: 'segment-2-rev-1',
+          composition_job_id: 'composition-job-1',
+          job_kind: 'draft',
+          segment_index: 2,
+          revision_number: 1,
+          status: 'completed',
+          acceptance_state: 'accepted',
+          is_current: true,
+          is_stale: false,
+          accepted_summary:
+            'Segment 1 settled the harbor before the cove opened.',
+          text_content: 'Mira followed the bell toward the quieter cove.',
+          word_count: 9,
+          created_at: '2026-04-02T05:14:00Z',
+          updated_at: '2026-04-02T05:16:00Z',
+          completed_at: '2026-04-02T05:16:00Z',
+        },
+      ],
+    },
+  ],
   latest_story_asset: null,
   latest_audio_asset: null,
 }
@@ -159,6 +217,7 @@ const liveComposition: SessionCompositionStreamState = {
 
 describe('CompositionStage', () => {
   it('renders the current segment focus, archive, and routes control requests through the callbacks', async () => {
+    const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
     const onCancelComposition = vi.fn().mockResolvedValue(undefined)
     const onPauseComposition = vi.fn().mockResolvedValue(undefined)
     const onRedirectComposition = vi.fn().mockResolvedValue(undefined)
@@ -170,6 +229,7 @@ describe('CompositionStage', () => {
       <CompositionStage
         composition={liveComposition}
         connectionState="open"
+        onAcceptRewrite={onAcceptRewrite}
         onCancelComposition={onCancelComposition}
         onPauseComposition={onPauseComposition}
         onRedirectComposition={onRedirectComposition}
@@ -207,13 +267,15 @@ describe('CompositionStage', () => {
         value: 'Soften the midpoint and bring Pip into the scene earlier.',
       },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Request rewrite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Queue rewrite' }))
 
     await waitFor(() => {
       expect(onRedirectComposition).toHaveBeenCalledWith({
         instructions:
           'Soften the midpoint and bring Pip into the scene earlier.',
         rewriteFromSegmentIndex: 2,
+        rewriteToSegmentIndex: 2,
+        downstreamRegenerationMode: null,
       })
     })
 
@@ -223,6 +285,7 @@ describe('CompositionStage', () => {
     })
 
     expect(onCancelComposition).not.toHaveBeenCalled()
+    expect(onAcceptRewrite).not.toHaveBeenCalled()
     expect(onResumeComposition).not.toHaveBeenCalled()
     expect(onStartComposition).not.toHaveBeenCalled()
   })
@@ -251,6 +314,7 @@ describe('CompositionStage', () => {
       <CompositionStage
         composition={idleComposition}
         connectionState="idle"
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
         onCancelComposition={vi.fn().mockResolvedValue(undefined)}
         onPauseComposition={vi.fn().mockResolvedValue(undefined)}
         onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
@@ -275,6 +339,7 @@ describe('CompositionStage', () => {
       <CompositionStage
         composition={liveComposition}
         connectionState="open"
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
         onCancelComposition={vi.fn().mockResolvedValue(undefined)}
         onPauseComposition={vi.fn().mockResolvedValue(undefined)}
         onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
@@ -332,6 +397,78 @@ describe('CompositionStage', () => {
       ),
     ).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Pause writing' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Request rewrite' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Queue rewrite' })).toBeDisabled()
+  })
+
+  it('shows pending rewrite comparisons and lets the user accept them', async () => {
+    const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
+
+    renderWithAppProviders(
+      <CompositionStage
+        composition={liveComposition}
+        connectionState="open"
+        onAcceptRewrite={onAcceptRewrite}
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={{
+          ...sampleSnapshot,
+          latest_composition_job: {
+            ...sampleSnapshot.latest_composition_job!,
+            id: 'rewrite-job-7',
+            job_kind: 'rewrite',
+            status: 'completed',
+            pending_review: true,
+            start_segment_index: 1,
+            rewrite_to_segment_index: 2,
+            rewrite_candidate_segment_indexes: [1, 2],
+          },
+          active_composition_job: null,
+          composition_segments: [
+            {
+              ...sampleSnapshot.composition_segments![0],
+              pending_version_id: 'segment-1-rev-2',
+              pending_revision_number: 2,
+              versions: [
+                {
+                  id: 'segment-1-rev-2',
+                  composition_job_id: 'rewrite-job-7',
+                  job_kind: 'rewrite',
+                  segment_index: 1,
+                  revision_number: 2,
+                  status: 'completed',
+                  acceptance_state: 'pending',
+                  is_current: false,
+                  is_stale: false,
+                  accepted_summary: 'The harbor opens more gently.',
+                  text_content: 'Rewrite segment 1 opens the harbor more gently.',
+                  word_count: 8,
+                  created_at: '2026-04-02T05:20:00Z',
+                  updated_at: '2026-04-02T05:22:00Z',
+                  completed_at: '2026-04-02T05:22:00Z',
+                },
+                ...sampleSnapshot.composition_segments![0].versions,
+              ],
+            },
+            sampleSnapshot.composition_segments![1],
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getAllByText('Pending rewrite').length).toBeGreaterThan(0)
+    expect(screen.getByText('Current accepted')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Rewrite segment 1 opens the harbor more gently.').length,
+    ).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept rewrite' }))
+
+    await waitFor(() => {
+      expect(onAcceptRewrite).toHaveBeenCalledWith('rewrite-job-7')
+    })
   })
 })

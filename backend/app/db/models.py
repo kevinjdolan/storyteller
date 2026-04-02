@@ -54,6 +54,12 @@ class CompositionJobKind(str, Enum):
     REWRITE = "rewrite"
 
 
+class CompositionDownstreamMode(str, Enum):
+    NONE = "none"
+    AUTO_REGENERATE = "auto_regenerate"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+
+
 class CompositionInterruptionKind(str, Enum):
     PAUSE = "pause"
     REDIRECT = "redirect"
@@ -64,6 +70,12 @@ class CompositionInterruptionState(str, Enum):
     APPLYING = "applying"
     APPLIED = "applied"
     SUPERSEDED = "superseded"
+
+
+class CompositionSegmentAcceptanceState(str, Enum):
+    ACCEPTED = "accepted"
+    PENDING = "pending"
+    REJECTED = "rejected"
 
 
 class AssetKind(str, Enum):
@@ -87,6 +99,10 @@ WORKFLOW_STAGE_ENUM = build_enum(WorkflowStage, "workflow_stage")
 WORKFLOW_STAGE_STATE_ENUM = build_enum(WorkflowStageState, "workflow_stage_state")
 JOB_STATUS_ENUM = build_enum(JobStatus, "job_status")
 COMPOSITION_JOB_KIND_ENUM = build_enum(CompositionJobKind, "composition_job_kind")
+COMPOSITION_DOWNSTREAM_MODE_ENUM = build_enum(
+    CompositionDownstreamMode,
+    "composition_downstream_mode",
+)
 COMPOSITION_INTERRUPTION_KIND_ENUM = build_enum(
     CompositionInterruptionKind,
     "composition_interruption_kind",
@@ -94,6 +110,10 @@ COMPOSITION_INTERRUPTION_KIND_ENUM = build_enum(
 COMPOSITION_INTERRUPTION_STATE_ENUM = build_enum(
     CompositionInterruptionState,
     "composition_interruption_state",
+)
+COMPOSITION_SEGMENT_ACCEPTANCE_STATE_ENUM = build_enum(
+    CompositionSegmentAcceptanceState,
+    "composition_segment_acceptance_state",
 )
 ASSET_KIND_ENUM = build_enum(AssetKind, "asset_kind")
 ASSET_STATUS_ENUM = build_enum(AssetStatus, "asset_status")
@@ -842,6 +862,14 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=0,
     )
     current_segment_index: Mapped[int | None] = mapped_column(Integer)
+    rewrite_to_segment_index: Mapped[int | None] = mapped_column(Integer)
+    downstream_regeneration_mode: Mapped[CompositionDownstreamMode] = mapped_column(
+        COMPOSITION_DOWNSTREAM_MODE_ENUM,
+        nullable=False,
+        default=CompositionDownstreamMode.NONE,
+    )
+    stale_from_segment_index: Mapped[int | None] = mapped_column(Integer)
+    stale_to_segment_index: Mapped[int | None] = mapped_column(Integer)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     stop_reason: Mapped[str | None] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
@@ -856,6 +884,7 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     segments: Mapped[list["CompositionSegment"]] = relationship(
         back_populates="composition_job",
         cascade="all, delete-orphan",
+        foreign_keys="CompositionSegment.composition_job_id",
     )
     interruption_requests: Mapped[list["CompositionInterruptionRequest"]] = relationship(
         back_populates="composition_job",
@@ -961,6 +990,18 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         default=JobStatus.QUEUED,
     )
+    acceptance_state: Mapped[CompositionSegmentAcceptanceState] = mapped_column(
+        COMPOSITION_SEGMENT_ACCEPTANCE_STATE_ENUM,
+        nullable=False,
+        default=CompositionSegmentAcceptanceState.ACCEPTED,
+    )
+    is_stale: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stale_reason: Mapped[str | None] = mapped_column(Text)
+    stale_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stale_by_job_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("composition_jobs.id", ondelete="SET NULL"),
+    )
     planned_summary: Mapped[str | None] = mapped_column(Text)
     raw_generated_text: Mapped[str | None] = mapped_column(Text)
     accepted_text: Mapped[str | None] = mapped_column(Text)
@@ -971,7 +1012,10 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     session: Mapped["StorySession"] = relationship(back_populates="composition_segments")
-    composition_job: Mapped["CompositionJob"] = relationship(back_populates="segments")
+    composition_job: Mapped["CompositionJob"] = relationship(
+        back_populates="segments",
+        foreign_keys=[composition_job_id],
+    )
     superseded_by_segment: Mapped["CompositionSegment | None"] = relationship(
         remote_side="CompositionSegment.id"
     )
@@ -985,6 +1029,12 @@ class CompositionSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="uq_composition_segments_job_segment_revision",
         ),
         Index("ix_composition_segments_session_id_status", "session_id", "status"),
+        Index(
+            "ix_composition_segments_session_id_acceptance_state",
+            "session_id",
+            "acceptance_state",
+        ),
+        Index("ix_composition_segments_session_id_is_stale", "session_id", "is_stale"),
     )
 
 

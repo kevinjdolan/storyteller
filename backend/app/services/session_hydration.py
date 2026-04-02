@@ -29,6 +29,8 @@ from app.models import (
     CompositionInterruptionRequestView,
     CompositionJobView,
     CompositionProgressEventPayload,
+    CompositionSegmentVersionView,
+    CompositionSegmentView,
     ContinuityBibleData,
     ContinuityBibleView,
     ContinuityFact,
@@ -243,6 +245,7 @@ def build_session_snapshot(
         latest_audio_job=build_audio_job_view(aggregate.latest_audio_job),
         active_composition_job=build_composition_job_view(aggregate.active_composition_job),
         active_audio_job=build_audio_job_view(aggregate.active_audio_job),
+        composition_segments=build_composition_segment_views(aggregate.composition_segments),
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
         continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
@@ -924,6 +927,12 @@ def _read_character_refinement_metadata(row) -> dict[str, Any]:
 
     refinement_metadata = row.character_data.get("refinement")
     return dict(refinement_metadata) if isinstance(refinement_metadata, Mapping) else {}
+
+
+def _read_mapping(value: object) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    return {}
 
 
 def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: str) -> str | None:
@@ -1693,12 +1702,27 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         return None
 
     metadata = row.metadata_json if isinstance(row.metadata_json, Mapping) else {}
+    rewrite_candidate_segment_indexes = sorted(
+        {
+            segment.segment_index
+            for segment in getattr(row, "segments", [])
+            if (
+                row.status == JobStatus.COMPLETED
+                and getattr(segment, "status", None) == JobStatus.COMPLETED
+                and (
+                    getattr(segment, "acceptance_state", None) == "pending"
+                    or getattr(segment, "acceptance_state", None) == "PENDING"
+                )
+            )
+        }
+    )
     story_outline_id = _read_optional_mapping_text(metadata, "story_outline_id")
     story_outline_revision_number = _read_optional_mapping_int(
         metadata,
         "story_outline_revision_number",
     )
     total_segments = _read_optional_mapping_int(metadata, "total_segments")
+    start_segment_index = _read_optional_mapping_int(metadata, "start_segment_index")
     current_segment_id = _read_optional_mapping_text(metadata, "current_segment_id")
     accepted_story_so_far = _read_optional_mapping_text(metadata, "accepted_story_so_far")
     latest_partial_output = _read_optional_mapping_text(metadata, "latest_partial_output")
@@ -1713,6 +1737,7 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         status=row.status,
         progress_percent=row.progress_percent,
         total_segments=total_segments,
+        start_segment_index=start_segment_index,
         plan_revision_id=row.plan_revision_id,
         plan_revision_number=(
             row.plan_revision.revision_number
@@ -1733,6 +1758,12 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         story_outline_revision_number=story_outline_revision_number,
         current_segment_id=current_segment_id,
         current_segment_index=row.current_segment_index,
+        rewrite_to_segment_index=row.rewrite_to_segment_index,
+        downstream_regeneration_mode=row.downstream_regeneration_mode,
+        stale_from_segment_index=row.stale_from_segment_index,
+        stale_to_segment_index=row.stale_to_segment_index,
+        pending_review=bool(rewrite_candidate_segment_indexes),
+        rewrite_candidate_segment_indexes=rewrite_candidate_segment_indexes,
         accepted_story_so_far=accepted_story_so_far,
         latest_partial_output=latest_partial_output,
         latest_segment_summary=latest_segment_summary,
@@ -1744,6 +1775,82 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         completed_at=row.completed_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def build_composition_segment_views(rows) -> list[CompositionSegmentView]:
+    by_segment: dict[int, list] = {}
+    for row in rows:
+        by_segment.setdefault(row.segment_index, []).append(row)
+
+    segment_views: list[CompositionSegmentView] = []
+    for segment_index in sorted(by_segment):
+        segment_rows = sorted(
+            by_segment[segment_index],
+            key=lambda item: (item.revision_number, item.created_at),
+            reverse=True,
+        )
+        current_version = next(
+            (
+                row
+                for row in segment_rows
+                if row.acceptance_state == "accepted" and row.superseded_by_segment_id is None
+            ),
+            None,
+        )
+        pending_version = next(
+            (row for row in segment_rows if row.acceptance_state == "pending"),
+            None,
+        )
+        outline_title = None
+        outline_summary = None
+        source_row = pending_version or current_version or segment_rows[0]
+        payload = _read_mapping(getattr(source_row, "payload", None))
+        outline_title = _read_optional_mapping_text(payload, "outline_card_title")
+        outline_summary = _read_optional_mapping_text(payload, "outline_card_summary")
+        segment_views.append(
+            CompositionSegmentView(
+                segment_index=segment_index,
+                outline_card_title=outline_title,
+                outline_card_summary=outline_summary,
+                current_version_id=getattr(current_version, "id", None),
+                current_revision_number=getattr(current_version, "revision_number", None),
+                pending_version_id=getattr(pending_version, "id", None),
+                pending_revision_number=getattr(pending_version, "revision_number", None),
+                is_stale=bool(getattr(current_version, "is_stale", False)),
+                stale_reason=getattr(current_version, "stale_reason", None),
+                versions=[
+                    build_composition_segment_version_view(version)
+                    for version in segment_rows
+                ],
+            )
+        )
+
+    return segment_views
+
+
+def build_composition_segment_version_view(row) -> CompositionSegmentVersionView:
+    return CompositionSegmentVersionView(
+        id=row.id,
+        composition_job_id=row.composition_job_id,
+        job_kind=(
+            row.composition_job.job_kind
+            if getattr(row, "composition_job", None) is not None
+            else "draft"
+        ),
+        segment_index=row.segment_index,
+        revision_number=row.revision_number,
+        status=row.status,
+        acceptance_state=row.acceptance_state,
+        is_current=row.acceptance_state == "accepted" and row.superseded_by_segment_id is None,
+        is_stale=bool(getattr(row, "is_stale", False)),
+        planned_summary=row.planned_summary,
+        accepted_summary=row.accepted_summary,
+        text_content=row.accepted_text or row.text_content,
+        word_count=row.word_count,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        completed_at=row.completed_at,
     )
 
 

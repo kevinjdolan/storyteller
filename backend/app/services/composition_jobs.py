@@ -19,12 +19,14 @@ from app.db import (
     AssetKind,
     AssetStatus,
     BackgroundJob,
+    CompositionDownstreamMode,
     CompositionInterruptionKind,
     CompositionInterruptionRequest,
     CompositionInterruptionState,
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
+    CompositionSegmentAcceptanceState,
     JobStatus,
     SessionAsset,
 )
@@ -94,6 +96,15 @@ class CompositionJobStartResult:
 class CompositionInterruptionActionResult:
     request: CompositionInterruptionRequest
     response_job_id: str
+
+
+@dataclass(frozen=True)
+class CompositionRewritePlan:
+    requested_end_segment_index: int
+    effective_end_segment_index: int
+    downstream_mode: CompositionDownstreamMode
+    stale_from_segment_index: int | None
+    stale_to_segment_index: int | None
 
 
 @dataclass(frozen=True)
@@ -495,6 +506,8 @@ class CompositionJobService:
         *,
         job_kind: CompositionJobKind,
         start_segment_index: int,
+        end_segment_index: int | None = None,
+        downstream_regeneration_mode: CompositionDownstreamMode | None = None,
         instructions: str | None = None,
         actor: SessionEventActor | None = None,
         cancel_reason: str,
@@ -512,8 +525,16 @@ class CompositionJobService:
             raise CompositionJobStateError(
                 f"segment {start_segment_index} is outside the current outline",
             )
+        if end_segment_index is not None and end_segment_index < start_segment_index:
+            raise CompositionJobStateError(
+                "rewrite end segment cannot be earlier than the start segment",
+            )
 
         self.cancel_active_jobs(session_id, reason=cancel_reason, actor=actor)
+        self._reject_pending_segment_candidates(
+            session_id,
+            reason="Superseded by a newer composition request.",
+        )
 
         plan_revision = self._plan_revisions.ensure_current_revision(
             session_id,
@@ -539,7 +560,17 @@ class CompositionJobService:
             if prior_completed_segments
             else None
         )
-        total_segments = total_outline_segments - start_segment_index + 1
+        rewrite_plan = self._resolve_rewrite_plan(
+            session_id,
+            job_kind=job_kind,
+            start_segment_index=start_segment_index,
+            end_segment_index=end_segment_index,
+            requested_downstream_mode=downstream_regeneration_mode,
+            total_outline_segments=total_outline_segments,
+        )
+        total_segments = (
+            rewrite_plan.effective_end_segment_index - start_segment_index + 1
+        )
         beat_sheet_id = snapshot.selected_beat_sheet.id
         story_setup_id = snapshot.selected_story_setup.id
         job = CompositionJob(
@@ -551,14 +582,27 @@ class CompositionJobService:
             status=JobStatus.QUEUED,
             progress_percent=0,
             current_segment_index=start_segment_index,
+            rewrite_to_segment_index=rewrite_plan.effective_end_segment_index,
+            downstream_regeneration_mode=rewrite_plan.downstream_mode,
+            stale_from_segment_index=rewrite_plan.stale_from_segment_index,
+            stale_to_segment_index=rewrite_plan.stale_to_segment_index,
             metadata_json={
                 "orchestration_version": "composition_job.v1",
                 "start_segment_index": start_segment_index,
+                "requested_end_segment_index": rewrite_plan.requested_end_segment_index,
                 "total_segments": total_segments,
                 "accepted_story_so_far": prior_story_text,
                 "latest_segment_summary": prior_segment_summary,
                 "latest_partial_output": None,
                 "request_instructions": instructions,
+                "requires_acceptance": (
+                    job_kind == CompositionJobKind.REWRITE
+                    and self._has_current_story_segments(
+                        session_id,
+                        from_segment_index=start_segment_index,
+                        to_segment_index=rewrite_plan.effective_end_segment_index,
+                    )
+                ),
             },
         )
         self._session.add(job)
@@ -566,7 +610,7 @@ class CompositionJobService:
 
         first_segment: CompositionSegment | None = None
         current_segment_number = start_segment_index
-        while current_segment_number <= total_outline_segments:
+        while current_segment_number <= rewrite_plan.effective_end_segment_index:
             assembled_prompt = self._prompt_assembly.assemble_prompt_package(
                 CompositionPromptAssemblyInput(
                     session_id=session_id,
@@ -584,6 +628,9 @@ class CompositionJobService:
             segment_payload = {
                 "job_kind": job_kind.value,
                 "request_instructions": instructions,
+                "requested_end_segment_index": rewrite_plan.requested_end_segment_index,
+                "effective_end_segment_index": rewrite_plan.effective_end_segment_index,
+                "downstream_regeneration_mode": rewrite_plan.downstream_mode.value,
                 **assembled_prompt.build_storage_payload(),
             }
             segment = CompositionSegment(
@@ -592,6 +639,11 @@ class CompositionJobService:
                 segment_index=current_segment_number,
                 revision_number=self._next_segment_revision(session_id, current_segment_number),
                 status=JobStatus.QUEUED,
+                acceptance_state=(
+                    CompositionSegmentAcceptanceState.PENDING
+                    if _job_requires_acceptance(job)
+                    else CompositionSegmentAcceptanceState.ACCEPTED
+                ),
                 planned_summary=assembled_prompt.dynamic_context.segment_goal_summary,
                 payload=segment_payload,
             )
@@ -635,18 +687,7 @@ class CompositionJobService:
         if active_job is not None and active_job.current_segment_index is not None:
             return active_job.current_segment_index
 
-        stmt = (
-            select(CompositionSegment)
-            .where(
-                CompositionSegment.session_id == session_id,
-                CompositionSegment.status == JobStatus.COMPLETED,
-            )
-            .order_by(
-                CompositionSegment.segment_index.desc(), CompositionSegment.revision_number.desc()
-            )
-            .limit(1)
-        )
-        latest_completed = self._session.execute(stmt).scalar_one_or_none()
+        latest_completed = self._latest_current_story_segment(session_id)
         if latest_completed is None:
             return 1
 
@@ -707,6 +748,8 @@ class CompositionJobService:
         *,
         instructions: str,
         rewrite_from_segment_index: int | None = None,
+        rewrite_to_segment_index: int | None = None,
+        downstream_regeneration_mode: CompositionDownstreamMode | None = None,
         actor: SessionEventActor | None = None,
         origin: str = "workspace",
     ) -> CompositionInterruptionActionResult:
@@ -721,6 +764,8 @@ class CompositionJobService:
             actor=actor,
             instructions=instructions,
             rewrite_from_segment_index=rewrite_from_segment_index,
+            rewrite_to_segment_index=rewrite_to_segment_index,
+            downstream_regeneration_mode=downstream_regeneration_mode,
         )
         current_segment = self._current_segment(job)
         response_job_id = job.id
@@ -876,6 +921,8 @@ class CompositionJobService:
         actor: SessionEventActor | None,
         instructions: str | None = None,
         rewrite_from_segment_index: int | None = None,
+        rewrite_to_segment_index: int | None = None,
+        downstream_regeneration_mode: CompositionDownstreamMode | None = None,
     ) -> CompositionInterruptionRequest:
         existing_request = self._active_interruption_request(job)
         if (
@@ -924,6 +971,12 @@ class CompositionJobService:
             metadata_json={
                 "current_segment_summary": (
                     current_segment.planned_summary if current_segment is not None else None
+                ),
+                "rewrite_to_segment_index": rewrite_to_segment_index,
+                "downstream_regeneration_mode": (
+                    downstream_regeneration_mode.value
+                    if downstream_regeneration_mode is not None
+                    else None
                 ),
                 "latest_partial_output": _read_optional_prompt_text(
                     _read_metadata(job),
@@ -1051,6 +1104,14 @@ class CompositionJobService:
             job.session_id,
             job_kind=CompositionJobKind.REWRITE,
             start_segment_index=rewrite_from_segment_index,
+            end_segment_index=_read_optional_mapping_int(
+                _read_mapping(request.metadata_json),
+                "rewrite_to_segment_index",
+            ),
+            downstream_regeneration_mode=_read_downstream_mode(
+                _read_mapping(request.metadata_json),
+                "downstream_regeneration_mode",
+            ),
             instructions=request.instructions,
             actor=actor,
             cancel_reason="Cancelled because a newer redirect replaced this composition pass.",
@@ -1227,6 +1288,7 @@ class CompositionJobService:
         completed_segments = self._latest_completed_segment_texts(
             job.session_id,
             before_segment_index=current_segment.segment_index,
+            prefer_job_id=job.id,
         )
         job.metadata_json = {
             **_read_metadata(job),
@@ -1394,6 +1456,15 @@ class CompositionJobService:
         current_segment.text_content = draft.accepted_text
         current_segment.word_count = _count_words(draft.accepted_text)
         current_segment.status = JobStatus.COMPLETED
+        current_segment.acceptance_state = (
+            CompositionSegmentAcceptanceState.PENDING
+            if _job_requires_acceptance(job)
+            else CompositionSegmentAcceptanceState.ACCEPTED
+        )
+        current_segment.is_stale = False
+        current_segment.stale_reason = None
+        current_segment.stale_at = None
+        current_segment.stale_by_job_id = None
         current_segment.completed_at = utc_now()
         self._record_composition_summary_checkpoint(
             job=job,
@@ -1409,12 +1480,14 @@ class CompositionJobService:
             draft.accepted_text,
             content_type="text/markdown; charset=utf-8",
         )
-        self._replace_prior_segment_revision(current_segment)
+        if not _job_requires_acceptance(job):
+            self._replace_prior_segment_revision(current_segment)
         self._save_segment_asset(
             job=job,
             segment=current_segment,
             storage_location=segment_storage_location,
             draft=draft,
+            supersede_prior_assets=not _job_requires_acceptance(job),
         )
 
         active_request = self._active_interruption_request(job)
@@ -1494,6 +1567,49 @@ class CompositionJobService:
             )
 
         if next_segment is None:
+            if _job_requires_acceptance(job):
+                job.status = JobStatus.COMPLETED
+                job.progress_percent = 100
+                job.completed_at = utc_now()
+                job.metadata_json = {
+                    **_read_metadata(job),
+                    "accepted_story_so_far": build_accepted_story_so_far(
+                        self._latest_completed_segment_texts(
+                            job.session_id,
+                            prefer_job_id=job.id,
+                        )
+                    ),
+                    "latest_segment_summary": current_segment.accepted_summary,
+                    "latest_partial_output": draft.accepted_text,
+                    "current_segment_id": current_segment.id,
+                }
+                self._events.record_composition_progress(
+                    job.session_id,
+                    job_id=job.id,
+                    status=JobStatus.COMPLETED,
+                    progress_percent=100,
+                    current_segment_index=current_segment.segment_index,
+                    total_segments=total_segments,
+                    segment_id=current_segment.id,
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+                self._sessions.update_stage_state(
+                    job.session_id,
+                    stage=WorkflowStage.COMPOSITION,
+                    status=WorkflowStageState.IN_PROGRESS,
+                    detail=(
+                        "Rewrite candidate ready for review. Compare the new text "
+                        "before accepting it into the manuscript."
+                    ),
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": job.id,
+                    "status": job.status.value,
+                    "action": "pending_review",
+                }
+
             story_text = self._compile_story_text(job.session_id)
             story_location = _story_text_location(
                 self._storage(), session_id=job.session_id, job_id=job.id
@@ -1556,6 +1672,7 @@ class CompositionJobService:
                 detail=_COMPLETION_DETAIL,
                 actor=actor or DEFAULT_SYSTEM_ACTOR,
             )
+            self._session.commit()
             return {
                 "composition_job_id": job.id,
                 "status": job.status.value,
@@ -1592,6 +1709,7 @@ class CompositionJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         self._enqueue_runtime_job(job.session_id, job.id)
+        self._session.commit()
         return {
             "composition_job_id": job.id,
             "status": job.status.value,
@@ -1748,6 +1866,7 @@ class CompositionJobService:
         carryover = self._build_context_carryover(
             session_id=job.session_id,
             before_segment_index=segment.segment_index,
+            prefer_job_id=job.id,
         )
         payload = {
             **existing_payload,
@@ -1767,10 +1886,12 @@ class CompositionJobService:
         *,
         session_id: str,
         before_segment_index: int,
+        prefer_job_id: str | None = None,
     ) -> CompositionSegmentCarryoverContext:
         prior_segments = self._latest_completed_segments(
             session_id,
             before_segment_index=before_segment_index,
+            prefer_job_id=prefer_job_id,
         )
         carryover_items: list[CompositionSegmentCarryoverItem] = []
         for row in prior_segments:
@@ -1801,10 +1922,12 @@ class CompositionJobService:
         session_id: str,
         *,
         before_segment_index: int | None = None,
+        prefer_job_id: str | None = None,
     ) -> list[str]:
         rows = self._latest_completed_segments(
             session_id,
             before_segment_index=before_segment_index,
+            prefer_job_id=prefer_job_id,
         )
         return [
             row.accepted_text or row.text_content
@@ -1817,6 +1940,7 @@ class CompositionJobService:
         session_id: str,
         *,
         before_segment_index: int | None = None,
+        prefer_job_id: str | None = None,
     ) -> list[CompositionSegment]:
         stmt: Select[tuple[CompositionSegment]] = (
             select(CompositionSegment)
@@ -1830,24 +1954,348 @@ class CompositionJobService:
             stmt = stmt.where(CompositionSegment.segment_index < before_segment_index)
         rows = list(self._session.execute(stmt).scalars().all())
         latest_by_segment: dict[int, CompositionSegment] = {}
+        accepted_current_by_segment: dict[int, CompositionSegment] = {}
         for row in rows:
-            if row.segment_index in latest_by_segment:
-                continue
             if row.status != JobStatus.COMPLETED and row.completed_at is None:
                 continue
             if row.accepted_text is None and row.text_content is None:
                 continue
-            latest_by_segment[row.segment_index] = row
+            if (
+                prefer_job_id is not None
+                and row.composition_job_id == prefer_job_id
+                and row.acceptance_state
+                in {
+                    CompositionSegmentAcceptanceState.PENDING,
+                    CompositionSegmentAcceptanceState.ACCEPTED,
+                }
+                and row.segment_index not in latest_by_segment
+            ):
+                latest_by_segment[row.segment_index] = row
+                continue
+            if (
+                row.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED
+                and row.superseded_by_segment_id is None
+                and row.segment_index not in accepted_current_by_segment
+            ):
+                accepted_current_by_segment[row.segment_index] = row
+
+        for segment_index, row in accepted_current_by_segment.items():
+            latest_by_segment.setdefault(segment_index, row)
         return [latest_by_segment[index] for index in sorted(latest_by_segment)]
 
     def _compile_story_text(self, session_id: str) -> str:
-        completed_segments = self._latest_completed_segment_texts(session_id)
+        completed_segments = self._latest_current_story_segment_texts(session_id)
         compiled_text = build_accepted_story_so_far(completed_segments)
         if compiled_text is None:
             raise CompositionJobStateError(
                 "cannot finalize a composition job without completed text"
             )
         return compiled_text
+
+    def _latest_current_story_segment_texts(self, session_id: str) -> list[str]:
+        return [
+            row.accepted_text or row.text_content
+            for row in self._latest_current_story_segments(session_id)
+            if row.accepted_text or row.text_content
+        ]
+
+    def _latest_current_story_segments(self, session_id: str) -> list[CompositionSegment]:
+        stmt: Select[tuple[CompositionSegment]] = (
+            select(CompositionSegment)
+            .where(CompositionSegment.session_id == session_id)
+            .order_by(
+                CompositionSegment.segment_index.asc(),
+                CompositionSegment.revision_number.desc(),
+            )
+        )
+        rows = list(self._session.execute(stmt).scalars().all())
+        current_by_segment: dict[int, CompositionSegment] = {}
+        for row in rows:
+            if row.segment_index in current_by_segment:
+                continue
+            if row.status != JobStatus.COMPLETED and row.completed_at is None:
+                continue
+            if row.accepted_text is None and row.text_content is None:
+                continue
+            if row.acceptance_state != CompositionSegmentAcceptanceState.ACCEPTED:
+                continue
+            if row.superseded_by_segment_id is not None:
+                continue
+            current_by_segment[row.segment_index] = row
+        return [current_by_segment[index] for index in sorted(current_by_segment)]
+
+    def _latest_current_story_segment(self, session_id: str) -> CompositionSegment | None:
+        segments = self._latest_current_story_segments(session_id)
+        return segments[-1] if segments else None
+
+    def _has_current_story_segments(
+        self,
+        session_id: str,
+        *,
+        from_segment_index: int,
+        to_segment_index: int,
+    ) -> bool:
+        stmt = (
+            select(CompositionSegment.id)
+            .where(
+                CompositionSegment.session_id == session_id,
+                CompositionSegment.segment_index >= from_segment_index,
+                CompositionSegment.segment_index <= to_segment_index,
+                CompositionSegment.acceptance_state
+                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.superseded_by_segment_id.is_(None),
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none() is not None
+
+    def _resolve_rewrite_plan(
+        self,
+        session_id: str,
+        *,
+        job_kind: CompositionJobKind,
+        start_segment_index: int,
+        end_segment_index: int | None,
+        requested_downstream_mode: CompositionDownstreamMode | None,
+        total_outline_segments: int,
+    ) -> CompositionRewritePlan:
+        if job_kind != CompositionJobKind.REWRITE:
+            requested_end_segment_index = end_segment_index or total_outline_segments
+            return CompositionRewritePlan(
+                requested_end_segment_index=requested_end_segment_index,
+                effective_end_segment_index=requested_end_segment_index,
+                downstream_mode=CompositionDownstreamMode.NONE,
+                stale_from_segment_index=None,
+                stale_to_segment_index=None,
+            )
+
+        latest_current_segment = self._latest_current_story_segment(session_id)
+        latest_current_segment_index = (
+            latest_current_segment.segment_index if latest_current_segment is not None else None
+        )
+        requested_end_segment_index = end_segment_index or start_segment_index
+        requested_end_segment_index = min(requested_end_segment_index, total_outline_segments)
+        if requested_end_segment_index < start_segment_index:
+            raise CompositionJobStateError(
+                "rewrite end segment cannot be earlier than the start segment",
+            )
+
+        if (
+            latest_current_segment_index is None
+            or latest_current_segment_index <= requested_end_segment_index
+        ):
+            return CompositionRewritePlan(
+                requested_end_segment_index=requested_end_segment_index,
+                effective_end_segment_index=requested_end_segment_index,
+                downstream_mode=CompositionDownstreamMode.NONE,
+                stale_from_segment_index=None,
+                stale_to_segment_index=None,
+            )
+
+        downstream_segment_count = latest_current_segment_index - requested_end_segment_index
+        downstream_mode = requested_downstream_mode
+        if downstream_mode in {None, CompositionDownstreamMode.NONE}:
+            downstream_mode = (
+                CompositionDownstreamMode.AUTO_REGENERATE
+                if downstream_segment_count <= 1
+                else CompositionDownstreamMode.REQUIRE_CONFIRMATION
+            )
+
+        if downstream_mode == CompositionDownstreamMode.AUTO_REGENERATE:
+            return CompositionRewritePlan(
+                requested_end_segment_index=requested_end_segment_index,
+                effective_end_segment_index=latest_current_segment_index,
+                downstream_mode=downstream_mode,
+                stale_from_segment_index=None,
+                stale_to_segment_index=None,
+            )
+
+        return CompositionRewritePlan(
+            requested_end_segment_index=requested_end_segment_index,
+            effective_end_segment_index=requested_end_segment_index,
+            downstream_mode=CompositionDownstreamMode.REQUIRE_CONFIRMATION,
+            stale_from_segment_index=requested_end_segment_index + 1,
+            stale_to_segment_index=latest_current_segment_index,
+        )
+
+    def _reject_pending_segment_candidates(
+        self,
+        session_id: str,
+        *,
+        reason: str,
+    ) -> None:
+        del reason
+        stmt = select(CompositionSegment).where(
+            CompositionSegment.session_id == session_id,
+            CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.PENDING,
+        )
+        for row in self._session.execute(stmt).scalars().all():
+            row.acceptance_state = CompositionSegmentAcceptanceState.REJECTED
+            row.is_stale = False
+            row.stale_reason = None
+            row.stale_at = None
+            row.stale_by_job_id = None
+
+    def accept_rewrite_job(
+        self,
+        session_id: str,
+        composition_job_id: str,
+        *,
+        actor: SessionEventActor | None = None,
+    ) -> CompositionJob:
+        job = self._require_job(session_id, composition_job_id)
+        if job.job_kind != CompositionJobKind.REWRITE:
+            raise CompositionJobStateError("only rewrite jobs can be accepted")
+        if job.status != JobStatus.COMPLETED:
+            raise CompositionJobStateError("rewrite jobs can only be accepted after completion")
+
+        candidate_segments = [
+            segment
+            for segment in job.segments
+            if segment.acceptance_state == CompositionSegmentAcceptanceState.PENDING
+            and segment.status == JobStatus.COMPLETED
+        ]
+        if not candidate_segments:
+            raise CompositionJobStateError("the rewrite job does not have any pending segments")
+
+        ordered_candidate_segments = sorted(
+            candidate_segments,
+            key=lambda item: item.segment_index,
+        )
+        for segment in ordered_candidate_segments:
+            prior_segment = self._current_story_segment_for_index(
+                session_id,
+                segment.segment_index,
+            )
+            if prior_segment is not None and prior_segment.id != segment.id:
+                prior_segment.superseded_by_segment_id = segment.id
+            segment.acceptance_state = CompositionSegmentAcceptanceState.ACCEPTED
+            segment.is_stale = False
+            segment.stale_reason = None
+            segment.stale_at = None
+            segment.stale_by_job_id = None
+            self._supersede_segment_assets(
+                session_id,
+                segment.segment_index,
+                keep_segment_id=segment.id,
+            )
+
+        self._clear_stale_segment_flags(session_id)
+        if (
+            job.downstream_regeneration_mode == CompositionDownstreamMode.REQUIRE_CONFIRMATION
+            and job.stale_from_segment_index is not None
+            and job.stale_to_segment_index is not None
+        ):
+            self._mark_downstream_segments_stale(job)
+
+        story_text = self._compile_story_text(session_id)
+        story_location = _story_text_location(
+            self._storage(),
+            session_id=session_id,
+            job_id=job.id,
+        )
+        story_metadata = self._storage().upload_text(
+            story_location,
+            story_text,
+            content_type="text/markdown; charset=utf-8",
+        )
+        self._supersede_story_assets(session_id)
+        self._assets.save_asset_record(
+            session_id=session_id,
+            asset_kind=AssetKind.STORY_TEXT,
+            storage_bucket=story_location.bucket,
+            object_path=story_location.key,
+            mime_type="text/markdown",
+            status=AssetStatus.READY,
+            composition_job_id=job.id,
+            segment_index=ordered_candidate_segments[-1].segment_index,
+            byte_size=story_metadata.size_bytes,
+            metadata_json={
+                "orchestration_version": "composition_job.v1",
+                "rewrite_accepted": True,
+                "downstream_regeneration_mode": job.downstream_regeneration_mode.value,
+            },
+        )
+        job.metadata_json = {
+            **_read_metadata(job),
+            "accepted_story_so_far": story_text,
+            "latest_partial_output": story_text,
+            "rewrite_accepted": True,
+        }
+        self._session.flush()
+
+        stage_status = (
+            WorkflowStageState.NEEDS_REGENERATION
+            if job.downstream_regeneration_mode == CompositionDownstreamMode.REQUIRE_CONFIRMATION
+            and job.stale_from_segment_index is not None
+            else WorkflowStageState.COMPLETED
+        )
+        stage_detail = (
+            "Accepted the rewrite and marked downstream segments for regeneration."
+            if stage_status == WorkflowStageState.NEEDS_REGENERATION
+            else "Accepted the rewrite and refreshed the manuscript."
+        )
+        self._sessions.update_stage_state(
+            session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=stage_status,
+            detail=stage_detail,
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        refreshed_job = self._session.get(CompositionJob, job.id)
+        assert refreshed_job is not None
+        return refreshed_job
+
+    def _current_story_segment_for_index(
+        self,
+        session_id: str,
+        segment_index: int,
+    ) -> CompositionSegment | None:
+        stmt: Select[tuple[CompositionSegment]] = (
+            select(CompositionSegment)
+            .where(
+                CompositionSegment.session_id == session_id,
+                CompositionSegment.segment_index == segment_index,
+                CompositionSegment.acceptance_state
+                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.superseded_by_segment_id.is_(None),
+            )
+            .order_by(CompositionSegment.revision_number.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _clear_stale_segment_flags(self, session_id: str) -> None:
+        stmt = select(CompositionSegment).where(
+            CompositionSegment.session_id == session_id,
+            CompositionSegment.is_stale.is_(True),
+            CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
+            CompositionSegment.superseded_by_segment_id.is_(None),
+        )
+        for row in self._session.execute(stmt).scalars().all():
+            row.is_stale = False
+            row.stale_reason = None
+            row.stale_at = None
+            row.stale_by_job_id = None
+
+    def _mark_downstream_segments_stale(self, job: CompositionJob) -> None:
+        stale_reason = (
+            f"Rewrite accepted through segment {job.rewrite_to_segment_index}. "
+            "Downstream text needs regeneration to match the new continuity."
+        )
+        stmt = select(CompositionSegment).where(
+            CompositionSegment.session_id == job.session_id,
+            CompositionSegment.segment_index >= job.stale_from_segment_index,
+            CompositionSegment.segment_index <= job.stale_to_segment_index,
+            CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
+            CompositionSegment.superseded_by_segment_id.is_(None),
+        )
+        marked_at = utc_now()
+        for row in self._session.execute(stmt).scalars().all():
+            row.is_stale = True
+            row.stale_reason = stale_reason
+            row.stale_at = marked_at
+            row.stale_by_job_id = job.id
 
     def _replace_prior_segment_revision(self, segment: CompositionSegment) -> None:
         stmt = select(CompositionSegment).where(
@@ -1866,9 +2314,15 @@ class CompositionJobService:
         segment: CompositionSegment,
         storage_location,
         draft: GeneratedCompositionSegmentDraft,
+        supersede_prior_assets: bool,
     ) -> None:
         object_metadata = self._storage().fetch_object_metadata(storage_location)
-        self._supersede_segment_assets(job.session_id, segment.segment_index)
+        if supersede_prior_assets:
+            self._supersede_segment_assets(
+                job.session_id,
+                segment.segment_index,
+                keep_segment_id=segment.id,
+            )
         self._assets.save_asset_record(
             session_id=job.session_id,
             asset_kind=AssetKind.COMPOSITION_SEGMENT,
@@ -1884,6 +2338,7 @@ class CompositionJobService:
                 "orchestration_version": "composition_job.v1",
                 "generation_source": draft.source,
                 "carryover_summary": segment.accepted_summary,
+                "acceptance_state": segment.acceptance_state.value,
                 "evaluation": [
                     {
                         "name": criterion.name,
@@ -1924,7 +2379,13 @@ class CompositionJobService:
             error_message=_extract_model_usage_error_message(draft.raw_response),
         )
 
-    def _supersede_segment_assets(self, session_id: str, segment_index: int) -> None:
+    def _supersede_segment_assets(
+        self,
+        session_id: str,
+        segment_index: int,
+        *,
+        keep_segment_id: str | None = None,
+    ) -> None:
         stmt = select(SessionAsset).where(
             SessionAsset.session_id == session_id,
             SessionAsset.asset_kind == AssetKind.COMPOSITION_SEGMENT,
@@ -1932,6 +2393,8 @@ class CompositionJobService:
             SessionAsset.status == AssetStatus.READY,
         )
         for asset in self._session.execute(stmt).scalars().all():
+            if keep_segment_id is not None and asset.composition_segment_id == keep_segment_id:
+                continue
             asset.status = AssetStatus.SUPERSEDED
             asset.superseded_at = utc_now()
 
@@ -2318,6 +2781,19 @@ def _read_start_segment_index(job: CompositionJob) -> int:
     )
 
 
+def _read_requested_end_segment_index(job: CompositionJob) -> int | None:
+    metadata = _read_metadata(job)
+    requested_end_segment_index = metadata.get("requested_end_segment_index")
+    if isinstance(requested_end_segment_index, int) and requested_end_segment_index >= 1:
+        return requested_end_segment_index
+    return None
+
+
+def _job_requires_acceptance(job: CompositionJob) -> bool:
+    metadata = _read_metadata(job)
+    return bool(metadata.get("requires_acceptance"))
+
+
 def _resolve_generation_protagonist_name(prompt_payload: Mapping[str, Any]) -> str:
     dynamic_context = _read_mapping(prompt_payload, "dynamic_context")
     selected_character_sheet = _read_mapping(dynamic_context, "selected_character_sheet")
@@ -2436,6 +2912,31 @@ def _read_optional_prompt_text(value: object, key: str) -> str | None:
         return None
     normalized = str(candidate).strip()
     return normalized or None
+
+
+def _read_optional_mapping_int(value: object, key: str) -> int | None:
+    if not isinstance(value, Mapping):
+        return None
+    candidate = value.get(key)
+    return candidate if isinstance(candidate, int) else None
+
+
+def _read_downstream_mode(
+    value: object,
+    key: str,
+) -> CompositionDownstreamMode | None:
+    if not isinstance(value, Mapping):
+        return None
+    candidate = value.get(key)
+    if candidate is None:
+        return None
+    normalized = str(candidate).strip()
+    if not normalized:
+        return None
+    try:
+        return CompositionDownstreamMode(normalized)
+    except ValueError:
+        return None
 
 
 def _resolve_model_usage_outcome(

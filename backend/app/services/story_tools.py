@@ -11,9 +11,11 @@ from sqlalchemy.orm import Session
 from app.db import (
     AudioJob,
     CharacterSheet,
+    CompositionDownstreamMode,
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
+    CompositionSegmentAcceptanceState,
     JobStatus,
     Pitch,
     StoryOutline,
@@ -1225,6 +1227,12 @@ class StoryWorkflowToolService:
             session_id,
             job_kind=CompositionJobKind.REWRITE,
             start_segment_index=request.rewrite_from_segment_index,
+            end_segment_index=request.rewrite_to_segment_index,
+            downstream_regeneration_mode=(
+                CompositionDownstreamMode(request.downstream_regeneration_mode)
+                if request.downstream_regeneration_mode is not None
+                else None
+            ),
             instructions=request.instructions,
             actor=actor,
             cancel_reason="Cancelled because a rewrite pass started.",
@@ -1235,8 +1243,15 @@ class StoryWorkflowToolService:
             detail=_join_detail_parts(
                 [
                     (
-                        f"Queued a rewrite from segment {request.rewrite_from_segment_index} "
-                        f"of {start_result.total_segments}."
+                        f"Queued a rewrite from segment {request.rewrite_from_segment_index}"
+                        + (
+                            f" through {request.rewrite_to_segment_index}"
+                            if request.rewrite_to_segment_index is not None
+                            else ""
+                        )
+                        + f" across {start_result.total_segments} queued segment"
+                        + ("" if start_result.total_segments == 1 else "s")
+                        + "."
                     ),
                     _read_optional_prompt_text(
                         start_result.job.metadata_json,
@@ -1502,6 +1517,10 @@ class StoryWorkflowToolService:
             if row.segment_index in latest_by_segment:
                 continue
             if row.status != JobStatus.COMPLETED and row.completed_at is None:
+                continue
+            if row.acceptance_state != CompositionSegmentAcceptanceState.ACCEPTED:
+                continue
+            if row.superseded_by_segment_id is not None:
                 continue
             if row.accepted_text is None and row.text_content is None and row.word_count is None:
                 continue

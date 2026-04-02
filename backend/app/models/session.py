@@ -271,12 +271,45 @@ class PlanRevisionView(BaseModel):
     updated_at: datetime
 
 
+class CompositionSegmentVersionView(BaseModel):
+    id: str
+    composition_job_id: str
+    job_kind: str
+    segment_index: int
+    revision_number: int
+    status: str
+    acceptance_state: str
+    is_current: bool = False
+    is_stale: bool = False
+    planned_summary: str | None = None
+    accepted_summary: str | None = None
+    text_content: str | None = None
+    word_count: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+
+
+class CompositionSegmentView(BaseModel):
+    segment_index: int
+    outline_card_title: str | None = None
+    outline_card_summary: str | None = None
+    current_version_id: str | None = None
+    current_revision_number: int | None = None
+    pending_version_id: str | None = None
+    pending_revision_number: int | None = None
+    is_stale: bool = False
+    stale_reason: str | None = None
+    versions: list[CompositionSegmentVersionView] = Field(default_factory=list)
+
+
 class CompositionJobView(BaseModel):
     id: str
     job_kind: str
     status: str
     progress_percent: float
     total_segments: int | None = None
+    start_segment_index: int | None = None
     plan_revision_id: str | None = None
     plan_revision_number: int | None = None
     beat_sheet_id: str | None = None
@@ -287,6 +320,12 @@ class CompositionJobView(BaseModel):
     story_outline_revision_number: int | None = None
     current_segment_id: str | None = None
     current_segment_index: int | None = None
+    rewrite_to_segment_index: int | None = None
+    downstream_regeneration_mode: str = "none"
+    stale_from_segment_index: int | None = None
+    stale_to_segment_index: int | None = None
+    pending_review: bool = False
+    rewrite_candidate_segment_indexes: list[int] = Field(default_factory=list)
     accepted_story_so_far: str | None = None
     latest_partial_output: str | None = None
     latest_segment_summary: str | None = None
@@ -524,18 +563,52 @@ class StartSessionCompositionRequest(BaseModel):
     mode: CompositionStartMode = CompositionStartMode.FRESH
     instructions: str | None = Field(default=None, min_length=1)
     restart_from_segment_index: int | None = Field(default=None, ge=1)
+    rewrite_to_segment_index: int | None = Field(default=None, ge=1)
+    downstream_regeneration_mode: (
+        Literal["none", "auto_regenerate", "require_confirmation"] | None
+    ) = None
     origin: str = Field(default="workspace", min_length=1)
 
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> "StartSessionCompositionRequest":
         if self.mode == CompositionStartMode.REWRITE and self.restart_from_segment_index is None:
             raise ValueError("rewrite composition starts require restart_from_segment_index")
+        if (
+            self.restart_from_segment_index is not None
+            and self.rewrite_to_segment_index is not None
+            and self.rewrite_to_segment_index < self.restart_from_segment_index
+        ):
+            raise ValueError(
+                "rewrite_to_segment_index cannot be earlier than "
+                "restart_from_segment_index"
+            )
         return self
 
 
 class RedirectSessionCompositionRequest(BaseModel):
     instructions: str = Field(min_length=1)
     rewrite_from_segment_index: int | None = Field(default=None, ge=1)
+    rewrite_to_segment_index: int | None = Field(default=None, ge=1)
+    downstream_regeneration_mode: (
+        Literal["none", "auto_regenerate", "require_confirmation"] | None
+    ) = None
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "RedirectSessionCompositionRequest":
+        if (
+            self.rewrite_from_segment_index is not None
+            and self.rewrite_to_segment_index is not None
+            and self.rewrite_to_segment_index < self.rewrite_from_segment_index
+        ):
+            raise ValueError(
+                "rewrite_to_segment_index cannot be earlier than "
+                "rewrite_from_segment_index"
+            )
+        return self
+
+
+class AcceptRewriteSessionCompositionRequest(BaseModel):
     origin: str = Field(default="workspace", min_length=1)
 
 
@@ -807,6 +880,7 @@ class SessionSnapshot(BaseModel):
     latest_audio_job: AudioJobView | None = None
     active_composition_job: CompositionJobView | None = None
     active_audio_job: AudioJobView | None = None
+    composition_segments: list[CompositionSegmentView] = Field(default_factory=list)
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
     continuity_bible: ContinuityBibleView | None = None

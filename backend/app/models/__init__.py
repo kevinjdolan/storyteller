@@ -254,6 +254,7 @@ from app.models.realtime import (
     get_realtime_contract_schema_bundle,
 )
 from app.models.session import (
+    AcceptRewriteSessionCompositionRequest,
     AudioJobView,
     BeatSheetBeatView,
     BeatSheetEditView,
@@ -262,6 +263,8 @@ from app.models.session import (
     CharacterSheetBatchView,
     CharacterSheetView,
     CompositionJobView,
+    CompositionSegmentVersionView,
+    CompositionSegmentView,
     ConversationMemorySnapshotView,
     ConversationMemorySummaryData,
     ConversationMemoryWorkflow,
@@ -460,6 +463,8 @@ __all__ = [
     "CompositionInterruptionRequestView",
     "CompositionProgressEventPayload",
     "CompositionJobView",
+    "CompositionSegmentVersionView",
+    "CompositionSegmentView",
     "CompositionToolResult",
     "CreateSessionRequest",
     "DEFAULT_CHAT_TO_UI_ACTION_POLICIES",
@@ -647,6 +652,7 @@ __all__ = [
     "StartAudioGenerationToolInput",
     "StartAudioGenerationToolResult",
     "StartSessionCompositionRequest",
+    "AcceptRewriteSessionCompositionRequest",
     "StartCompositionAction",
     "StartCompositionValues",
     "StoryWorkflowToolCall",

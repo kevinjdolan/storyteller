@@ -349,6 +349,7 @@ export type CompositionJobView = {
   job_kind?: string
   status: string
   progress_percent: number
+  start_segment_index?: number | null
   plan_revision_id?: string | null
   plan_revision_number?: number | null
   beat_sheet_id?: string | null
@@ -360,6 +361,12 @@ export type CompositionJobView = {
   current_segment_id?: string | null
   current_segment_index?: number | null
   total_segments?: number | null
+  rewrite_to_segment_index?: number | null
+  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation'
+  stale_from_segment_index?: number | null
+  stale_to_segment_index?: number | null
+  pending_review?: boolean
+  rewrite_candidate_segment_indexes?: number[]
   accepted_story_so_far?: string | null
   latest_partial_output?: string | null
   latest_segment_summary?: string | null
@@ -371,6 +378,38 @@ export type CompositionJobView = {
   completed_at?: string | null
   created_at?: string
   updated_at?: string
+}
+
+export type CompositionSegmentVersionView = {
+  id: string
+  composition_job_id: string
+  job_kind: string
+  segment_index: number
+  revision_number: number
+  status: string
+  acceptance_state: 'accepted' | 'pending' | 'rejected'
+  is_current: boolean
+  is_stale: boolean
+  planned_summary?: string | null
+  accepted_summary?: string | null
+  text_content?: string | null
+  word_count?: number | null
+  created_at: string
+  updated_at: string
+  completed_at?: string | null
+}
+
+export type CompositionSegmentView = {
+  segment_index: number
+  outline_card_title?: string | null
+  outline_card_summary?: string | null
+  current_version_id?: string | null
+  current_revision_number?: number | null
+  pending_version_id?: string | null
+  pending_revision_number?: number | null
+  is_stale: boolean
+  stale_reason?: string | null
+  versions: CompositionSegmentVersionView[]
 }
 
 export type AudioJobView = {
@@ -549,6 +588,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   latest_audio_job?: AudioJobView | null
   active_composition_job?: CompositionJobView | null
   active_audio_job?: AudioJobView | null
+  composition_segments?: CompositionSegmentView[] | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
   continuity_bible?: ContinuityBibleView | null
@@ -641,12 +681,20 @@ export type StartSessionCompositionRequest = {
   mode?: 'fresh' | 'continue' | 'rewrite'
   instructions?: string | null
   restart_from_segment_index?: number | null
+  rewrite_to_segment_index?: number | null
+  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation' | null
   origin?: string
 }
 
 export type RedirectSessionCompositionRequest = {
   instructions: string
   rewrite_from_segment_index?: number | null
+  rewrite_to_segment_index?: number | null
+  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation' | null
+  origin?: string
+}
+
+export type AcceptRewriteSessionCompositionRequest = {
   origin?: string
 }
 
@@ -847,6 +895,17 @@ export function redirectSessionComposition(
 ) {
   return postJson<SessionCompositionResponse>(
     `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/redirect`,
+    body,
+  )
+}
+
+export function acceptSessionCompositionRewrite(
+  sessionId: string,
+  compositionJobId: string,
+  body: AcceptRewriteSessionCompositionRequest = {},
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/accept`,
     body,
   )
 }

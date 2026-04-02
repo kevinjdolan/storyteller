@@ -20,8 +20,9 @@ from app.api.dependencies import (
     get_intent_parser_adapter,
     get_pitch_generation_adapter,
 )
-from app.db import CompositionJob
+from app.db import CompositionDownstreamMode, CompositionJob
 from app.models import (
+    AcceptRewriteSessionCompositionRequest,
     CreateSessionRequest,
     EditSessionBeatSheetRequest,
     GenerateSessionBeatSheetRequest,
@@ -442,6 +443,8 @@ def start_session_composition(
                 arguments={
                     "instructions": payload.instructions,
                     "rewrite_from_segment_index": payload.restart_from_segment_index,
+                    "rewrite_to_segment_index": payload.rewrite_to_segment_index,
+                    "downstream_regeneration_mode": payload.downstream_regeneration_mode,
                     "preserve_completed_segments": False,
                 },
             )
@@ -641,6 +644,12 @@ def redirect_session_composition(
             composition_job_id,
             instructions=payload.instructions,
             rewrite_from_segment_index=payload.rewrite_from_segment_index,
+            rewrite_to_segment_index=payload.rewrite_to_segment_index,
+            downstream_regeneration_mode=(
+                CompositionDownstreamMode(payload.downstream_regeneration_mode)
+                if payload.downstream_regeneration_mode is not None
+                else None
+            ),
             origin=payload.origin,
         )
         snapshot = session_service.load_session_snapshot(session_id)
@@ -666,6 +675,54 @@ def redirect_session_composition(
             detail=str(exc),
         ) from exc
     except (CompositionJobStateError, StoryWorkflowToolServiceError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/composition/{composition_job_id}/accept",
+    response_model=SessionCompositionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Accept a completed rewrite candidate into the manuscript",
+)
+def accept_session_composition_rewrite(
+    session_id: str,
+    composition_job_id: str,
+    payload: AcceptRewriteSessionCompositionRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionCompositionResponse:
+    session_service = SessionService(db_session)
+    del payload
+
+    try:
+        job = CompositionJobService(db_session).accept_rewrite_job(
+            session_id,
+            composition_job_id,
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        job_view = _resolve_composition_job_view(
+            snapshot=snapshot,
+            db_session=db_session,
+            composition_job_id=job.id,
+        )
+        event = _resolve_latest_composition_stage_event(
+            session_service=session_service,
+            session_id=session_id,
+        )
+        return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except CompositionJobStateError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -1289,6 +1346,20 @@ def _resolve_composition_response_event(
             continue
         if getattr(event.payload, "job_id", None) == composition_job_id:
             return event
+
+    for event in reversed(history.events):
+        if event.stage == WorkflowStage.COMPOSITION:
+            return event
+
+    raise RuntimeError("composition operation did not produce a replayable event")
+
+
+def _resolve_latest_composition_stage_event(
+    *,
+    session_service: SessionService,
+    session_id: str,
+) -> SessionEventView:
+    history = session_service.load_session_history(session_id, limit=20)
 
     for event in reversed(history.events):
         if event.stage == WorkflowStage.COMPOSITION:

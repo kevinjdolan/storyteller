@@ -2,6 +2,7 @@ import { type MouseEvent, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
+  acceptSessionCompositionRewrite,
   applySessionContextUpdate,
   cancelSessionComposition,
   editSessionBeatSheet,
@@ -1311,11 +1312,20 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     instructions?: string | null
     origin: string
     restartFromSegmentIndex?: number | null
+    rewriteToSegmentIndex?: number | null
+    downstreamRegenerationMode?:
+      | 'none'
+      | 'auto_regenerate'
+      | 'require_confirmation'
+      | null
   }) {
     const result = await startSessionComposition(sessionId, {
       mode: options.mode ?? 'fresh',
       instructions: options.instructions ?? null,
       restart_from_segment_index: options.restartFromSegmentIndex ?? null,
+      rewrite_to_segment_index: options.rewriteToSegmentIndex ?? null,
+      downstream_regeneration_mode:
+        options.downstreamRegenerationMode ?? null,
       origin: options.origin,
     })
 
@@ -1361,12 +1371,34 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     jobId: string
     origin: string
     rewriteFromSegmentIndex?: number | null
+    rewriteToSegmentIndex?: number | null
+    downstreamRegenerationMode?:
+      | 'auto_regenerate'
+      | 'require_confirmation'
+      | null
   }) {
     const result = await redirectSessionComposition(sessionId, options.jobId, {
       instructions: options.instructions,
       rewrite_from_segment_index: options.rewriteFromSegmentIndex ?? null,
+      rewrite_to_segment_index: options.rewriteToSegmentIndex ?? null,
+      downstream_regeneration_mode:
+        options.downstreamRegenerationMode ?? null,
       origin: options.origin,
     })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
+  async function applyCompositionRewriteAcceptance(options: { jobId: string }) {
+    const result = await acceptSessionCompositionRewrite(
+      sessionId,
+      options.jobId,
+      { origin: 'workspace' },
+    )
 
     runtimeStore.hydrateSessionSnapshot(result.snapshot)
     appendHistoryEventToChat(result.event)
@@ -2033,6 +2065,11 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 <CompositionStage
                   composition={composition}
                   connectionState={eventStream.connectionState}
+                  onAcceptRewrite={async (jobId) =>
+                    applyCompositionRewriteAcceptance({
+                      jobId,
+                    })
+                  }
                   onCancelComposition={async (jobId) =>
                     applyCompositionCancel({
                       jobId,
@@ -2057,6 +2094,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       instructions: options.instructions,
                       rewriteFromSegmentIndex:
                         options.rewriteFromSegmentIndex ?? null,
+                      rewriteToSegmentIndex:
+                        options.rewriteToSegmentIndex ?? null,
+                      downstreamRegenerationMode:
+                        options.downstreamRegenerationMode ?? null,
                       origin: 'workspace',
                     })
                   }}
@@ -2081,6 +2122,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       instructions: body.instructions ?? null,
                       restartFromSegmentIndex:
                         body.restart_from_segment_index ?? null,
+                      rewriteToSegmentIndex:
+                        body.rewrite_to_segment_index ?? null,
+                      downstreamRegenerationMode:
+                        body.downstream_regeneration_mode ?? null,
                       origin: body.origin ?? 'workspace',
                     })
                   }
