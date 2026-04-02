@@ -1370,8 +1370,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       instructions: options.instructions ?? null,
       restart_from_segment_index: options.restartFromSegmentIndex ?? null,
       rewrite_to_segment_index: options.rewriteToSegmentIndex ?? null,
-      downstream_regeneration_mode:
-        options.downstreamRegenerationMode ?? null,
+      downstream_regeneration_mode: options.downstreamRegenerationMode ?? null,
       origin: options.origin,
     })
 
@@ -1427,8 +1426,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       instructions: options.instructions,
       rewrite_from_segment_index: options.rewriteFromSegmentIndex ?? null,
       rewrite_to_segment_index: options.rewriteToSegmentIndex ?? null,
-      downstream_regeneration_mode:
-        options.downstreamRegenerationMode ?? null,
+      downstream_regeneration_mode: options.downstreamRegenerationMode ?? null,
       origin: options.origin,
     })
 

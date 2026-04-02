@@ -62,15 +62,20 @@ export function FinalizeStage({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Final review</p>
-            <h3>Read the current manuscript and compare revisions before export.</h3>
+            <h3>
+              Read the current manuscript and compare revisions before export.
+            </h3>
             <p>
-              Finalize keeps the current draft, export readiness, and segment-level
-              version history in one place so late rewrite decisions stay explicit.
+              Finalize keeps the current draft, export readiness, and
+              segment-level version history in one place so late rewrite
+              decisions stay explicit.
             </p>
           </div>
 
           <div className="workspace-stage-detail__badges">
-            {reviewJob != null ? <Badge tone="accent">Rewrite pending</Badge> : null}
+            {reviewJob != null ? (
+              <Badge tone="accent">Rewrite pending</Badge>
+            ) : null}
             <Badge tone={finalStoryReady ? 'success' : 'neutral'}>
               {finalStoryReady ? 'Story export ready' : 'Story export pending'}
             </Badge>
@@ -89,7 +94,9 @@ export function FinalizeStage({
             }
             label="Manuscript status"
             title={
-              reviewJob != null ? 'Rewrite requires review' : 'Current draft is active'
+              reviewJob != null
+                ? 'Rewrite requires review'
+                : 'Current draft is active'
             }
             tone={reviewJob != null ? 'accent' : 'default'}
           />
@@ -111,7 +118,7 @@ export function FinalizeStage({
                 ? 'A ready narration asset is attached to the accepted manuscript.'
                 : activeAudioJob?.current_step
                   ? activeAudioJob.current_step
-                : 'Narration still depends on the currently accepted text version.'
+                  : 'Narration still depends on the currently accepted text version.'
             }
             label="Audio asset"
             title={
@@ -121,7 +128,13 @@ export function FinalizeStage({
                   ? `Narration ${Math.round(activeAudioJob.progress_percent)}% complete`
                   : 'Narration pending'
             }
-            tone={finalAudioReady ? 'accent' : activeAudioJob != null ? 'accent' : 'default'}
+            tone={
+              finalAudioReady
+                ? 'accent'
+                : activeAudioJob != null
+                  ? 'accent'
+                  : 'default'
+            }
           />
         </CardGrid>
 
@@ -143,8 +156,9 @@ export function FinalizeStage({
             <div>
               <h3>Revision compare</h3>
               <p>
-                Compare any saved segment revision against the live manuscript, then
-                restore an older revision or resolve pending rewrite review from here.
+                Compare any saved segment revision against the live manuscript,
+                then restore an older revision or resolve pending rewrite review
+                from here.
               </p>
             </div>
           </div>

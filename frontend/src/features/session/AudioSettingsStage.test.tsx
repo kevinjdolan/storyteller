@@ -35,7 +35,8 @@ const sampleSnapshot: SessionSnapshot = {
     {
       stage: 'audio',
       label: 'Audio',
-      description: 'Configure narration settings and generate resumable audio artifacts.',
+      description:
+        'Configure narration settings and generate resumable audio artifacts.',
       status: 'in_progress',
       detail: 'Tune narration settings.',
     },
@@ -77,7 +78,8 @@ const sampleSnapshot: SessionSnapshot = {
 const selectedStage: SessionWorkspaceStageView = {
   stage: 'audio',
   label: 'Audio',
-  description: 'Configure narration settings and generate resumable audio artifacts.',
+  description:
+    'Configure narration settings and generate resumable audio artifacts.',
   status: 'in_progress',
   detail: 'Tune narration settings.',
   availability: 'unlocked',
@@ -100,7 +102,11 @@ describe('AudioSettingsStage', () => {
       />,
     )
 
-    expect(screen.getByText('Shape the narration pass before the audio render starts.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Shape the narration pass before the audio render starts.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText('Approx. 14 min')).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -243,7 +249,8 @@ describe('AudioSettingsStage', () => {
           {
             key: 'night_ambience',
             label: 'Night ambience',
-            description: 'Low environmental bed for harbor, forest, or sky scenes.',
+            description:
+              'Low environmental bed for harbor, forest, or sky scenes.',
             bedtime_use_case:
               'Fits scene-setting passages that want a steady sense of place.',
             asset_file_name: 'night_ambience.wav',

@@ -362,7 +362,10 @@ export type CompositionJobView = {
   current_segment_index?: number | null
   total_segments?: number | null
   rewrite_to_segment_index?: number | null
-  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation'
+  downstream_regeneration_mode?:
+    | 'none'
+    | 'auto_regenerate'
+    | 'require_confirmation'
   stale_from_segment_index?: number | null
   stale_to_segment_index?: number | null
   pending_review?: boolean
@@ -765,7 +768,11 @@ export type StartSessionCompositionRequest = {
   instructions?: string | null
   restart_from_segment_index?: number | null
   rewrite_to_segment_index?: number | null
-  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation' | null
+  downstream_regeneration_mode?:
+    | 'none'
+    | 'auto_regenerate'
+    | 'require_confirmation'
+    | null
   origin?: string
 }
 
@@ -773,7 +780,11 @@ export type RedirectSessionCompositionRequest = {
   instructions: string
   rewrite_from_segment_index?: number | null
   rewrite_to_segment_index?: number | null
-  downstream_regeneration_mode?: 'none' | 'auto_regenerate' | 'require_confirmation' | null
+  downstream_regeneration_mode?:
+    | 'none'
+    | 'auto_regenerate'
+    | 'require_confirmation'
+    | null
   origin?: string
 }
 

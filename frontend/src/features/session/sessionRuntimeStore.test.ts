@@ -357,7 +357,9 @@ describe('sessionRuntimeStore', () => {
       lastConnectedAt: '2026-04-01T08:11:00Z',
       lastSequenceNumber: 17,
     })
-    expect(store.getState().sessionSnapshot?.active_composition_job).toMatchObject({
+    expect(
+      store.getState().sessionSnapshot?.active_composition_job,
+    ).toMatchObject({
       id: 'composition-job-1',
       status: 'in_progress',
       progress_percent: 62.5,
@@ -446,7 +448,8 @@ describe('sessionRuntimeStore', () => {
     })
 
     expect(
-      store.getState().sessionSnapshot?.active_composition_job?.interruption_request,
+      store.getState().sessionSnapshot?.active_composition_job
+        ?.interruption_request,
     ).toMatchObject({
       request_kind: 'redirect',
       state: 'requested',
@@ -490,8 +493,7 @@ describe('sessionRuntimeStore', () => {
         job_kind: 'audio',
         status: 'in_progress',
         progress_percent: 72,
-        current_step:
-          'Mixing narration with the selected background bed.',
+        current_step: 'Mixing narration with the selected background bed.',
         current_step_index: 5,
         total_steps: 6,
         completed_segments: 3,
@@ -516,7 +518,9 @@ describe('sessionRuntimeStore', () => {
       updated_at: '2026-04-01T08:15:00Z',
     })
     expect(
-      store.getState().sessionSnapshot?.stage_states.find((stage) => stage.stage === 'audio'),
+      store
+        .getState()
+        .sessionSnapshot?.stage_states.find((stage) => stage.stage === 'audio'),
     ).toMatchObject({
       status: 'in_progress',
       detail: 'Mixing narration with the selected background bed.',

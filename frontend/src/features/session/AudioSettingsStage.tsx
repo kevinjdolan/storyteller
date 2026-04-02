@@ -6,7 +6,12 @@ import type {
   SessionHistoryEvent,
   SessionSnapshot,
 } from '../../api/sessions.ts'
-import { Badge, Button, ProgressBar, TextArea } from '../../shared/ui/primitives.tsx'
+import {
+  Badge,
+  Button,
+  ProgressBar,
+  TextArea,
+} from '../../shared/ui/primitives.tsx'
 import {
   CardGrid,
   FormColumns,
@@ -68,7 +73,8 @@ const voiceOptions = [
   {
     value: 'storykeeper',
     label: 'Storykeeper',
-    description: 'Clearer diction for longer narration passes and chapter breaks.',
+    description:
+      'Clearer diction for longer narration passes and chapter breaks.',
   },
 ] as const
 
@@ -170,7 +176,9 @@ function audioSettingsMatch(
   )
 }
 
-function formatMinutesRange(runtimeEstimate: AudioSettingsView['runtime_estimate']) {
+function formatMinutesRange(
+  runtimeEstimate: AudioSettingsView['runtime_estimate'],
+) {
   if (runtimeEstimate == null) {
     return null
   }
@@ -230,7 +238,8 @@ function buildAudioProgressHint(audioJob: AudioJobView | null) {
   const stepSummary =
     audioJob.current_step_index != null && audioJob.total_steps != null
       ? `Step ${audioJob.current_step_index} of ${audioJob.total_steps}.`
-      : audioJob.current_segment_index != null && audioJob.total_segments != null
+      : audioJob.current_segment_index != null &&
+          audioJob.total_segments != null
         ? `Segment ${audioJob.current_segment_index} of ${audioJob.total_segments}.`
         : null
   const completedSummary =
@@ -242,7 +251,9 @@ function buildAudioProgressHint(audioJob: AudioJobView | null) {
       ? `Estimated listening length ${Math.max(Math.round(audioJob.estimated_duration_seconds / 60), 1)} min.`
       : null
 
-  return [stepSummary, completedSummary, durationSummary].filter(Boolean).join(' ')
+  return [stepSummary, completedSummary, durationSummary]
+    .filter(Boolean)
+    .join(' ')
 }
 
 export function AudioSettingsStage({
@@ -259,7 +270,8 @@ export function AudioSettingsStage({
   const savedState = buildFormState(snapshot)
   const isLocked = selectedStage.availability === 'locked'
   const isDirty = !audioSettingsMatch(formState, savedState)
-  const musicOptions = snapshot.audio_settings?.music_profile_options ?? fallbackMusicOptions
+  const musicOptions =
+    snapshot.audio_settings?.music_profile_options ?? fallbackMusicOptions
   const persistedRuntimeEstimate = snapshot.audio_settings?.runtime_estimate
   const persistedMixPreview = snapshot.audio_settings?.mix_preview
   const runtimeEstimate = deriveAudioRuntimeEstimatePreview(
@@ -268,7 +280,9 @@ export function AudioSettingsStage({
   )
   const runtimeSummary = formatMinutesRange(runtimeEstimate)
   const runtimeBasisLabel =
-    runtimeEstimate != null ? buildAudioEstimateBasisLabel(runtimeEstimate) : null
+    runtimeEstimate != null
+      ? buildAudioEstimateBasisLabel(runtimeEstimate)
+      : null
   const runtimeAssumptions =
     runtimeEstimate != null
       ? buildAudioEstimateAssumptionsText(
@@ -351,13 +365,17 @@ export function AudioSettingsStage({
           </div>
 
           <div className="workspace-stage-detail__badges">
-            <Badge tone={selectedStage.status === 'completed' ? 'success' : 'brand'}>
+            <Badge
+              tone={selectedStage.status === 'completed' ? 'success' : 'brand'}
+            >
               {selectedStage.status === 'completed'
                 ? 'Narration approved'
                 : 'Narration in planning'}
             </Badge>
             {activeAudioJob != null ? (
-              <Badge tone="accent">{Math.round(audioProgressPercent)}% rendered</Badge>
+              <Badge tone="accent">
+                {Math.round(audioProgressPercent)}% rendered
+              </Badge>
             ) : null}
             {snapshot.latest_audio_asset != null ? (
               <Badge tone="success">Audio asset ready</Badge>
@@ -383,21 +401,24 @@ export function AudioSettingsStage({
           <SummaryPanel
             description={voiceDescription}
             label="Voice"
-            title={voiceOptions.find((option) => option.value === formState.voiceKey)?.label}
+            title={
+              voiceOptions.find((option) => option.value === formState.voiceKey)
+                ?.label
+            }
           />
-            <SummaryPanel
-              description={
-                formState.includeBackgroundMusic
-                  ? musicDescription
-                  : 'The narration will render dry, with no background bed under the voice.'
-              }
-              label="Music"
-              title={
-                formState.includeBackgroundMusic
-                  ? selectedMusicOption?.label ?? 'Music on'
-                  : 'Music off'
-              }
-            />
+          <SummaryPanel
+            description={
+              formState.includeBackgroundMusic
+                ? musicDescription
+                : 'The narration will render dry, with no background bed under the voice.'
+            }
+            label="Music"
+            title={
+              formState.includeBackgroundMusic
+                ? (selectedMusicOption?.label ?? 'Music on')
+                : 'Music off'
+            }
+          />
           <SummaryPanel
             description={
               runtimeSummary != null
@@ -441,28 +462,25 @@ export function AudioSettingsStage({
                   {runtimeEstimate.estimated_word_count} words, and a live{' '}
                   {formState.playbackSpeed.toFixed(2)}x playback preview.
                 </p>
+                <p>{runtimeAssumptions}</p>
                 <p>
-                  {runtimeAssumptions}
-                </p>
-                <p>
-                  Expect a {runtimeEstimate.pacing_band} delivery. Actual runtime can
-                  still shift once the final narration pass is rendered.
+                  Expect a {runtimeEstimate.pacing_band} delivery. Actual
+                  runtime can still shift once the final narration pass is
+                  rendered.
                 </p>
               </InlineHelp>
             ) : (
               <InlineHelp title="Estimate pending" tone="info">
                 <p>
-                  The runtime card stays approximate by design and will sharpen once
-                  the story text or target word count is available.
+                  The runtime card stays approximate by design and will sharpen
+                  once the story text or target word count is available.
                 </p>
               </InlineHelp>
             )}
 
             {formState.includeBackgroundMusic && selectedMusicOption != null ? (
               <InlineHelp title="Music mix" tone="info">
-                <p>
-                  {selectedMusicOption.bedtime_use_case}
-                </p>
+                <p>{selectedMusicOption.bedtime_use_case}</p>
                 <p>
                   {selectedMusicOption.mix_note} Recommended bed level:{' '}
                   {selectedMusicOption.recommended_music_volume_min}-
@@ -477,8 +495,9 @@ export function AudioSettingsStage({
             {activeAudioJob != null ? (
               <InlineHelp title="Active render" tone="warning">
                 <p>
-                  Saving new settings updates the durable plan for the next narration
-                  pass and cancels the current audio job if one is still running.
+                  Saving new settings updates the durable plan for the next
+                  narration pass and cancels the current audio job if one is
+                  still running.
                 </p>
                 {audioProgressHint != null ? <p>{audioProgressHint}</p> : null}
               </InlineHelp>
@@ -501,8 +520,8 @@ export function AudioSettingsStage({
               <h3>Settings</h3>
               <p>
                 Keep the first pass tight: choose the voice, shape the delivery,
-                decide whether music belongs underneath it, and leave any final mix
-                note for the next render.
+                decide whether music belongs underneath it, and leave any final
+                mix note for the next render.
               </p>
             </div>
           </div>
