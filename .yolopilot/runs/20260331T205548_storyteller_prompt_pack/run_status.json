@@ -44,9 +44,10 @@
     "41-tone-selection-api-and-ui.md",
     "42-story-setup-brief-form.md",
     "43-brief-normalization-service.md",
-    "44-pitch-generation-pipeline.md"
+    "44-pitch-generation-pipeline.md",
+    "45-pitch-refinement-via-chat.md"
   ],
-  "current_success_ref": "d9820475ecc6edbadc65899a091097c87534d6fb",
+  "current_success_ref": "385e66428d77c6d8e7cb38cbe0b2f329272f2eeb",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
