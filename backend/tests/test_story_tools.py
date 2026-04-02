@@ -68,6 +68,8 @@ from app.services.composition_streaming import (
     split_text_for_streaming,
 )
 from app.services.event_log import SessionEventLogService
+from app.services.session_hydration import SessionHydrationService
+from app.services.session_realtime import CompositionChunkCursor, SessionRealtimeService
 from app.settings import load_settings
 from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
@@ -299,6 +301,80 @@ class SummaryCheckpointCompositionWriter:
             remaining_chunks=chunks,
             evaluation=evaluation,
             source="heuristic",
+        )
+
+
+class StreamingLoopCompositionWriter:
+    def compose_segment(
+        self,
+        *,
+        segment_payload,
+        prior_segments,
+        current_partial_text,
+        total_segments,
+    ) -> GeneratedCompositionSegmentDraft:
+        del prior_segments, current_partial_text, total_segments
+        dynamic_context = segment_payload["composition_prompt"]["dynamic_context"]
+        segment_index = int(dynamic_context["segment_index"])
+        protagonist_name = (
+            dynamic_context["selected_character_sheet"].get("protagonist_name") or "Mira"
+        )
+        companion_name = "Pip"
+        accepted_text = self.segment_text(
+            segment_index=segment_index,
+            protagonist_name=protagonist_name,
+            companion_name=companion_name,
+        )
+        carryover_summary = (
+            f"Segment {segment_index} keeps {protagonist_name} moving forward calmly, "
+            f"keeps {companion_name} visible, and lands the handoff in repair."
+        )
+        evaluation = evaluate_composition_segment_draft(
+            accepted_text,
+            protagonist_name=protagonist_name,
+            supporting_character_name=companion_name,
+            carryover_summary=carryover_summary,
+        )
+        return GeneratedCompositionSegmentDraft(
+            raw_text=accepted_text,
+            accepted_text=accepted_text,
+            carryover_summary=carryover_summary,
+            remaining_chunks=tuple(split_text_for_streaming("", accepted_text)),
+            evaluation=evaluation,
+            source="heuristic",
+        )
+
+    def segment_text(
+        self,
+        *,
+        segment_index: int,
+        protagonist_name: str = "Mira",
+        companion_name: str = "Pip",
+    ) -> str:
+        return "\n\n".join(
+            [
+                (
+                    f"Draft segment {segment_index} lets {protagonist_name} follow the silver "
+                    "bell along a lantern path where every ripple stays readable, warm, and "
+                    "gentle enough for bedtime listening."
+                ),
+                (
+                    f"{companion_name} stays close beside {protagonist_name}, answering each new "
+                    "question before the harbor can feel sharp, and the prose keeps the movement "
+                    "soft, patient, visibly cared for, and easy to trust."
+                ),
+                (
+                    f"The segment closes in calm repair, so {protagonist_name} and "
+                    f"{companion_name} can hand the story forward with the promise intact, the "
+                    "water settled, and the night ready for the next quiet turn."
+                ),
+            ]
+        )
+
+    def story_text(self, segment_indexes: list[int]) -> str:
+        return "\n\n".join(
+            self.segment_text(segment_index=segment_index)
+            for segment_index in segment_indexes
         )
 
 
@@ -1185,6 +1261,293 @@ def test_composition_redirect_request_is_durable_and_starts_rewrite_after_checkp
         }
 
         assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    writer = StreamingLoopCompositionWriter()
+    worker_result: dict[str, object] = {}
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            initial_events, realtime_cursor = SessionRealtimeService(
+                session
+            ).read_composition_chunk_events(
+                seeded["session_id"],
+                cursor=CompositionChunkCursor(),
+            )
+
+        assert len(initial_events) == 1
+        assert initial_events[0].payload.chunk_kind.value == "segment_start"
+        assert initial_events[0].payload.segment_index == 1
+
+        def run_worker() -> None:
+            try:
+                with session_factory() as session:
+                    worker_result["result"] = CompositionJobService(
+                        session,
+                        object_storage=object_storage,
+                        writer=writer,
+                        chunk_delay_seconds=0.05,
+                    ).run_job(result.composition_job_id)
+            except Exception as exc:  # pragma: no cover - surfaced in assertion below
+                worker_result["error"] = exc
+
+        worker_thread = Thread(target=run_worker)
+        worker_thread.start()
+
+        _wait_for_condition(
+            lambda: _job_progress_percent(session_factory, result.composition_job_id) > 0
+        )
+
+        with session_factory() as session:
+            CompositionJobService(session).pause_job(
+                seeded["session_id"],
+                result.composition_job_id,
+            )
+
+        worker_thread.join(timeout=5)
+        assert not worker_thread.is_alive()
+        assert "error" not in worker_result, worker_result.get("error")
+        assert worker_result["result"]["action"] == "paused"
+
+        with session_factory() as session:
+            paused_job = session.get(CompositionJob, result.composition_job_id)
+            paused_segment = session.execute(
+                select(CompositionSegment)
+                .where(
+                    CompositionSegment.composition_job_id == result.composition_job_id,
+                    CompositionSegment.segment_index == 1,
+                )
+                .limit(1)
+            ).scalar_one()
+            draft_snapshot_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.session_id == seeded["session_id"],
+                    SessionAsset.composition_job_id == result.composition_job_id,
+                    SessionAsset.asset_kind == AssetKind.DRAFT_TEXT_SNAPSHOT,
+                )
+            ).scalar_one()
+            paused_hydration = SessionHydrationService(
+                session,
+                object_storage=object_storage,
+            ).hydrate_session(seeded["session_id"])
+            paused_events, realtime_cursor = SessionRealtimeService(
+                session
+            ).read_composition_chunk_events(
+                seeded["session_id"],
+                cursor=realtime_cursor,
+            )
+            history = SessionEventLogService(session).list_session_history(
+                seeded["session_id"]
+            )
+
+        paused_story_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=draft_snapshot_asset.storage_bucket,
+                key=draft_snapshot_asset.object_path,
+            )
+        )
+        paused_delta_events = [
+            event for event in paused_events if event.payload.chunk_kind.value == "delta"
+        ]
+        paused_progress_events = [
+            event
+            for event in history.events
+            if event.event_type == "composition.progress.recorded"
+        ]
+
+        assert paused_job is not None
+        assert paused_job.status == JobStatus.PAUSED
+        assert paused_job.progress_percent > 0
+        assert paused_job.current_segment_index == 1
+        assert paused_segment.status == JobStatus.PAUSED
+        assert paused_segment.accepted_text == paused_story_text
+        assert paused_segment.accepted_text
+        assert paused_story_text.strip()
+        assert paused_story_text != writer.segment_text(segment_index=1)
+        assert "".join(
+            event.payload.text or "" for event in paused_delta_events
+        ) == paused_story_text
+        assert paused_hydration.snapshot.active_composition_job is not None
+        assert paused_hydration.snapshot.active_composition_job.status == JobStatus.PAUSED
+        assert (
+            paused_hydration.snapshot.active_composition_job.accepted_story_so_far
+            == paused_story_text
+        )
+        assert (
+            paused_hydration.snapshot.active_composition_job.latest_partial_output
+            == paused_story_text
+        )
+        assert any(
+            getattr(getattr(event.payload, "interruption_request", None), "request_kind", None)
+            == "pause"
+            for event in paused_progress_events
+        )
+
+        with session_factory() as session:
+            CompositionJobService(session).resume_job(
+                seeded["session_id"],
+                result.composition_job_id,
+            )
+
+        with session_factory() as session:
+            resumed_hydration = SessionHydrationService(
+                session,
+                object_storage=object_storage,
+            ).hydrate_session(seeded["session_id"])
+
+        assert resumed_hydration.snapshot.active_composition_job is not None
+        assert resumed_hydration.snapshot.active_composition_job.status == JobStatus.QUEUED
+        assert resumed_hydration.snapshot.active_composition_job.current_segment_index == 1
+        assert (
+            resumed_hydration.snapshot.active_composition_job.accepted_story_so_far
+            == paused_story_text
+        )
+        assert (
+            resumed_hydration.snapshot.active_composition_job.latest_partial_output
+            == paused_story_text
+        )
+
+        with session_factory() as session:
+            resumed_result = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=writer,
+            ).run_job(result.composition_job_id)
+
+        assert resumed_result["action"] == "queued_next_segment"
+        assert resumed_result["next_segment_index"] == 2
+
+        expected_segment_one = writer.segment_text(segment_index=1)
+        assert expected_segment_one.startswith(paused_story_text)
+
+        with session_factory() as session:
+            resumed_session_hydration = SessionHydrationService(
+                session,
+                object_storage=object_storage,
+            ).hydrate_session(seeded["session_id"])
+            resumed_events, realtime_cursor = SessionRealtimeService(
+                session
+            ).read_composition_chunk_events(
+                seeded["session_id"],
+                cursor=realtime_cursor,
+            )
+
+        resumed_delta_events = [
+            event for event in resumed_events if event.payload.chunk_kind.value == "delta"
+        ]
+        resumed_summary_events = [
+            event
+            for event in resumed_events
+            if event.payload.chunk_kind.value == "segment_summary"
+        ]
+        resumed_segment_start_events = [
+            event
+            for event in resumed_events
+            if event.payload.chunk_kind.value == "segment_start"
+        ]
+
+        assert resumed_session_hydration.snapshot.active_composition_job is not None
+        assert resumed_session_hydration.snapshot.active_composition_job.status == JobStatus.QUEUED
+        assert resumed_session_hydration.snapshot.active_composition_job.current_segment_index == 2
+        assert (
+            resumed_session_hydration.snapshot.active_composition_job.accepted_story_so_far
+            == expected_segment_one
+        )
+        assert (
+            resumed_session_hydration.snapshot.active_composition_job.latest_partial_output
+            == expected_segment_one
+        )
+        assert resumed_segment_start_events
+        assert resumed_segment_start_events[0].payload.segment_index == 2
+        assert "".join(event.payload.text or "" for event in resumed_delta_events) == (
+            expected_segment_one[len(paused_story_text) :]
+        )
+        assert resumed_summary_events
+        assert resumed_summary_events[0].payload.summary.startswith("Segment 1 keeps Mira")
+
+        with session_factory() as session:
+            second_result = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=writer,
+            ).run_job(result.composition_job_id)
+
+        with session_factory() as session:
+            final_result = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=writer,
+            ).run_job(result.composition_job_id)
+
+        assert second_result["action"] == "queued_next_segment"
+        assert second_result["next_segment_index"] == 3
+        assert final_result["action"] == "completed"
+
+        with session_factory() as session:
+            final_job = session.get(CompositionJob, result.composition_job_id)
+            final_segments = list(
+                session.execute(
+                    select(CompositionSegment)
+                    .where(CompositionSegment.composition_job_id == result.composition_job_id)
+                    .order_by(CompositionSegment.segment_index.asc())
+                ).scalars()
+            )
+            final_story_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.composition_job_id == result.composition_job_id,
+                    SessionAsset.asset_kind == AssetKind.STORY_TEXT,
+                )
+            ).scalar_one()
+            final_hydration = SessionHydrationService(
+                session,
+                object_storage=object_storage,
+            ).hydrate_session(seeded["session_id"])
+
+        final_story_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=final_story_asset.storage_bucket,
+                key=final_story_asset.object_path,
+            )
+        )
+        expected_story_text = writer.story_text([1, 2, 3])
+
+        assert final_job is not None
+        assert final_job.status == JobStatus.COMPLETED
+        assert final_job.progress_percent == 100
+        assert [segment.status for segment in final_segments] == [
+            JobStatus.COMPLETED,
+            JobStatus.COMPLETED,
+            JobStatus.COMPLETED,
+        ]
+        assert [segment.accepted_text for segment in final_segments] == [
+            writer.segment_text(segment_index=1),
+            writer.segment_text(segment_index=2),
+            writer.segment_text(segment_index=3),
+        ]
+        assert final_story_text == expected_story_text
+        assert final_hydration.snapshot.active_composition_job is None
+        assert final_hydration.snapshot.latest_composition_job is not None
+        assert final_hydration.snapshot.latest_composition_job.status == JobStatus.COMPLETED
+        assert (
+            final_hydration.snapshot.latest_composition_job.accepted_story_so_far
+            == expected_story_text
+        )
     finally:
         object_storage.close()
         client.close()

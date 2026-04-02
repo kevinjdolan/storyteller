@@ -587,6 +587,23 @@ def merge_composition_job_view(
             if current_job is not None
             else None
         ),
+        start_segment_index=current_job.start_segment_index if current_job is not None else None,
+        plan_revision_id=current_job.plan_revision_id if current_job is not None else None,
+        plan_revision_number=(
+            current_job.plan_revision_number if current_job is not None else None
+        ),
+        beat_sheet_id=current_job.beat_sheet_id if current_job is not None else None,
+        beat_sheet_revision_number=(
+            current_job.beat_sheet_revision_number if current_job is not None else None
+        ),
+        story_setup_id=current_job.story_setup_id if current_job is not None else None,
+        story_setup_revision_number=(
+            current_job.story_setup_revision_number if current_job is not None else None
+        ),
+        story_outline_id=current_job.story_outline_id if current_job is not None else None,
+        story_outline_revision_number=(
+            current_job.story_outline_revision_number if current_job is not None else None
+        ),
         current_segment_id=(
             payload.segment_id
             if payload.segment_id is not None
@@ -600,6 +617,27 @@ def merge_composition_job_view(
             else current_job.current_segment_index
             if current_job is not None
             else None
+        ),
+        rewrite_to_segment_index=(
+            current_job.rewrite_to_segment_index if current_job is not None else None
+        ),
+        downstream_regeneration_mode=(
+            current_job.downstream_regeneration_mode if current_job is not None else "none"
+        ),
+        stale_from_segment_index=(
+            current_job.stale_from_segment_index if current_job is not None else None
+        ),
+        stale_to_segment_index=(
+            current_job.stale_to_segment_index if current_job is not None else None
+        ),
+        pending_review=current_job.pending_review if current_job is not None else False,
+        rewrite_candidate_segment_indexes=(
+            list(current_job.rewrite_candidate_segment_indexes)
+            if current_job is not None
+            else []
+        ),
+        accepted_story_so_far=(
+            current_job.accepted_story_so_far if current_job is not None else None
         ),
         latest_partial_output=(
             current_job.latest_partial_output if current_job is not None else None
