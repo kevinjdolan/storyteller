@@ -66,9 +66,10 @@
     "63-composition-main-pane-ui.md",
     "64-agent-summary-messages-during-composition.md",
     "65-interrupt-and-redirect-composition.md",
-    "66-rewrite-prior-segments.md"
+    "66-rewrite-prior-segments.md",
+    "67-diff-and-compare-ui.md"
   ],
-  "current_success_ref": "f6ead56ac202044ee1f22fd618089d7a8200a0e9",
+  "current_success_ref": "3b421c9b1eb0e4a7d273423764d3ae0e718fe1d1",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
