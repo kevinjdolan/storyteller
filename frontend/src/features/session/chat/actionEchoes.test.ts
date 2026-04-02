@@ -347,4 +347,57 @@ describe('actionEchoes', () => {
       }),
     )
   })
+
+  it('prefers queued interruption messages over generic composition progress copy', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 1,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'system',
+              actor_id: 'worker',
+            },
+            event_type: 'composition.progress.recorded',
+            stage: 'composition',
+            summary: 'Composition progress 46.0%.',
+            payload: {
+              schema_version: 1,
+              job_id: 'composition-job-1',
+              status: 'in_progress',
+              progress_percent: 46,
+              current_segment_index: 2,
+              total_segments: 5,
+              interruption_request: {
+                id: 'interrupt-1',
+                request_kind: 'redirect',
+                state: 'requested',
+                origin: 'workspace',
+                message:
+                  'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+                created_at: '2026-04-01T08:17:00Z',
+                updated_at: '2026-04-01T08:17:00Z',
+              },
+            },
+            created_at: '2026-04-01T08:17:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'composition',
+      } as never,
+    )
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: 'action_echo',
+        body:
+          'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+      }),
+    )
+  })
 })

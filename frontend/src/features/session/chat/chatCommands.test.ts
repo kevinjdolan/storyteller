@@ -150,4 +150,34 @@ describe('chatCommands', () => {
       },
     })
   })
+
+  it('hides pause quick actions while another composition interruption is pending', () => {
+    const quickActions = buildSessionChatQuickActions({
+      snapshot: {
+        ...sampleSnapshot,
+        current_stage: 'composition',
+        active_composition_job: {
+          id: 'composition-job-1',
+          status: 'in_progress',
+          progress_percent: 48,
+          current_segment_index: 2,
+          interruption_request: {
+            id: 'interrupt-1',
+            request_kind: 'redirect',
+            state: 'requested',
+            origin: 'workspace',
+            message:
+              'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+            created_at: '2026-04-01T05:16:00Z',
+            updated_at: '2026-04-01T05:16:00Z',
+          },
+        },
+      },
+      selectedStage: 'composition',
+    })
+
+    expect(quickActions.some((action) => action.commandId === 'pause_writing')).toBe(
+      false,
+    )
+  })
 })

@@ -224,7 +224,9 @@ export function buildInitialSessionChatMessages(
       createSessionChatMessage({
         id: 'composition-progress',
         role: 'system',
-        body: `Writing progress: ${Math.round(snapshot.active_composition_job.progress_percent)}% complete.`,
+        body:
+          snapshot.active_composition_job.interruption_request?.message ??
+          `Writing progress: ${Math.round(snapshot.active_composition_job.progress_percent)}% complete.`,
         createdAt: snapshot.updated_at,
       }),
     )

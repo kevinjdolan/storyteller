@@ -269,4 +269,69 @@ describe('CompositionStage', () => {
       screen.queryByTestId('composition-manuscript-archive'),
     ).not.toBeInTheDocument()
   })
+
+  it('surfaces queued interruption state while the worker finishes a safe checkpoint', () => {
+    renderWithAppProviders(
+      <CompositionStage
+        composition={liveComposition}
+        connectionState="open"
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={{
+          ...sampleSnapshot,
+          active_composition_job: {
+            ...sampleSnapshot.active_composition_job!,
+            interruption_request: {
+              id: 'interrupt-1',
+              request_kind: 'redirect',
+              state: 'requested',
+              origin: 'workspace',
+              message:
+                'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+              instructions: 'Soften the midpoint and bring Pip in sooner.',
+              rewrite_from_segment_index: 2,
+              requested_status: 'in_progress',
+              requested_segment_id: 'segment-2',
+              requested_segment_index: 2,
+              requested_progress_percent: 54,
+              created_at: '2026-04-02T05:16:30Z',
+              updated_at: '2026-04-02T05:16:30Z',
+            },
+          },
+          latest_composition_job: {
+            ...sampleSnapshot.latest_composition_job!,
+            interruption_request: {
+              id: 'interrupt-1',
+              request_kind: 'redirect',
+              state: 'requested',
+              origin: 'workspace',
+              message:
+                'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+              instructions: 'Soften the midpoint and bring Pip in sooner.',
+              rewrite_from_segment_index: 2,
+              requested_status: 'in_progress',
+              requested_segment_id: 'segment-2',
+              requested_segment_index: 2,
+              requested_progress_percent: 54,
+              created_at: '2026-04-02T05:16:30Z',
+              updated_at: '2026-04-02T05:16:30Z',
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getAllByText('Redirect queued')).toHaveLength(2)
+    expect(
+      screen.getAllByText(
+        'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+      ),
+    ).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Pause writing' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Request rewrite' })).toBeDisabled()
+  })
 })

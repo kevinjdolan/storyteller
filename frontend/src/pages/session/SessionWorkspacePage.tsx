@@ -228,6 +228,10 @@ function buildPlanFocusCopy(snapshot: SessionSnapshot) {
 
 function buildProductionCopy(snapshot: SessionSnapshot) {
   if (snapshot.active_composition_job) {
+    if (snapshot.active_composition_job.interruption_request?.message) {
+      return snapshot.active_composition_job.interruption_request.message
+    }
+
     return `Writing is ${Math.round(snapshot.active_composition_job.progress_percent)}% complete.`
   }
 
@@ -357,7 +361,9 @@ function buildChatActivityState(
 
   if (snapshot.active_composition_job != null) {
     return {
-      activityLabel: `Writing is ${Math.round(snapshot.active_composition_job.progress_percent)}% complete. Chat stays available for redirect notes.`,
+      activityLabel:
+        snapshot.active_composition_job.interruption_request?.message ??
+        `Writing is ${Math.round(snapshot.active_composition_job.progress_percent)}% complete. Chat stays available for redirect notes.`,
       disabledReason: null,
       isBusy: true,
     }

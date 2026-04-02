@@ -235,6 +235,17 @@ function buildJobProgressEcho(event: SessionHistoryEvent) {
     return event.summary
   }
 
+  const interruptionPayload = isRecord(event.payload.interruption_request)
+    ? event.payload.interruption_request
+    : null
+  const interruptionMessage =
+    interruptionPayload != null
+      ? readString(interruptionPayload, 'message')
+      : null
+  if (interruptionMessage != null) {
+    return interruptionMessage
+  }
+
   const status = readString(event.payload, 'status')
   const progressPercent = readNumber(event.payload, 'progress_percent')
   const currentSegmentIndex = readNumber(event.payload, 'current_segment_index')

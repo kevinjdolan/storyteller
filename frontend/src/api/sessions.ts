@@ -326,6 +326,24 @@ export type PlanRevisionView = {
   updated_at: string
 }
 
+export type CompositionInterruptionRequestView = {
+  id: string
+  request_kind: string
+  state: string
+  origin: string
+  message: string
+  instructions?: string | null
+  rewrite_from_segment_index?: number | null
+  requested_status?: string | null
+  requested_segment_id?: string | null
+  requested_segment_index?: number | null
+  requested_progress_percent?: number | null
+  resolution_summary?: string | null
+  created_at: string
+  updated_at: string
+  resolved_at?: string | null
+}
+
 export type CompositionJobView = {
   id: string
   job_kind?: string
@@ -345,6 +363,7 @@ export type CompositionJobView = {
   accepted_story_so_far?: string | null
   latest_partial_output?: string | null
   latest_segment_summary?: string | null
+  interruption_request?: CompositionInterruptionRequestView | null
   attempt_count?: number
   stop_reason?: string | null
   error_message?: string | null

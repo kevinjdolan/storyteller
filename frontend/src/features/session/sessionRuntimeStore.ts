@@ -415,6 +415,13 @@ function buildProgressDetail(
     | Extract<SessionRealtimeEvent, { type: 'job.progress' }>
     | Extract<SessionRealtimeEvent, { type: 'job.status' }>,
 ) {
+  if (event.payload.job_kind === 'composition') {
+    const interruptionMessage = event.payload.interruption_request?.message
+    if (interruptionMessage != null && interruptionMessage.length > 0) {
+      return interruptionMessage
+    }
+  }
+
   if (event.type === 'job.progress') {
     if (event.payload.message != null) {
       return event.payload.message
@@ -465,6 +472,14 @@ function applyJobProgressEvent(
         : event.payload.status === 'completed'
           ? 100
           : currentProgress
+    const nextInterruptionRequest =
+      event.payload.interruption_request?.state === 'applied' ||
+      event.payload.interruption_request?.state === 'superseded'
+        ? null
+        : (event.payload.interruption_request ??
+          snapshot.latest_composition_job?.interruption_request ??
+          snapshot.active_composition_job?.interruption_request ??
+          null)
     const nextJob = {
       ...(snapshot.latest_composition_job ?? snapshot.active_composition_job),
       id: event.payload.job_id,
@@ -475,6 +490,7 @@ function applyJobProgressEvent(
         snapshot.latest_composition_job?.current_segment_index ??
         snapshot.active_composition_job?.current_segment_index ??
         null,
+      interruption_request: nextInterruptionRequest,
       updated_at: event.created_at,
     }
 

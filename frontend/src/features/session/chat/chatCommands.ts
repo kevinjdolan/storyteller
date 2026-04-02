@@ -138,8 +138,9 @@ const commandDefinitions: ReadonlyArray<SessionChatCommandDefinition> = [
     description: 'Ask the policy engine to pause the active composition job.',
     aliases: ['pause-writing', 'pause'],
     isQuickActionVisible: ({ snapshot }) =>
-      snapshot.active_composition_job?.status === 'queued' ||
-      snapshot.active_composition_job?.status === 'in_progress',
+      (snapshot.active_composition_job?.status === 'queued' ||
+        snapshot.active_composition_job?.status === 'in_progress') &&
+      snapshot.active_composition_job?.interruption_request == null,
     buildActions: ({ snapshot }) => [
       buildCompositionJobAction({
         actionType: 'pause_job',

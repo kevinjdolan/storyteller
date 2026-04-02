@@ -239,6 +239,7 @@ export function CompositionStage({
     composition.latestSegmentSummary ??
     compositionJob?.latest_segment_summary ??
     null
+  const interruptionRequest = compositionJob?.interruption_request ?? null
   const latestPartialOutput =
     composition.latestPartialOutput ||
     compositionJob?.latest_partial_output ||
@@ -296,6 +297,12 @@ export function CompositionStage({
     snapshot.selected_story_outline != null
   const rewriteFromSegmentIndex =
     activeJob?.current_segment_index ?? currentSegmentIndex ?? 1
+  const interruptionLabel =
+    interruptionRequest == null
+      ? null
+      : interruptionRequest.request_kind === 'pause'
+        ? 'Pause queued'
+        : 'Redirect queued'
 
   async function runAction(
     action:
@@ -433,6 +440,9 @@ export function CompositionStage({
                 <Badge tone={getCompositionStatusTone(stageStatus)}>
                   {stageStatus.replace(/_/g, ' ')}
                 </Badge>
+                {interruptionLabel != null ? (
+                  <Badge tone="warning">{interruptionLabel}</Badge>
+                ) : null}
                 <Badge
                   tone={composition.source === 'live' ? 'success' : 'neutral'}
                 >
@@ -498,6 +508,15 @@ export function CompositionStage({
               </div>
             </div>
 
+            {interruptionRequest != null ? (
+              <SummaryPanel
+                description={interruptionRequest.message}
+                label="Pending change"
+                title={interruptionLabel ?? 'Pending interruption'}
+                tone="accent"
+              />
+            ) : null}
+
             <div className="composition-stage__control-grid">
               {canStart ? (
                 <Button
@@ -522,7 +541,7 @@ export function CompositionStage({
 
               {canPause && activeJob != null ? (
                 <Button
-                  disabled={activeAction != null}
+                  disabled={activeAction != null || interruptionRequest != null}
                   onClick={() => {
                     void runAction('pause', () =>
                       onPauseComposition(activeJob.id),
@@ -579,7 +598,9 @@ export function CompositionStage({
 
             <TextArea
               description="Use a concrete note such as ‘soften the midpoint, add the otter sooner, and keep the ending hushed.’"
-              disabled={!canRedirect || activeAction != null}
+              disabled={
+                !canRedirect || activeAction != null || interruptionRequest != null
+              }
               label="Rewrite guidance"
               onChange={(event) => {
                 setRedirectInstructions(event.currentTarget.value)
@@ -589,7 +610,9 @@ export function CompositionStage({
             />
 
             <p className="composition-stage__rewrite-note">
-              {canRedirect
+              {interruptionRequest != null
+                ? interruptionRequest.message
+                : canRedirect
                 ? `A rewrite request restarts from ${currentSegmentLabel.toLowerCase()} while keeping earlier accepted pages readable.`
                 : 'Rewrite requests unlock once a composition job is actively drafting.'}
             </p>
@@ -600,6 +623,7 @@ export function CompositionStage({
                   !canRedirect ||
                   redirectInstructions.trim().length === 0 ||
                   activeAction != null ||
+                  interruptionRequest != null ||
                   activeJob == null
                 }
                 onClick={() => {

@@ -357,7 +357,7 @@ describe('sessionRuntimeStore', () => {
       lastConnectedAt: '2026-04-01T08:11:00Z',
       lastSequenceNumber: 17,
     })
-    expect(store.getState().sessionSnapshot?.active_composition_job).toEqual({
+    expect(store.getState().sessionSnapshot?.active_composition_job).toMatchObject({
       id: 'composition-job-1',
       status: 'in_progress',
       progress_percent: 62.5,
@@ -374,6 +374,93 @@ describe('sessionRuntimeStore', () => {
       status: 'in_progress',
       detail: 'Writing the harbor crossing.',
       last_event_type: 'job.progress',
+    })
+  })
+
+  it('merges composition interruption details from replayable job events', () => {
+    const store = createSessionRuntimeStore()
+
+    store.hydrateSessionSnapshot({
+      ...buildSampleSnapshot(),
+      active_composition_job: {
+        id: 'composition-job-1',
+        status: 'in_progress',
+        progress_percent: 41,
+        current_segment_index: 2,
+        updated_at: '2026-04-01T08:12:00Z',
+      },
+      latest_composition_job: {
+        id: 'composition-job-1',
+        status: 'in_progress',
+        progress_percent: 41,
+        current_segment_index: 2,
+        updated_at: '2026-04-01T08:12:00Z',
+      },
+    })
+
+    store.applyRealtimeEvent({
+      schema_version: 1,
+      event_id: 'rt-18',
+      type: 'job.progress',
+      session_id: 'session-123',
+      channel: 'session:session-123',
+      actor: {
+        actor_type: 'system',
+        actor_id: 'worker',
+      },
+      stage: 'composition',
+      created_at: '2026-04-01T08:14:00Z',
+      delivery: 'replay',
+      replayable: true,
+      sequence_number: 18,
+      event_log_entry_id: 'event-log-18',
+      payload: {
+        schema_version: 1,
+        job_id: 'composition-job-1',
+        job_kind: 'composition',
+        status: 'in_progress',
+        progress_percent: 46,
+        current_segment_index: 2,
+        total_segments: 5,
+        message:
+          'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+        interruption_request: {
+          id: 'interrupt-1',
+          request_kind: 'redirect',
+          state: 'requested',
+          origin: 'workspace',
+          message:
+            'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+          instructions: 'Soften the midpoint and bring Pip in sooner.',
+          rewrite_from_segment_index: 2,
+          requested_status: 'in_progress',
+          requested_segment_id: 'segment-2',
+          requested_segment_index: 2,
+          requested_progress_percent: 46,
+          resolution_summary: null,
+          created_at: '2026-04-01T08:14:00Z',
+          updated_at: '2026-04-01T08:14:00Z',
+          resolved_at: null,
+        },
+      },
+    })
+
+    expect(
+      store.getState().sessionSnapshot?.active_composition_job?.interruption_request,
+    ).toMatchObject({
+      request_kind: 'redirect',
+      state: 'requested',
+      rewrite_from_segment_index: 2,
+    })
+    expect(
+      store
+        .getState()
+        .sessionSnapshot?.stage_states.find(
+          (stage) => stage.stage === 'composition',
+        ),
+    ).toMatchObject({
+      detail:
+        'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
     })
   })
 

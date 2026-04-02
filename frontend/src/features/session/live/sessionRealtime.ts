@@ -1,4 +1,5 @@
 import type { SessionChatMessageRole } from '../chat/sessionChat.ts'
+import type { CompositionInterruptionRequestView } from '../../../api/sessions.ts'
 import {
   type WorkflowStageId,
   type WorkflowStageState,
@@ -127,6 +128,7 @@ export type JobProgressEventPayload = {
   latest_asset_id?: string | null
   latest_asset_kind?: string | null
   message?: string | null
+  interruption_request?: CompositionInterruptionRequestView | null
 }
 
 export type JobStatusEventPayload = {
@@ -142,6 +144,7 @@ export type JobStatusEventPayload = {
   total_segments?: number | null
   latest_asset_id?: string | null
   latest_asset_kind?: string | null
+  interruption_request?: CompositionInterruptionRequestView | null
 }
 
 export type ErrorNotificationEventPayload = {
@@ -591,6 +594,54 @@ function parseCompositionChunkPayload(
   }
 }
 
+function parseCompositionInterruptionRequest(
+  record: JsonRecord,
+): CompositionInterruptionRequestView | null {
+  const id = readRequiredString(record, 'id')
+  const requestKind = readRequiredString(record, 'request_kind')
+  const state = readRequiredString(record, 'state')
+  const origin = readRequiredString(record, 'origin')
+  const message = readRequiredString(record, 'message')
+  const createdAt = readRequiredString(record, 'created_at')
+  const updatedAt = readRequiredString(record, 'updated_at')
+
+  if (
+    id == null ||
+    requestKind == null ||
+    state == null ||
+    origin == null ||
+    message == null ||
+    createdAt == null ||
+    updatedAt == null
+  ) {
+    return null
+  }
+
+  return {
+    id,
+    request_kind: requestKind,
+    state,
+    origin,
+    message,
+    instructions: readOptionalString(record, 'instructions'),
+    rewrite_from_segment_index: readOptionalNumber(
+      record,
+      'rewrite_from_segment_index',
+    ),
+    requested_status: readOptionalString(record, 'requested_status'),
+    requested_segment_id: readOptionalString(record, 'requested_segment_id'),
+    requested_segment_index: readOptionalNumber(record, 'requested_segment_index'),
+    requested_progress_percent: readOptionalNumber(
+      record,
+      'requested_progress_percent',
+    ),
+    resolution_summary: readOptionalString(record, 'resolution_summary'),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    resolved_at: readOptionalString(record, 'resolved_at'),
+  }
+}
+
 function parseJobProgressPayload(
   record: JsonRecord,
 ): JobProgressEventPayload | null {
@@ -624,6 +675,9 @@ function parseJobProgressPayload(
     latest_asset_id: readOptionalString(record, 'latest_asset_id'),
     latest_asset_kind: readOptionalString(record, 'latest_asset_kind'),
     message: readOptionalString(record, 'message'),
+    interruption_request: isRecord(record.interruption_request)
+      ? parseCompositionInterruptionRequest(record.interruption_request)
+      : null,
   }
 }
 
@@ -657,6 +711,9 @@ function parseJobStatusPayload(
     total_segments: readOptionalNumber(record, 'total_segments'),
     latest_asset_id: readOptionalString(record, 'latest_asset_id'),
     latest_asset_kind: readOptionalString(record, 'latest_asset_kind'),
+    interruption_request: isRecord(record.interruption_request)
+      ? parseCompositionInterruptionRequest(record.interruption_request)
+      : null,
   }
 }
 
