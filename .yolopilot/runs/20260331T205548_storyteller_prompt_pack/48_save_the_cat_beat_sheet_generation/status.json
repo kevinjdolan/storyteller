@@ -1,0 +1,161 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,340p' backend/app/api/v1/sessions.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"beat_sheet|beats/generate|selections/beat|refine beat|BeatSheetView|selected_beat_sheet\" backend/tests frontend/src/*.test.tsx frontend/src/pages/session/SessionWorkspacePage.test.tsx frontend/src/features/session/*.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_beat_sheet_generation_service.py backend/tests/test_session_beat_sheet_service.py backend/tests/test_session_api.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run frontend/src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run format:check'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run format:check'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml up -d --build'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'set -euo pipefail\nsession_json=$(curl -s -X POST http://localhost:8565/api/v1/sessions -H '\"'Content-Type: application/json' -d '{\\\"working_title\\\":\\\"Beat QA Session\\\"}')\nsession_id=\"'$(printf '\"'%s' \\\"\"'$session_json\" | jq -r '\"'.id // .snapshot.id // empty')\necho \\\"session_id=\"'$session_id\"\ncurl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/selections/genre -H '\"'Content-Type: application/json' -d '{\\\"genre_slug\\\":\\\"quest-fantasy\\\",\\\"origin\\\":\\\"workspace\\\"}' >/dev/null\ncurl -s -X POST http://localhost:8565/api/v1/sessions/\"'$session_id/selections/tone -H '\"'Content-Type: application/json' -d '{\\\"tone_profile_slug\\\":\\\"hushed-wonder\\\",\\\"origin\\\":\\\"workspace\\\"}' >/dev/null\ncurl -s -X POST http://localhost:8565/api/v1/sessions/\"'$session_id/story-brief -H '\"'Content-Type: application/json' -d '{\\\"story_idea\\\":\\\"A child follows floating lanterns through a moonlit harbor and helps a shy otter guardian guide each light home before bed.\\\",\\\"origin\\\":\\\"workspace\\\"}' >/dev/null\npitch_json=\"'$(curl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/pitches/generate -H '\"'Content-Type: application/json' -d '{\\\"candidate_count\\\":3,\\\"origin\\\":\\\"workspace\\\"}')\npitch_id=\"'$(printf '\"'%s' \\\"\"'$pitch_json\" | jq -r '\"'.snapshot.pitch_batches[0].pitches[0].id')\necho \\\"pitch_id=\"'$pitch_id\"\ncurl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/selections/pitch -H '\"'Content-Type: application/json' -d \\\"{\\\\\\\"pitch_id\\\\\\\":\\\\\\\"\"'$pitch_id'\"\\\\\\\",\\\\\\\"origin\\\\\\\":\\\\\\\"workspace\\\\\\\"}\\\" >/dev/null\ncharacter_json=\"'$(curl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/characters/generate -H '\"'Content-Type: application/json' -d '{\\\"candidate_count\\\":3,\\\"origin\\\":\\\"workspace\\\"}')\ncharacter_id=\"'$(printf '\"'%s' \\\"\"'$character_json\" | jq -r '\"'.snapshot.character_sheet_batches[0].character_sheets[0].id')\necho \\\"character_id=\"'$character_id\"\ncurl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/selections/character-sheet -H '\"'Content-Type: application/json' -d \\\"{\\\\\\\"character_sheet_id\\\\\\\":\\\\\\\"\"'$character_id'\"\\\\\\\",\\\\\\\"origin\\\\\\\":\\\\\\\"workspace\\\\\\\"}\\\" >/dev/null\nbeat_json=\"'$(curl -s -X POST http://localhost:8565/api/v1/sessions/$session_id/beats/generate -H '\"'Content-Type: application/json' -d '{\\\"guidance\\\":\\\"Keep the midpoint more awestruck than tense.\\\",\\\"focus_beats\\\":[\\\"midpoint\\\"],\\\"bedtime_goal\\\":\\\"Land in a visibly sleepy ending.\\\",\\\"origin\\\":\\\"workspace\\\"}')\nbeat_id=\"'$(printf '\"'%s' \\\"\"'$beat_json\" | jq -r '\"'.snapshot.beat_sheet_revisions[0].id')\necho \\\"beat_id=\"'$beat_id\"\necho \"session_url=http://localhost:8566/sessions/$session_id?stage=beats\"'",
+        "exit_code": 7,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"curl -s -X POST http://localhost:8565/api/v1/sessions -H 'Content-Type: application/json' -d '{\\\"working_title\\\":\\\"Beat QA Session\\\"}'\"",
+        "exit_code": 7,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/app/settings.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T06:28:36.051338Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/ai/__init__.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 604,
+    "file_paths": [
+      "backend/app/models/beat_sheet_generation.py",
+      "backend/app/ai/beat_sheet_generation.py",
+      "backend/app/ai/prompts/beat_sheet_generation.md",
+      "backend/app/services/beat_sheet_generation.py",
+      "backend/app/ai/__init__.py",
+      "backend/app/models/__init__.py",
+      "backend/app/services/__init__.py",
+      "backend/app/api/dependencies.py",
+      "backend/app/models/session.py",
+      "backend/app/repositories/sessions.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/services/sessions.py",
+      "backend/app/api/v1/routes/sessions.py",
+      "backend/app/services/story_tools.py",
+      "backend/tests/test_beat_sheet_generation_service.py",
+      "backend/tests/test_session_beat_sheet_service.py",
+      "backend/tests/test_session_api.py",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/BeatSheetStage.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/pages/session/SessionWorkspacePage.test.tsx",
+      "secrets.yaml",
+      ".artifacts/webapp-qa/beat-stage.spec.json",
+      ".artifacts/webapp-qa/beat-stage-mobile.spec.json",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/48_save_the_cat_beat_sheet_generation/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4cd8-0a85-77f3-9baf-1534e06b9872",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 30377344,
+      "input_tokens": 32953082,
+      "output_tokens": 113853,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T06:28:36.051338Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/ai/__init__.py:"
+  ],
+  "head_commit": "fc3d521d70fdc937c251465b010bcf4e8abf8e92",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "48-save-the-cat-beat-sheet-generation.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_48_save_the_cat_beat_sheet_generation",
+  "task_name_human": "48 save the cat beat sheet generation",
+  "task_name_system": "48_save_the_cat_beat_sheet_generation",
+  "timing": {
+    "duration_seconds": 3737.0,
+    "finished_at": "2026-04-02T00:20:55-07:00",
+    "started_at": "2026-04-01T23:18:38-07:00"
+  }
+}

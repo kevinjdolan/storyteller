@@ -47,9 +47,10 @@
     "44-pitch-generation-pipeline.md",
     "45-pitch-refinement-via-chat.md",
     "46-character-sheet-generation.md",
-    "47-character-refinement-via-chat.md"
+    "47-character-refinement-via-chat.md",
+    "48-save-the-cat-beat-sheet-generation.md"
   ],
-  "current_success_ref": "5730910e339370b79c3715f3623fc386acd1c363",
+  "current_success_ref": "fc3d521d70fdc937c251465b010bcf4e8abf8e92",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
