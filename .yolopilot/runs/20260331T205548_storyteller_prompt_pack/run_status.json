@@ -63,9 +63,10 @@
     "60-composition-job-orchestration.md",
     "61-segmented-writing-engine.md",
     "62-composition-streaming-events.md",
-    "63-composition-main-pane-ui.md"
+    "63-composition-main-pane-ui.md",
+    "64-agent-summary-messages-during-composition.md"
   ],
-  "current_success_ref": "f5dbbdafe67b0f945557ff8e3fed64fb444fb479",
+  "current_success_ref": "9f36be460b682bdedd84fd2e3bbc40ac05dd2cd5",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
