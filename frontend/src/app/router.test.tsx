@@ -92,6 +92,24 @@ const sampleSessionSnapshot = {
   latest_audio_asset: null,
 } as const
 
+const sampleSessionHydration = {
+  snapshot: sampleSessionSnapshot,
+  recent_history: {
+    session_id: sampleSessionSnapshot.id,
+    latest_sequence_number: 1,
+    events: [],
+  },
+  hydration: {
+    strategy: 'materialized_only',
+    materialized_through_sequence_number: 1,
+    replay_from_sequence_number: null,
+    replayed_event_count: 0,
+    latest_sequence_number: 1,
+    history_event_count: 0,
+    history_window_truncated: false,
+  },
+} as const
+
 function buildJsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -103,11 +121,11 @@ function buildJsonResponse(status: number, body: unknown) {
 function mockBackendOnline({
   createSessionId = 'fresh-session',
   sessions = sampleSessions,
-  sessionSnapshot = sampleSessionSnapshot,
+  sessionHydration = sampleSessionHydration,
 }: {
   createSessionId?: string
   sessions?: ReadonlyArray<Record<string, unknown>>
-  sessionSnapshot?: Record<string, unknown>
+  sessionHydration?: Record<string, unknown>
 } = {}) {
   vi.stubGlobal(
     'fetch',
@@ -128,17 +146,24 @@ function mockBackendOnline({
         return Promise.resolve(buildJsonResponse(200, sessions))
       }
 
-      if (url.includes('/api/v1/sessions/moonlit-harbor')) {
-        return Promise.resolve(buildJsonResponse(200, sessionSnapshot))
+      if (url.includes('/api/v1/sessions/moonlit-harbor/hydrate')) {
+        return Promise.resolve(buildJsonResponse(200, sessionHydration))
       }
 
-      if (url.includes('/api/v1/sessions/fresh-session')) {
+      if (url.includes('/api/v1/sessions/fresh-session/hydrate')) {
         return Promise.resolve(
           buildJsonResponse(200, {
-            ...sessionSnapshot,
-            id: 'fresh-session',
-            display_title: 'Fresh Session',
-            working_title: 'Fresh Session',
+            ...sessionHydration,
+            snapshot: {
+              ...(sessionHydration.snapshot as Record<string, unknown>),
+              id: 'fresh-session',
+              display_title: 'Fresh Session',
+              working_title: 'Fresh Session',
+            },
+            recent_history: {
+              ...(sessionHydration.recent_history as Record<string, unknown>),
+              session_id: 'fresh-session',
+            },
           }),
         )
       }

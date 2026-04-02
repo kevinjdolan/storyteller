@@ -700,6 +700,92 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows rejected chat-driven action echoes without mutating the visible workspace stage', async () => {
+    mockWorkspaceApi({
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response:
+          'I can shorten the story once story setup is ready.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              confidence: 0.82,
+              rationale: 'The user asked for a shorter runtime.',
+              requires_confirmation: false,
+              extracted_values: {
+                target_runtime_minutes: 8,
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'update_story_setup',
+              target_stage: 'story_setup',
+              decision: 'rejected',
+              summary:
+                'Complete or regenerate beats before changing story_setup.',
+              reasons: [
+                {
+                  code: 'prerequisite_stage_incomplete',
+                  message:
+                    'Complete or regenerate beats before changing story_setup.',
+                  stage: 'story_setup',
+                  related_stages: ['beats'],
+                  related_action_types: [],
+                },
+              ],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: 'Make it shorter.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      within(screen.getByRole('log')).getByText('Make it shorter.'),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'I can shorten the story once story setup is ready.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        "Couldn't update story setup yet. Finish Beat sheet first.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Refine the Save-the-Cat beats',
+      }),
+    ).toBeInTheDocument()
+  })
+
   it('submits slash commands through the explicit command contract', async () => {
     const { chatIntentRequests } = mockWorkspaceApi({
       chatIntentResponse: buildCommandChatIntentResponse,
@@ -788,6 +874,103 @@ describe('SessionWorkspacePage', () => {
 
     expect(
       await screen.findByText('Updated beat sheet notes from the workspace.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Beat sheet note')).toHaveValue(
+      'Add one calmer beat before the return home.',
+    )
+  })
+
+  it('replays durable ui-originated echoes and hydrated stage detail when resuming', async () => {
+    const resumedHistory = {
+      ...sampleHistory,
+      latest_sequence_number: 6,
+      events: [
+        ...sampleHistory.events,
+        {
+          id: 'event-5',
+          session_id: 'moonlit-harbor',
+          sequence_number: 5,
+          actor: {
+            actor_type: 'user',
+            actor_id: 'local-user',
+          },
+          event_type: 'ui.action.recorded',
+          stage: 'audio',
+          summary: 'Recorded UI action: navigate_to_stage.',
+          payload: {
+            schema_version: 1,
+            action: 'navigate_to_stage',
+            control_id: 'stage-navigator',
+            value_summary: 'Audio',
+            origin: 'workspace',
+          },
+          created_at: '2026-04-01T03:04:00Z',
+        },
+        {
+          id: 'event-6',
+          session_id: 'moonlit-harbor',
+          sequence_number: 6,
+          actor: {
+            actor_type: 'user',
+            actor_id: 'local-user',
+          },
+          event_type: 'content.user_edit.recorded',
+          stage: 'beats',
+          summary: 'Saved user edit for beat sheet.',
+          payload: {
+            schema_version: 1,
+            target_kind: 'beat_sheet',
+            changed_fields: ['detail'],
+            source: 'workspace',
+            field_values: {
+              detail: 'Add one calmer beat before the return home.',
+              control_id: 'stage-note-editor',
+            },
+            summary_text: 'Updated beat sheet notes from the workspace.',
+          },
+          created_at: '2026-04-01T03:05:00Z',
+        },
+      ],
+    } as const
+    const resumedHydration = {
+      ...sampleHydration,
+      snapshot: {
+        ...sampleSnapshot,
+        updated_at: '2026-04-01T03:05:00Z',
+        stage_states: sampleSnapshot.stage_states.map((stageState) =>
+          stageState.stage === 'beats'
+            ? {
+                ...stageState,
+                detail: 'Add one calmer beat before the return home.',
+                last_event_summary:
+                  'Updated beat sheet notes from the workspace.',
+                last_event_type: 'content.user_edit.recorded',
+                last_event_at: '2026-04-01T03:05:00Z',
+              }
+            : stageState,
+        ),
+      },
+      recent_history: resumedHistory,
+      hydration: {
+        ...sampleHydration.hydration,
+        materialized_through_sequence_number: 6,
+        latest_sequence_number: 6,
+        history_event_count: 6,
+      },
+    } as const
+
+    mockWorkspaceApi({
+      history: resumedHistory,
+      hydration: resumedHydration,
+    })
+
+    renderWorkspaceRoute()
+
+    expect(
+      await screen.findByText('Opened Audio in the main pane.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Updated beat sheet notes from the workspace.'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Beat sheet note')).toHaveValue(
       'Add one calmer beat before the return home.',

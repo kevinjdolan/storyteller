@@ -172,6 +172,84 @@ def test_record_session_ui_action_endpoint_returns_recorded_event(
     assert payload["payload"]["origin"] == "workspace"
 
 
+def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Bridge Replay"},
+    )
+    created = create_response.json()
+
+    parse_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/chat/intents",
+        json={
+            "message": "/next-stage",
+            "explicit_command": {
+                "command_id": "next_stage",
+                "source": "quick_action",
+                "proposed_actions": {
+                    "schema_version": 1,
+                    "actions": [
+                        {
+                            "schema_version": 1,
+                            "action_type": "navigate_to_stage",
+                            "target_stage": "tone",
+                            "confidence": 1,
+                            "rationale": "Explicit command requested navigation to Tone.",
+                            "requires_confirmation": False,
+                            "extracted_values": {},
+                        }
+                    ],
+                },
+            },
+        },
+    )
+
+    assert parse_response.status_code == 200
+    assert parse_response.json()["policy_evaluation"]["evaluated_actions"][0]["decision"] == (
+        "accepted"
+    )
+
+    ui_action_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/ui-actions",
+        json={
+            "action": "navigate_to_stage",
+            "stage": "tone",
+            "control_id": "chat-intent",
+            "value_summary": "Tone",
+            "origin": "chat",
+        },
+    )
+
+    assert ui_action_response.status_code == 201
+
+    hydration_response = session_api_client.get(f"/api/v1/sessions/{created['id']}/hydrate")
+
+    assert hydration_response.status_code == 200
+    payload = hydration_response.json()
+
+    assert [event["event_type"] for event in payload["recent_history"]["events"]] == [
+        "session.created",
+        "chat.message.recorded",
+        "chat.intent.parsed",
+        "chat.message.recorded",
+        "ui.action.recorded",
+    ]
+    assert payload["recent_history"]["events"][-1]["payload"] == {
+        "schema_version": 1,
+        "action": "navigate_to_stage",
+        "control_id": "chat-intent",
+        "value_summary": "Tone",
+        "origin": "chat",
+    }
+    assert payload["snapshot"]["current_stage"] == "genre"
+    assert payload["snapshot"]["resume_stage"] == "genre"
+    assert payload["hydration"]["strategy"] == "materialized_only"
+    assert payload["hydration"]["latest_sequence_number"] == 5
+    assert payload["hydration"]["history_event_count"] == 5
+
+
 def test_apply_session_context_update_endpoint_returns_updated_snapshot_and_event(
     session_api_client: TestClient,
 ) -> None:
@@ -225,6 +303,80 @@ def test_apply_session_context_update_endpoint_returns_updated_snapshot_and_even
         "Latest saved UI detail: Beat sheet: Add one calmer beat"
         in payload["snapshot"]["agent_context_summary"]
     )
+
+
+def test_hydrate_session_endpoint_replays_context_updates_into_resumed_snapshot(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    try:
+        service = SessionService(db_session)
+        snapshot = service.create_session(working_title="Replay Context")
+        for stage in (
+            WorkflowStage.GENRE,
+            WorkflowStage.TONE,
+            WorkflowStage.BRIEF,
+            WorkflowStage.PITCHES,
+            WorkflowStage.CHARACTERS,
+            WorkflowStage.BEATS,
+            WorkflowStage.STORY_SETUP,
+            WorkflowStage.COMPOSITION,
+            WorkflowStage.AUDIO,
+        ):
+            service.update_stage_state(
+                snapshot.id,
+                stage=stage,
+                status=WorkflowStageState.COMPLETED,
+                detail=f"Accepted {stage.value}.",
+            )
+    finally:
+        db_session.close()
+
+    ui_action_response = session_api_client.post(
+        f"/api/v1/sessions/{snapshot.id}/ui-actions",
+        json={
+            "action": "navigate_to_stage",
+            "stage": "audio",
+            "control_id": "stage-navigator",
+            "value_summary": "Audio",
+            "origin": "workspace",
+        },
+    )
+    assert ui_action_response.status_code == 201
+
+    context_update_response = session_api_client.post(
+        f"/api/v1/sessions/{snapshot.id}/context-updates",
+        json={
+            "target_kind": "stage_note",
+            "stage": "beats",
+            "control_id": "stage-note-editor",
+            "origin": "workspace",
+            "values": {
+                "detail": "Soften the midpoint and let the return home land faster.",
+            },
+        },
+    )
+    assert context_update_response.status_code == 200
+
+    hydration_response = session_api_client.get(f"/api/v1/sessions/{snapshot.id}/hydrate")
+
+    assert hydration_response.status_code == 200
+    payload = hydration_response.json()
+
+    assert [event["event_type"] for event in payload["recent_history"]["events"][-3:]] == [
+        "ui.action.recorded",
+        "workflow.stage_changed",
+        "content.user_edit.recorded",
+    ]
+    assert payload["snapshot"]["stage_states"][5]["detail"] == (
+        "Soften the midpoint and let the return home land faster."
+    )
+    assert payload["snapshot"]["stage_states"][7]["status"] == "needs_regeneration"
+    assert payload["snapshot"]["stage_states"][8]["status"] == "needs_regeneration"
+    assert payload["snapshot"]["resume_stage"] == "composition"
+    assert payload["snapshot"]["overall_status"] == "needs_regeneration"
+    assert payload["hydration"]["history_event_count"] == 13
+    assert payload["hydration"]["latest_sequence_number"] == 13
 
 
 def test_get_session_snapshot_endpoint_returns_404_for_missing_session(
@@ -288,6 +440,32 @@ def test_apply_session_context_update_endpoint_returns_422_for_unsupported_stage
 
     assert response.status_code == 422
     assert "does not support durable note edits" in response.json()["detail"]
+
+
+def test_apply_session_context_update_endpoint_returns_409_for_invalid_transition(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Transition Guard"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/context-updates",
+        json={
+            "target_kind": "stage_note",
+            "stage": "story_setup",
+            "values": {
+                "detail": "Target a shorter read-aloud.",
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert "cannot set 'story_setup' to 'in_progress' before prerequisites are completed" in (
+        response.json()["detail"]
+    )
 
 
 def test_create_session_endpoint_returns_a_fresh_snapshot(

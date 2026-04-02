@@ -25,6 +25,7 @@ from app.models import (
 from app.services import SessionActionPolicyService, SessionIntentParserService
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
+    InvalidStageTransitionError,
     SessionNotFoundError,
     SessionService,
     UnsupportedSessionContextUpdateError,
@@ -175,6 +176,11 @@ def apply_session_context_update(
     except UnsupportedSessionContextUpdateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 
