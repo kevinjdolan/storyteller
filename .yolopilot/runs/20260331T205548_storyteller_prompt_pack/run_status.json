@@ -50,9 +50,10 @@
     "47-character-refinement-via-chat.md",
     "48-save-the-cat-beat-sheet-generation.md",
     "49-beat-sheet-refinement-ui-and-chat.md",
-    "50-story-length-duration-and-chapter-setup.md"
+    "50-story-length-duration-and-chapter-setup.md",
+    "51-correlation-heuristics.md"
   ],
-  "current_success_ref": "f25fb051cd7d632c443ec945732f6b92c5b33f0d",
+  "current_success_ref": "57a789dbe6f76468368d3cbfc75ecc772ce2c197",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",

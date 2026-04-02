@@ -1,0 +1,125 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' frontend/src/features/session/StorySetupStage.test.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg --files frontend/src/features/session | rg 'StorySetupStage.*test'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"calm read-aloud pace|works out to about|Word count and runtime can stay approximate|scene count can stay loose|chapters and scenes are planning containers|words per minute\\\" frontend/src/pages/session/SessionWorkspacePage.test.tsx frontend/src -g '*test*'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run frontend/src/features/session/planningHeuristics.test.ts frontend/src/features/session/StorySetupStage.test.tsx frontend/src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"mkdir -p .artifacts/webapp-qa && cat > .artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json <<'EOF'\n{\n  \\\"url\\\": \\\"http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=story_setup\\\",\n  \\\"outputPath\\\": \\\"/workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.png\\\",\n  \\\"viewport\\\": { \\\"width\\\": 1440, \\\"height\\\": 1200 },\n  \\\"timeout\\\": 20000,\n  \\\"steps\\\": [\n    { \\\"action\\\": \\\"waitForText\\\", \\\"text\\\": \\\"Planning targets\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Composition can use this plan\\\" },\n    { \\\"action\\\": \\\"type\\\", \\\"selector\\\": \\\"section[aria-label='Story setup stage'] .form-columns > .field:nth-of-type(1) input\\\", \\\"text\\\": \\\"2400\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"2400 words in 14 minutes implies about 171 words per minute, which sits outside the usual bedtime range of 120-160.\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Use ~17 minutes\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Read-aloud estimates assume about 140 words per minute, with most bedtime narration landing between 120 and 160.\\\" },\n    { \\\"action\\\": \\\"click\\\", \\\"selector\\\": \\\".story-setup-stage__suggestion button\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"~17 minutes, 2400 words, 4 chapters, about 10 scenes\\\" },\n    { \\\"action\\\": \\\"screenshot\\\", \\\"fullPage\\\": true }\n  ]\n}\nEOF\n\ndocker compose -f infra/compose/docker-compose.yml run --rm browser npm run check -- --spec /workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cat > .artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json <<'EOF'\n{\n  \\\"url\\\": \\\"http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=story_setup\\\",\n  \\\"outputPath\\\": \\\"/workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.png\\\",\n  \\\"viewport\\\": { \\\"width\\\": 1440, \\\"height\\\": 1200 },\n  \\\"timeout\\\": 20000,\n  \\\"steps\\\": [\n    { \\\"action\\\": \\\"waitForText\\\", \\\"text\\\": \\\"Planning targets\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Composition can use this plan\\\" },\n    { \\\"action\\\": \\\"click\\\", \\\"selector\\\": \\\"section[aria-label='Story setup stage'] .form-columns > .field:nth-of-type(1) input\\\" },\n    { \\\"action\\\": \\\"press\\\", \\\"key\\\": \\\"Backspace\\\" },\n    { \\\"action\\\": \\\"press\\\", \\\"key\\\": \\\"Backspace\\\" },\n    { \\\"action\\\": \\\"press\\\", \\\"key\\\": \\\"Backspace\\\" },\n    { \\\"action\\\": \\\"press\\\", \\\"key\\\": \\\"Backspace\\\" },\n    { \\\"action\\\": \\\"type\\\", \\\"selector\\\": \\\"section[aria-label='Story setup stage'] .form-columns > .field:nth-of-type(1) input\\\", \\\"text\\\": \\\"2400\\\", \\\"clear\\\": false },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"2400 words in 14 minutes implies about 171 words per minute, which sits outside the usual bedtime range of 120-160.\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Use ~17 minutes\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Read-aloud estimates assume about 140 words per minute, with most bedtime narration landing between 120 and 160.\\\" },\n    { \\\"action\\\": \\\"click\\\", \\\"selector\\\": \\\".story-setup-stage__suggestion button\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"~17 minutes, 2400 words, 4 chapters, about 10 scenes\\\" },\n    { \\\"action\\\": \\\"screenshot\\\", \\\"fullPage\\\": true }\n  ]\n}\nEOF\n\ndocker compose -f infra/compose/docker-compose.yml run --rm browser npm run check -- --spec /workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cat > .artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json <<'EOF'\n{\n  \\\"url\\\": \\\"http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=story_setup\\\",\n  \\\"outputPath\\\": \\\"/workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.png\\\",\n  \\\"viewport\\\": { \\\"width\\\": 1440, \\\"height\\\": 1200 },\n  \\\"timeout\\\": 20000,\n  \\\"steps\\\": [\n    { \\\"action\\\": \\\"waitForText\\\", \\\"text\\\": \\\"Planning targets\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Composition can use this plan\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"14 minutes usually lands near 2000 words, often somewhere around 1700-2200.\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"At a calm pace, 14 minutes across 4 chapters often means about 500 words per chapter. That works out to about 2.5 scenes per chapter.\\\" },\n    { \\\"action\\\": \\\"assertText\\\", \\\"text\\\": \\\"Read-aloud estimates assume about 140 words per minute, with most bedtime narration landing between 120 and 160. Chapter sizing assumes individual chapters can drift by about 15% around the average rather than matching perfectly.\\\" },\n    { \\\"action\\\": \\\"screenshot\\\", \\\"fullPage\\\": true }\n  ]\n}\nEOF\n\ndocker compose -f infra/compose/docker-compose.yml run --rm browser npm run check -- --spec /workspace/.artifacts/webapp-qa/prompt-51-story-setup-heuristics.spec.json\"",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T09:01:37.779590Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/StorySetupStage.tsx:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 252,
+    "file_paths": [
+      "backend/app/services/planning_heuristics.py",
+      "backend/app/services/story_tools.py",
+      "backend/tests/test_planning_heuristics.py",
+      "frontend/src/features/session/planningHeuristics.ts",
+      "frontend/src/features/session/StorySetupStage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/planningHeuristics.test.ts",
+      "frontend/src/features/session/StorySetupStage.test.tsx",
+      "frontend/src/shared/ui/workflow.tsx",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/51_correlation_heuristics_for_word_count_runtime_and_chapters/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4d63-4898-7353-9cdb-189bb0992be9",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 7260416,
+      "input_tokens": 7930616,
+      "output_tokens": 45324,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T09:01:37.779590Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/StorySetupStage.tsx:"
+  ],
+  "head_commit": "57a789dbe6f76468368d3cbfc75ecc772ce2c197",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "51-correlation-heuristics.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_51_correlation_heuristics_for_word_count_runtime_and_chapters",
+  "task_name_human": "51 correlation heuristics for word count runtime and chapters",
+  "task_name_system": "51_correlation_heuristics_for_word_count_runtime_and_chapters",
+  "timing": {
+    "duration_seconds": 1387.0,
+    "finished_at": "2026-04-02T02:13:51-07:00",
+    "started_at": "2026-04-02T01:50:44-07:00"
+  }
+}
