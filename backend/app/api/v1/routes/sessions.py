@@ -5,20 +5,23 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.ai import BriefNormalizationAdapter, IntentParserAdapter
+from app.ai import BriefNormalizationAdapter, IntentParserAdapter, PitchGenerationAdapter
 from app.api.dependencies import (
     get_brief_normalization_adapter,
     get_db_session,
     get_intent_parser_adapter,
+    get_pitch_generation_adapter,
 )
 from app.models import (
     CreateSessionRequest,
+    GenerateSessionPitchesRequest,
     ParseChatIntentRequest,
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
     SaveSessionStoryBriefRequest,
     SelectSessionGenreRequest,
+    SelectSessionPitchRequest,
     SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
@@ -27,12 +30,14 @@ from app.models import (
     SessionEventView,
     SessionHistoryView,
     SessionHydrationView,
+    SessionPitchGenerationResponse,
     SessionSelectionResponse,
     SessionSnapshot,
     SessionStoryBriefResponse,
 )
 from app.services import (
     BriefNormalizationService,
+    PitchGenerationService,
     SessionActionPolicyService,
     SessionIntentParserService,
 )
@@ -41,6 +46,8 @@ from app.services.sessions import (
     InvalidStageTransitionError,
     SessionGenreSelectionError,
     SessionNotFoundError,
+    SessionPitchGenerationError,
+    SessionPitchSelectionError,
     SessionService,
     SessionStoryBriefSaveError,
     SessionToneSelectionError,
@@ -243,7 +250,92 @@ def save_session_story_brief(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except SessionStoryBriefSaveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/pitches/generate",
+    response_model=SessionPitchGenerationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate a durable pitch batch for a story session",
+)
+def generate_session_pitches(
+    session_id: str,
+    payload: GenerateSessionPitchesRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    pitch_generation_adapter: Annotated[
+        PitchGenerationAdapter,
+        Depends(get_pitch_generation_adapter),
+    ],
+) -> SessionPitchGenerationResponse:
+    try:
+        return SessionService(db_session).generate_pitches(
+            session_id,
+            candidate_count=payload.candidate_count,
+            guidance=payload.guidance,
+            preserve_selected_pitch=payload.preserve_selected_pitch,
+            origin=payload.origin,
+            pitch_generation_service=PitchGenerationService(
+                adapter=pitch_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionPitchGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/selections/pitch",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist the selected pitch for a story session",
+)
+def select_session_pitch(
+    session_id: str,
+    payload: SelectSessionPitchRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).select_pitch(
+            session_id,
+            pitch_id=payload.pitch_id,
+            generation_key=payload.generation_key,
+            pitch_index=payload.pitch_index,
+            title=payload.title,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SessionPitchSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

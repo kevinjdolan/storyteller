@@ -29,6 +29,11 @@ from app.services.jobs import (
     BackgroundJobServiceError,
     ClaimedBackgroundJob,
 )
+from app.services.pitch_generation import (
+    PitchGenerationService,
+    build_pitch_model_output,
+    evaluate_pitch_batch,
+)
 from app.services.session_hydration import (
     SessionHydrationNotFoundError,
     SessionHydrationService,
@@ -65,6 +70,7 @@ __all__ = [
     "BriefNormalizationService",
     "ClaimedBackgroundJob",
     "InvalidStageTransitionError",
+    "PitchGenerationService",
     "SessionActionPolicyService",
     "SessionActionPolicyServiceError",
     "SessionIntentParserService",
@@ -86,6 +92,8 @@ __all__ = [
     "apply_brief_normalization_overrides",
     "build_brief_model_output",
     "build_brief_normalization_result_from_existing",
+    "build_pitch_model_output",
+    "evaluate_pitch_batch",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
     "get_story_workflow_tool_schema_bundle",

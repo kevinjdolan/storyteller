@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.db import StoryBrief
+from app.db import Pitch, StoryBrief
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
+    AIOutputKind,
+    ExistingSelectedPitchContext,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
@@ -17,6 +20,7 @@ from app.models import (
     SessionEventActor,
     SessionEventView,
     SessionHistoryView,
+    SessionPitchGenerationResponse,
     SessionSelectionResponse,
     SessionSnapshot,
     SessionStoryBriefResponse,
@@ -37,6 +41,7 @@ from app.services.brief_normalization import (
 )
 from app.services.catalog import find_active_genre, find_active_tone_for_genre
 from app.services.event_log import SessionEventLogService
+from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
 from app.services.session_hydration import (
     SessionHydrationNotFoundError,
     SessionHydrationService,
@@ -72,6 +77,14 @@ class SessionToneSelectionError(SessionServiceError):
 
 class SessionStoryBriefSaveError(SessionServiceError):
     """Raised when a story brief save request cannot be fulfilled."""
+
+
+class SessionPitchGenerationError(SessionServiceError):
+    """Raised when a pitch generation request cannot be fulfilled."""
+
+
+class SessionPitchSelectionError(SessionServiceError):
+    """Raised when a pitch selection request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -276,8 +289,7 @@ class SessionService:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
         selected_count = sum(
-            value is not None
-            for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
+            value is not None for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
         )
         if selected_count != 1:
             raise ValueError("exactly one tone selector is required")
@@ -528,6 +540,271 @@ class SessionService:
         return SessionStoryBriefResponse(
             snapshot=self.load_session_snapshot(story_session.id),
             event=self._event_log.build_event_view(edit_event),
+        )
+
+    def generate_pitches(
+        self,
+        session_id: str,
+        *,
+        candidate_count: int = 3,
+        guidance: str | None = None,
+        preserve_selected_pitch: bool = False,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        pitch_generation_service: PitchGenerationService | None = None,
+    ) -> SessionPitchGenerationResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        if active_brief is None:
+            raise SessionPitchGenerationError(
+                "save a story brief before generating pitches",
+            )
+
+        generator = pitch_generation_service or PitchGenerationService()
+        current_selected_pitch = self._sessions.get_selected_pitch(session_id)
+        generation_result = generator.generate_pitches(
+            candidate_count=candidate_count,
+            raw_brief=active_brief.raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=active_brief.normalized_summary,
+            story_idea=active_brief.story_idea,
+            desired_themes=active_brief.desired_themes,
+            key_images=active_brief.key_images,
+            audience_notes=active_brief.audience_notes,
+            must_have_elements=active_brief.must_have_elements,
+            planning_notes=active_brief.planning_notes,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences or {}
+            ),
+            guidance=guidance,
+            selected_pitch=_build_selected_pitch_context(current_selected_pitch)
+            if current_selected_pitch is not None
+            else None,
+        )
+        if not generation_result.evaluation.passed:
+            raise SessionPitchGenerationError(
+                "pitch generation produced an invalid candidate batch"
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            status=WorkflowStageState.IN_PROGRESS,
+        )
+        stage_snapshot = stage_map[WorkflowStage.PITCHES]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+        stage_snapshot.detail = _build_pitch_generation_stage_detail(
+            len(generation_result.pitches),
+        )
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = None
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            detail=stage_snapshot.detail,
+        )
+
+        if not preserve_selected_pitch:
+            for pitch in self._sessions.list_pitches(session_id):
+                if pitch.is_selected:
+                    pitch.is_selected = False
+
+        generation_key = _build_pitch_generation_key()
+        model_output = build_pitch_model_output(generation_result)
+
+        for index, candidate in enumerate(generation_result.pitches, start=1):
+            self._session.add(
+                Pitch(
+                    session_id=story_session.id,
+                    story_brief_id=active_brief.id,
+                    generation_key=generation_key,
+                    pitch_index=index,
+                    title=candidate.title,
+                    logline=candidate.hook,
+                    summary=candidate.central_conflict,
+                    bedtime_notes=candidate.why_it_fits,
+                    model_output={
+                        **model_output,
+                        "candidate": candidate.model_dump(mode="json"),
+                        "pitch_index": index,
+                    },
+                    is_selected=False,
+                )
+            )
+
+        self._session.flush()
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.PITCHES,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        ai_event = self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.PITCH_BATCH,
+            stage=WorkflowStage.PITCHES,
+            generation_key=generation_key,
+            candidate_count=len(generation_result.pitches),
+            model_id=generation_result.model_id,
+            summary_text=_build_pitch_generation_summary_text(generation_result.pitches),
+            actor=actor,
+        )
+        stage_snapshot.last_event = ai_event
+        self._session.commit()
+        return SessionPitchGenerationResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(ai_event),
+        )
+
+    def select_pitch(
+        self,
+        session_id: str,
+        *,
+        pitch_id: str | None = None,
+        generation_key: str | None = None,
+        pitch_index: int | None = None,
+        title: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        matches = _find_matching_pitches(
+            self._sessions.list_pitches(session_id),
+            pitch_id=pitch_id,
+            generation_key=generation_key,
+            pitch_index=pitch_index,
+            title=title,
+        )
+        if not matches:
+            raise SessionPitchSelectionError("no generated pitch matched the requested selection")
+        if len(matches) > 1:
+            raise SessionPitchSelectionError(
+                "the requested pitch selection matched more than one candidate"
+            )
+
+        selected_pitch = matches[0]
+        previous_selected_pitch = self._sessions.get_selected_pitch(session_id)
+        for pitch in self._sessions.list_pitches(session_id):
+            pitch.is_selected = pitch.id == selected_pitch.id
+
+        now = utc_now()
+        selected_pitch.accepted_at = now
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.PITCHES]
+        previous_status = stage_snapshot.status
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_pitch_selection_detail(selected_pitch)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            detail=_build_pitch_invalidation_detail(selected_pitch),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        if previous_status != stage_snapshot.status or invalidated_stages:
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.PITCHES,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.PITCH,
+            stage=WorkflowStage.PITCHES,
+            label=selected_pitch.title,
+            selection_id=selected_pitch.id,
+            previous_selection_id=(
+                previous_selected_pitch.id if previous_selected_pitch is not None else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
         )
 
     def apply_context_update(
@@ -813,6 +1090,68 @@ def _build_tone_selection_detail(label: str) -> str:
 
 def _build_tone_invalidation_detail(label: str) -> str:
     return f"Tone changed to {label}. Revisit the brief and any downstream planning."
+
+
+def _build_selected_pitch_context(pitch: Pitch) -> ExistingSelectedPitchContext:
+    return ExistingSelectedPitchContext(
+        title=pitch.title,
+        hook=pitch.logline,
+        central_conflict=pitch.summary,
+        why_it_fits=pitch.bedtime_notes,
+    )
+
+
+def _build_pitch_generation_key() -> str:
+    return f"pitch-batch-{uuid4().hex[:12]}"
+
+
+def _build_pitch_generation_stage_detail(candidate_count: int) -> str:
+    return f"Generated {candidate_count} pitch options. Select one to continue."
+
+
+def _build_pitch_generation_summary_text(pitches: list[object]) -> str:
+    titles = [getattr(pitch, "title", None) for pitch in pitches]
+    summarized_titles = [title for title in titles if isinstance(title, str) and title]
+    if not summarized_titles:
+        return "Generated a fresh pitch batch."
+
+    return "Generated pitches: " + ", ".join(summarized_titles[:3]) + "."
+
+
+def _build_pitch_selection_detail(pitch: Pitch) -> str:
+    return f"Selected pitch: {pitch.title}. {pitch.logline}"
+
+
+def _build_pitch_invalidation_detail(pitch: Pitch) -> str:
+    return (
+        f"Pitch selection changed to {pitch.title}. Refresh character work and any downstream "
+        "planning."
+    )
+
+
+def _find_matching_pitches(
+    pitches: list[Pitch],
+    *,
+    pitch_id: str | None,
+    generation_key: str | None,
+    pitch_index: int | None,
+    title: str | None,
+) -> list[Pitch]:
+    title_match = title.lower() if title is not None else None
+    matches: list[Pitch] = []
+
+    for pitch in pitches:
+        if pitch_id is not None and pitch.id != pitch_id:
+            continue
+        if generation_key is not None and pitch.generation_key != generation_key:
+            continue
+        if pitch_index is not None and pitch.pitch_index != pitch_index:
+            continue
+        if title_match is not None and pitch.title.lower() != title_match:
+            continue
+        matches.append(pitch)
+
+    return matches
 
 
 _STORY_BRIEF_TEXT_FIELDS = (

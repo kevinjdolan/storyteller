@@ -117,6 +117,22 @@ export function buildInitialSessionChatMessages(
     )
   }
 
+  const latestPitchBatch = snapshot.pitch_batches?.[0]
+  if (
+    snapshot.selected_pitch == null &&
+    latestPitchBatch != null &&
+    latestPitchBatch.candidate_count > 0
+  ) {
+    messages.push(
+      createSessionChatMessage({
+        id: 'pitch-batch-ready',
+        role: 'assistant',
+        body: `Pitch options ready: ${latestPitchBatch.candidate_count} candidates are waiting in the newest batch.`,
+        createdAt: latestPitchBatch.created_at,
+      }),
+    )
+  }
+
   if (snapshot.selected_pitch != null) {
     messages.push(
       createSessionChatMessage({

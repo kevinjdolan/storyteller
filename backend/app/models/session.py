@@ -58,10 +58,23 @@ class PitchView(BaseModel):
     generation_key: str
     pitch_index: int
     title: str
+    hook: str
+    central_conflict: str | None = None
+    why_it_fits: str | None = None
     logline: str
     summary: str | None = None
     bedtime_notes: str | None = None
+    is_selected: bool = False
     accepted_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PitchBatchView(BaseModel):
+    generation_key: str
+    candidate_count: int
+    created_at: datetime
+    pitches: list[PitchView] = Field(default_factory=list)
 
 
 class CharacterSheetView(BaseModel):
@@ -225,6 +238,40 @@ class SessionSelectionResponse(BaseModel):
     event: SessionEventView
 
 
+class GenerateSessionPitchesRequest(BaseModel):
+    candidate_count: int = Field(default=3, ge=2, le=6)
+    guidance: str | None = Field(default=None, min_length=1)
+    preserve_selected_pitch: bool = False
+    origin: str = Field(default="workspace", min_length=1)
+
+
+class SessionPitchGenerationResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
+class SelectSessionPitchRequest(BaseModel):
+    pitch_id: str | None = Field(default=None, min_length=1)
+    generation_key: str | None = Field(default=None, min_length=1)
+    pitch_index: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectSessionPitchRequest":
+        selectors = [
+            self.pitch_id,
+            self.generation_key,
+            self.pitch_index,
+            self.title,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count == 0:
+            raise ValueError("one of pitch_id, generation_key, pitch_index, or title is required")
+
+        return self
+
+
 class SaveSessionStoryBriefRequest(BaseModel):
     story_idea: str | None = Field(default=None, min_length=1)
     desired_themes: str | None = Field(default=None, min_length=1)
@@ -319,6 +366,7 @@ class SessionSnapshot(BaseModel):
     progress: SessionProgress
     stage_states: list[SessionStageStateView] = Field(default_factory=list)
     story_brief: StoryBriefView | None = None
+    pitch_batches: list[PitchBatchView] = Field(default_factory=list)
     selected_pitch: PitchView | None = None
     selected_character_sheet: CharacterSheetView | None = None
     selected_beat_sheet: BeatSheetView | None = None
@@ -353,6 +401,7 @@ ExportAssetView = SessionAssetView
 
 
 SessionContextUpdateResponse.model_rebuild()
+SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()
 SessionStoryBriefResponse.model_rebuild()
 SessionHydrationView.model_rebuild()

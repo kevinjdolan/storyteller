@@ -12,7 +12,11 @@ from app.models import (
     BriefNormalizationInvocation,
     BriefNormalizationInvocationResult,
     BriefNormalizationStructuredOutput,
+    GeneratedPitchCandidate,
     NormalizedBriefPreferences,
+    PitchGenerationInvocation,
+    PitchGenerationInvocationResult,
+    PitchGenerationStructuredOutput,
     WorkflowStage,
     WorkflowStageState,
 )
@@ -41,11 +45,75 @@ class StubBriefNormalizationAdapter:
                     setting="a moonlit harbor",
                     emotional_goal="a calm return home",
                     constraint_notes=["End with the harbor settled and safe."],
-                    bedtime_safety_concerns=[
-                        "Keep every surprise quickly reassuring."
-                    ],
+                    bedtime_safety_concerns=["Keep every surprise quickly reassuring."],
                     candidate_motifs=["floating lanterns", "moonlit water"],
                 ),
+            ),
+            raw_response={"stub": True},
+        )
+
+    def close(self) -> None:
+        return None
+
+
+class StubPitchGenerationAdapter:
+    def __init__(self) -> None:
+        self.model_id = "gemini-3.1-pro"
+
+    def generate(
+        self,
+        invocation: PitchGenerationInvocation,
+    ) -> PitchGenerationInvocationResult:
+        return PitchGenerationInvocationResult(
+            invocation=invocation,
+            structured_output=PitchGenerationStructuredOutput(
+                pitches=[
+                    GeneratedPitchCandidate(
+                        title="The Juniper Lake Promise",
+                        hook=(
+                            "A child and an otter guardian carry drifting lanterns across the "
+                            "harbor so each light can return home before bed."
+                        ),
+                        central_conflict=(
+                            "They need to help each lantern find the right doorstep before one "
+                            "worried pause stretches the journey too long."
+                        ),
+                        why_it_fits=(
+                            "It fits the selected lane with soft movement, harbor wonder, and "
+                            "a clearly restful ending."
+                        ),
+                    ),
+                    GeneratedPitchCandidate(
+                        title="The Last Lantern Question",
+                        hook=(
+                            "When one lantern stays awake after the docks quiet down, the child "
+                            "follows it to learn what the night still needs."
+                        ),
+                        central_conflict=(
+                            "The answer must be found before everyone can settle, but each "
+                            "discovery has to stay gentle and reassuring."
+                        ),
+                        why_it_fits=(
+                            "It fits the brief by turning the harbor imagery into a bedtime-safe "
+                            "mystery with quick emotional repair."
+                        ),
+                    ),
+                    GeneratedPitchCandidate(
+                        title="Moonpost Harbor Map",
+                        hook=(
+                            "A hidden path of lights appears across the docks, leading the child "
+                            "and otter toward the night's unfinished kindness."
+                        ),
+                        central_conflict=(
+                            "Each stop asks them to choose patience and care before the last "
+                            "route home can become real."
+                        ),
+                        why_it_fits=(
+                            "It fits Quest Fantasy and Hushed Wonder by keeping the stakes soft "
+                            "while the imagery stays luminous."
+                        ),
+                    ),
+                ]
             ),
             raw_response={"stub": True},
         )
@@ -68,6 +136,7 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
     app = create_app()
     app.state.brief_normalization_adapter = StubBriefNormalizationAdapter()
+    app.state.pitch_generation_adapter = StubPitchGenerationAdapter()
 
     with TestClient(app) as test_client:
         yield test_client
@@ -195,9 +264,7 @@ def test_get_tone_catalog_endpoint_returns_only_requested_genre_tones(
         "gentle",
         "reverent",
     ]
-    assert payload[0]["default_planning_hints"]["ending_style"].startswith(
-        "return home carrying"
-    )
+    assert payload[0]["default_planning_hints"]["ending_style"].startswith("return home carrying")
 
 
 def test_get_tone_catalog_endpoint_returns_404_for_unknown_genre(
@@ -448,9 +515,7 @@ def test_save_story_brief_endpoint_persists_revisioned_brief_and_returns_snapsho
         in payload["snapshot"]["story_brief"]["raw_brief"]
     )
     assert payload["snapshot"]["stage_states"][2]["status"] == "completed"
-    assert payload["snapshot"]["stage_states"][2]["detail"].startswith(
-        "Saved story brief:"
-    )
+    assert payload["snapshot"]["stage_states"][2]["detail"].startswith("Saved story brief:")
 
 
 def test_save_story_brief_endpoint_requires_tone_prerequisite(
@@ -482,6 +547,133 @@ def test_save_story_brief_endpoint_requires_tone_prerequisite(
 
     assert response.status_code == 409
     assert "cannot set 'brief' to 'completed'" in response.json()["detail"]
+
+
+def test_generate_session_pitches_endpoint_persists_a_durable_batch(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Pitch API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={
+            "candidate_count": 3,
+            "guidance": "Keep the harbor mystery very gentle.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "ai.output.recorded"
+    assert payload["event"]["payload"]["output_kind"] == "pitch_batch"
+    assert payload["event"]["payload"]["candidate_count"] == 3
+    assert payload["snapshot"]["current_stage"] == "pitches"
+    assert payload["snapshot"]["resume_stage"] == "pitches"
+    assert payload["snapshot"]["selected_pitch"] is None
+    assert payload["snapshot"]["pitch_batches"][0]["candidate_count"] == 3
+    assert payload["snapshot"]["pitch_batches"][0]["pitches"][0]["title"] == (
+        "The Juniper Lake Promise"
+    )
+    assert payload["snapshot"]["stage_states"][3]["status"] == "in_progress"
+    assert payload["snapshot"]["stage_states"][3]["detail"] == (
+        "Generated 3 pitch options. Select one to continue."
+    )
+
+
+def test_select_session_pitch_endpoint_marks_choice_and_advances_to_characters(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Pitch Selection API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    first_pitch_id = generated["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/pitch",
+        json={
+            "pitch_id": first_pitch_id,
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["payload"]["selection_kind"] == "pitch"
+    assert payload["snapshot"]["current_stage"] == "characters"
+    assert payload["snapshot"]["resume_stage"] == "characters"
+    assert payload["snapshot"]["selected_pitch"]["id"] == first_pitch_id
+    assert payload["snapshot"]["selected_pitch"]["is_selected"] is True
+    assert payload["snapshot"]["stage_states"][3]["status"] == "completed"
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(

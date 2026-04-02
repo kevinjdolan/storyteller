@@ -20,6 +20,7 @@ from app.db import (
 )
 from app.db.base import utc_now
 from app.models import (
+    WORKFLOW_STAGE_SEQUENCE,
     ChatToUIActionBatch,
     ChatToUIActionType,
     CompositionStartMode,
@@ -61,6 +62,7 @@ from app.models.story_tools import (
 )
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobRecord, BackgroundJobService
+from app.services.pitch_generation import PitchGenerationService
 from app.services.sessions import SessionNotFoundError, SessionService
 
 ESTIMATED_NARRATION_WORDS_PER_MINUTE = 140
@@ -579,12 +581,20 @@ class StoryWorkflowActionRouter:
 
 
 class StoryWorkflowToolService:
-    def __init__(self, session: Session, registry: StoryWorkflowToolRegistry | None = None):
+    def __init__(
+        self,
+        session: Session,
+        registry: StoryWorkflowToolRegistry | None = None,
+        *,
+        pitch_generation_service: PitchGenerationService | None = None,
+    ):
         self._session = session
         self._registry = registry or get_story_workflow_tool_registry()
         self._sessions = SessionService(session)
         self._events = SessionEventLogService(session)
         self._jobs = BackgroundJobService(session)
+        self._pitch_generation = pitch_generation_service or PitchGenerationService()
+
     def enqueue(
         self,
         *,
@@ -621,10 +631,18 @@ class StoryWorkflowToolService:
         request: GeneratePitchesToolInput,
         actor: SessionEventActor | None = None,
     ) -> StageOperationToolResult:
-        self._sessions.load_session_snapshot(session_id)
+        response = self._sessions.generate_pitches(
+            session_id,
+            candidate_count=request.candidate_count,
+            guidance=request.guidance,
+            preserve_selected_pitch=request.preserve_selected_pitch,
+            actor=actor,
+            pitch_generation_service=self._pitch_generation,
+        )
+        snapshot = response.snapshot
         detail = _join_detail_parts(
             [
-                f"Generating {request.candidate_count} pitch candidates.",
+                snapshot.stage_states[WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.PITCHES)].detail,
                 _optional_detail("Guidance", request.guidance),
                 (
                     "Preserving the current selected pitch."
@@ -633,16 +651,10 @@ class StoryWorkflowToolService:
                 ),
             ]
         )
-        snapshot = self._transition_stage_to_in_progress(
-            session_id,
-            stage=WorkflowStage.PITCHES,
-            detail=detail,
-            actor=actor,
-        )
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.GENERATE_PITCHES,
             stage=WorkflowStage.PITCHES,
-            summary="Queued pitch generation from the current bedtime brief.",
+            summary="Generated a fresh pitch batch from the current bedtime brief.",
             stage_status=_stage_status(snapshot, WorkflowStage.PITCHES),
             detail=detail,
         )
@@ -761,11 +773,7 @@ class StoryWorkflowToolService:
                 "Generating the next beat-sheet revision.",
                 _optional_detail("Guidance", request.guidance),
                 _optional_detail("Instructions", request.instructions),
-                (
-                    "Focus beats: " + ", ".join(request.focus_beats)
-                    if request.focus_beats
-                    else None
-                ),
+                ("Focus beats: " + ", ".join(request.focus_beats) if request.focus_beats else None),
                 _optional_detail("Bedtime goal", request.bedtime_goal),
             ]
         )
@@ -919,8 +927,8 @@ class StoryWorkflowToolService:
             session_id,
             reason="Cancelled because a new composition pass started.",
         )
-        next_segment_index = (
-            request.restart_from_segment_index or self._next_segment_index(session_id)
+        next_segment_index = request.restart_from_segment_index or self._next_segment_index(
+            session_id
         )
         job = CompositionJob(
             session_id=session_id,

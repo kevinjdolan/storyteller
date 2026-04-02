@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         intent_parser_adapter = getattr(app.state, "intent_parser_adapter", None)
         if intent_parser_adapter is not None:
             intent_parser_adapter.close()
+        pitch_generation_adapter = getattr(app.state, "pitch_generation_adapter", None)
+        if pitch_generation_adapter is not None:
+            pitch_generation_adapter.close()
         object_storage.close()
         logger.info("Stopping %s", settings.app_name)
 

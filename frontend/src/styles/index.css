@@ -933,6 +933,50 @@ h4 {
   text-transform: uppercase;
 }
 
+.pitch-stage__controls,
+.pitch-stage__grid,
+.pitch-stage__history {
+  align-items: stretch;
+}
+
+.pitch-stage__card {
+  height: 100%;
+}
+
+.pitch-stage__card-copy {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pitch-stage__card-copy p {
+  margin: 0;
+}
+
+.pitch-stage__card-copy strong {
+  color: var(--color-ink-strong);
+}
+
+.pitch-stage__history {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pitch-stage__history-titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pitch-stage__history-titles span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: rgba(39, 69, 99, 0.08);
+  color: var(--color-brand);
+}
+
 .genre-selection-card__facts dd,
 .tone-selection-card__facts dd {
   margin: 0;

@@ -215,7 +215,7 @@ class SessionEventLogService:
         summary_text: str | None = None,
         actor: SessionEventActor | None = None,
     ) -> EventLogEntry:
-        return self.append_event(
+        event = self.append_event(
             session_id,
             actor=actor or DEFAULT_ASSISTANT_ACTOR,
             event_type=SessionEventType.AI_OUTPUT_RECORDED,
@@ -230,6 +230,8 @@ class SessionEventLogService:
                 summary=summary_text,
             ),
         )
+        self._refresh_memory_snapshot(session_id, event)
+        return event
 
     def record_user_edit(
         self,

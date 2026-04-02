@@ -20,6 +20,15 @@ from app.ai.intent_parser import (
     get_intent_parser_response_schema,
     render_intent_parser_prompt,
 )
+from app.ai.pitch_generation import (
+    GeminiPitchGenerationAdapter,
+    PitchGenerationAdapter,
+    PitchGenerationError,
+    PitchGenerationTransportError,
+    build_pitch_generation_invocation,
+    get_pitch_generation_response_schema,
+    render_pitch_generation_prompt,
+)
 
 __all__ = [
     "DEFAULT_GEMINI_BRIEF_NORMALIZATION_API_BASE_URL",
@@ -29,13 +38,20 @@ __all__ = [
     "BriefNormalizationTransportError",
     "GeminiBriefNormalizationAdapter",
     "GeminiIntentParserAdapter",
+    "GeminiPitchGenerationAdapter",
     "IntentParserAdapter",
     "IntentParserError",
     "IntentParserTransportError",
+    "PitchGenerationAdapter",
+    "PitchGenerationError",
+    "PitchGenerationTransportError",
     "build_brief_normalization_invocation",
     "build_intent_parser_invocation",
+    "build_pitch_generation_invocation",
     "get_brief_normalization_response_schema",
     "get_intent_parser_response_schema",
+    "get_pitch_generation_response_schema",
     "render_brief_normalization_prompt",
     "render_intent_parser_prompt",
+    "render_pitch_generation_prompt",
 ]

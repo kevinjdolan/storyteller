@@ -37,6 +37,7 @@ STORY_ASSET_KINDS = (
 class SessionAggregate:
     session: StorySession
     active_story_brief: StoryBrief | None
+    pitches: list[Pitch]
     selected_pitch: Pitch | None
     selected_character_sheet: CharacterSheet | None
     selected_beat_sheet: BeatSheet | None
@@ -93,6 +94,7 @@ class StorySessionRepository:
         return SessionAggregate(
             session=story_session,
             active_story_brief=self._get_active_story_brief(session_id),
+            pitches=self._list_pitches(session_id),
             selected_pitch=self._get_selected_pitch(session_id),
             selected_character_sheet=self._get_selected_character_sheet(session_id),
             selected_beat_sheet=self._get_selected_beat_sheet(session_id),
@@ -107,6 +109,12 @@ class StorySessionRepository:
 
     def get_active_story_brief(self, session_id: str) -> StoryBrief | None:
         return self._get_active_story_brief(session_id)
+
+    def get_selected_pitch(self, session_id: str) -> Pitch | None:
+        return self._get_selected_pitch(session_id)
+
+    def list_pitches(self, session_id: str) -> list[Pitch]:
+        return self._list_pitches(session_id)
 
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
@@ -138,6 +146,14 @@ class StorySessionRepository:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def _list_pitches(self, session_id: str) -> list[Pitch]:
+        stmt: Select[tuple[Pitch]] = (
+            select(Pitch)
+            .where(Pitch.session_id == session_id)
+            .order_by(Pitch.created_at.asc(), Pitch.pitch_index.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def _get_selected_character_sheet(self, session_id: str) -> CharacterSheet | None:
         stmt: Select[tuple[CharacterSheet]] = (

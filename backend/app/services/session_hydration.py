@@ -16,6 +16,7 @@ from app.models import (
     CompositionProgressEventPayload,
     ConversationMemorySnapshotView,
     NormalizedBriefPreferences,
+    PitchBatchView,
     PitchView,
     RecentSessionSummary,
     SessionAssetView,
@@ -169,9 +170,7 @@ def build_session_snapshot(
             working_title=story_session.working_title,
             pitch_title=aggregate.selected_pitch.title if aggregate.selected_pitch else None,
             story_idea=(
-                aggregate.active_story_brief.story_idea
-                if aggregate.active_story_brief
-                else None
+                aggregate.active_story_brief.story_idea if aggregate.active_story_brief else None
             ),
             normalized_summary=(
                 aggregate.active_story_brief.normalized_summary
@@ -195,6 +194,7 @@ def build_session_snapshot(
         progress=build_progress(story_session.workflow_stage_states),
         stage_states=build_stage_state_views(story_session.workflow_stage_states),
         story_brief=build_story_brief_view(aggregate.active_story_brief),
+        pitch_batches=build_pitch_batch_views(aggregate.pitches),
         selected_pitch=build_pitch_view(aggregate.selected_pitch),
         selected_character_sheet=build_character_sheet_view(aggregate.selected_character_sheet),
         selected_beat_sheet=build_beat_sheet_view(aggregate.selected_beat_sheet),
@@ -270,9 +270,8 @@ def replay_session_snapshot(
 
     for event in events:
         applied = False
-        if (
-            event.event_type == SessionEventType.WORKFLOW_STAGE_CHANGED.value
-            and isinstance(event.payload, WorkflowStageChangedEventPayload)
+        if event.event_type == SessionEventType.WORKFLOW_STAGE_CHANGED.value and isinstance(
+            event.payload, WorkflowStageChangedEventPayload
         ):
             apply_workflow_stage_changed_event(hydrated, event)
             applied = True
@@ -289,9 +288,8 @@ def replay_session_snapshot(
                 event_summary=event.summary,
             )
             applied = True
-        elif (
-            event.event_type == SessionEventType.AUDIO_PROGRESS_RECORDED.value
-            and isinstance(event.payload, AudioProgressEventPayload)
+        elif event.event_type == SessionEventType.AUDIO_PROGRESS_RECORDED.value and isinstance(
+            event.payload, AudioProgressEventPayload
         ):
             apply_job_progress_event(
                 hydrated,
@@ -346,9 +344,8 @@ def apply_workflow_stage_changed_event(snapshot: SessionSnapshot, event) -> None
             )
             continue
 
-        if (
-            stage_state.stage in payload.invalidated_stages
-            and is_event_newer(stage_state.last_event_at, event.created_at)
+        if stage_state.stage in payload.invalidated_stages and is_event_newer(
+            stage_state.last_event_at, event.created_at
         ):
             snapshot.stage_states[index] = stage_state.model_copy(
                 update={
@@ -404,8 +401,7 @@ def apply_job_progress_event(
         if latest_job is not None and latest_job.status in _ACTIVE_JOB_STATUS_VALUES:
             snapshot.active_audio_job = latest_job
         elif (
-            snapshot.active_audio_job is not None
-            and snapshot.active_audio_job.id == payload.job_id
+            snapshot.active_audio_job is not None and snapshot.active_audio_job.id == payload.job_id
         ):
             snapshot.active_audio_job = None
         job_detail = build_audio_job_detail(
@@ -447,7 +443,9 @@ def merge_composition_job_view(
     progress_percent = (
         payload.progress_percent
         if payload.progress_percent is not None
-        else current_job.progress_percent if current_job is not None else 0
+        else current_job.progress_percent
+        if current_job is not None
+        else 0
     )
     return CompositionJobView(
         id=payload.job_id,
@@ -457,7 +455,9 @@ def merge_composition_job_view(
         current_segment_index=(
             payload.current_segment_index
             if payload.current_segment_index is not None
-            else current_job.current_segment_index if current_job is not None else None
+            else current_job.current_segment_index
+            if current_job is not None
+            else None
         ),
         attempt_count=current_job.attempt_count if current_job is not None else 1,
         stop_reason=current_job.stop_reason if current_job is not None else None,
@@ -466,7 +466,9 @@ def merge_composition_job_view(
         completed_at=(
             event_created_at
             if payload.status == JobStatus.COMPLETED.value
-            else current_job.completed_at if current_job is not None else None
+            else current_job.completed_at
+            if current_job is not None
+            else None
         ),
         created_at=current_job.created_at if current_job is not None else event_created_at,
         updated_at=event_created_at,
@@ -489,9 +491,9 @@ def merge_audio_job_view(
     return AudioJobView(
         id=payload.job_id,
         status=payload.status,
-        voice_key=payload.voice_key if payload.voice_key is not None else (
-            current_job.voice_key if current_job is not None else None
-        ),
+        voice_key=payload.voice_key
+        if payload.voice_key is not None
+        else (current_job.voice_key if current_job is not None else None),
         playback_speed=current_job.playback_speed if current_job is not None else 1.0,
         include_background_music=(
             current_job.include_background_music if current_job is not None else False
@@ -500,12 +502,16 @@ def merge_audio_job_view(
         estimated_duration_seconds=(
             payload.estimated_duration_seconds
             if payload.estimated_duration_seconds is not None
-            else current_job.estimated_duration_seconds if current_job is not None else None
+            else current_job.estimated_duration_seconds
+            if current_job is not None
+            else None
         ),
         current_segment_index=(
             payload.current_segment_index
             if payload.current_segment_index is not None
-            else current_job.current_segment_index if current_job is not None else None
+            else current_job.current_segment_index
+            if current_job is not None
+            else None
         ),
         attempt_count=current_job.attempt_count if current_job is not None else 1,
         stop_reason=current_job.stop_reason if current_job is not None else None,
@@ -514,7 +520,9 @@ def merge_audio_job_view(
         completed_at=(
             event_created_at
             if payload.status == JobStatus.COMPLETED.value
-            else current_job.completed_at if current_job is not None else None
+            else current_job.completed_at
+            if current_job is not None
+            else None
         ),
         created_at=current_job.created_at if current_job is not None else event_created_at,
         updated_at=event_created_at,
@@ -730,11 +738,54 @@ def build_pitch_view(row) -> PitchView | None:
         generation_key=row.generation_key,
         pitch_index=row.pitch_index,
         title=row.title,
+        hook=row.logline,
+        central_conflict=row.summary,
+        why_it_fits=row.bedtime_notes,
         logline=row.logline,
         summary=row.summary,
         bedtime_notes=row.bedtime_notes,
+        is_selected=row.is_selected,
         accepted_at=row.accepted_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
+
+
+def build_pitch_batch_views(rows) -> list[PitchBatchView]:
+    batches: dict[str, list] = {}
+    batch_created_at: dict[str, datetime] = {}
+
+    for row in rows or []:
+        batches.setdefault(row.generation_key, []).append(row)
+        batch_created_at[row.generation_key] = min(
+            batch_created_at.get(row.generation_key, row.created_at),
+            row.created_at,
+        )
+
+    ordered_keys = sorted(
+        batches,
+        key=lambda generation_key: (
+            batch_created_at[generation_key],
+            generation_key,
+        ),
+        reverse=True,
+    )
+
+    return [
+        PitchBatchView(
+            generation_key=generation_key,
+            candidate_count=len(batches[generation_key]),
+            created_at=batch_created_at[generation_key],
+            pitches=[
+                build_pitch_view(row)
+                for row in sorted(
+                    batches[generation_key],
+                    key=lambda pitch: pitch.pitch_index,
+                )
+            ],
+        )
+        for generation_key in ordered_keys
+    ]
 
 
 def build_character_sheet_view(row) -> CharacterSheetView | None:

@@ -9,7 +9,9 @@ from app.ai import (
     BriefNormalizationAdapter,
     GeminiBriefNormalizationAdapter,
     GeminiIntentParserAdapter,
+    GeminiPitchGenerationAdapter,
     IntentParserAdapter,
+    PitchGenerationAdapter,
 )
 from app.db.session import get_session_factory
 from app.settings import AppSettings, get_settings
@@ -53,5 +55,18 @@ def get_brief_normalization_adapter(request: Request) -> BriefNormalizationAdapt
             model_id=settings.gemini.planning_model,
         )
         request.app.state.brief_normalization_adapter = adapter
+
+    return adapter
+
+
+def get_pitch_generation_adapter(request: Request) -> PitchGenerationAdapter:
+    adapter = getattr(request.app.state, "pitch_generation_adapter", None)
+    if adapter is None:
+        settings = get_app_settings(request)
+        adapter = GeminiPitchGenerationAdapter(
+            credential=settings.gemini_api_key,
+            model_id=settings.gemini.planning_model,
+        )
+        request.app.state.pitch_generation_adapter = adapter
 
     return adapter

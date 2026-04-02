@@ -77,10 +77,23 @@ export type PitchView = {
   generation_key: string
   pitch_index: number
   title: string
+  hook?: string | null
+  central_conflict?: string | null
+  why_it_fits?: string | null
   logline: string
   summary?: string | null
   bedtime_notes?: string | null
+  is_selected?: boolean
   accepted_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type PitchBatchView = {
+  generation_key: string
+  candidate_count: number
+  created_at: string
+  pitches: PitchView[]
 }
 
 export type BeatSheetView = {
@@ -270,6 +283,7 @@ export type SessionContextUpdateRequest = {
 export type SessionSnapshot = RecentSessionSummary & {
   stage_states: SessionStageStateView[]
   story_brief?: StoryBriefView | null
+  pitch_batches?: PitchBatchView[] | null
   selected_pitch?: PitchView | null
   selected_character_sheet?: CharacterSheetView | null
   selected_beat_sheet?: BeatSheetView | null
@@ -323,6 +337,26 @@ export type SessionStoryBriefResponse = {
   event: SessionHistoryEvent
 }
 
+export type GenerateSessionPitchesRequest = {
+  candidate_count?: number
+  guidance?: string | null
+  preserve_selected_pitch?: boolean
+  origin?: string
+}
+
+export type SelectSessionPitchRequest = {
+  pitch_id?: string | null
+  generation_key?: string | null
+  pitch_index?: number | null
+  title?: string | null
+  origin?: string
+}
+
+export type SessionPitchGenerationResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
 export function fetchRecentSessions(limit = 20) {
@@ -367,6 +401,26 @@ export function saveSessionStoryBrief(
 ) {
   return postJson<SessionStoryBriefResponse>(
     `/api/v1/sessions/${sessionId}/story-brief`,
+    body,
+  )
+}
+
+export function generateSessionPitches(
+  sessionId: string,
+  body: GenerateSessionPitchesRequest,
+) {
+  return postJson<SessionPitchGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/pitches/generate`,
+    body,
+  )
+}
+
+export function selectSessionPitch(
+  sessionId: string,
+  body: SelectSessionPitchRequest,
+) {
+  return postJson<SessionPitchGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/selections/pitch`,
     body,
   )
 }

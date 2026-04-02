@@ -183,6 +183,28 @@ function buildRecordedUiActionEcho(event: SessionHistoryEvent) {
   return event.summary
 }
 
+function buildAiOutputEcho(event: SessionHistoryEvent) {
+  if (!isRecord(event.payload)) {
+    return event.summary
+  }
+
+  const outputKind = readString(event.payload, 'output_kind')
+  const candidateCount = event.payload.candidate_count
+  const summary = readString(event.payload, 'summary')
+  const countLabel =
+    typeof candidateCount === 'number' ? `${candidateCount} ` : ''
+
+  if (outputKind === 'pitch_batch') {
+    if (summary != null) {
+      return `Generated ${countLabel}pitch options. ${summary}`
+    }
+
+    return `Generated ${countLabel}pitch options.`
+  }
+
+  return event.summary
+}
+
 function describeActionIntent(action: ChatToUiAction) {
   switch (action.action_type) {
     case 'navigate_to_stage':
@@ -416,6 +438,17 @@ function buildMessagesForHistoryEvent(
         id: event.id,
         role: 'action_echo',
         body: buildRecordedUiActionEcho(event),
+        createdAt: event.created_at,
+      }),
+    ]
+  }
+
+  if (event.event_type === 'ai.output.recorded') {
+    return [
+      createSessionChatMessage({
+        id: event.id,
+        role: 'assistant',
+        body: buildAiOutputEcho(event),
         createdAt: event.created_at,
       }),
     ]

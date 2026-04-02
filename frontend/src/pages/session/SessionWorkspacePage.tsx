@@ -3,9 +3,11 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
+  generateSessionPitches,
   parseSessionChatIntent,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  selectSessionPitch,
   type NormalizedBriefPreferencesView,
   type SessionHistoryEvent,
   type SessionSnapshot,
@@ -14,6 +16,7 @@ import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
+import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
 import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
 import { ToneSelectionStage } from '../../features/session/ToneSelectionStage.tsx'
 import {
@@ -800,6 +803,56 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyPitchGeneration(options: {
+    candidateCount: number
+    guidance?: string | null
+    origin: string
+    preserveSelectedPitch?: boolean
+    previewCurrentStage?: boolean
+  }) {
+    const result = await generateSessionPitches(sessionId, {
+      candidate_count: options.candidateCount,
+      guidance: options.guidance ?? null,
+      preserve_selected_pitch: options.preserveSelectedPitch ?? false,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
+  async function applyPitchSelection(options: {
+    generationKey?: string | null
+    origin: string
+    pitchId?: string | null
+    pitchIndex?: number | null
+    previewCurrentStage?: boolean
+    title?: string | null
+  }) {
+    const result = await selectSessionPitch(sessionId, {
+      pitch_id: options.pitchId ?? null,
+      generation_key: options.generationKey ?? null,
+      pitch_index: options.pitchIndex ?? null,
+      title: options.title ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -847,6 +900,28 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         normalizedSummary: action.extracted_values.normalized_summary,
         planningNotes: action.extracted_values.planning_notes ?? null,
         editMode: action.extracted_values.edit_mode,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'regenerate_pitches') {
+      await applyPitchGeneration({
+        candidateCount: action.extracted_values.candidate_count ?? 3,
+        guidance: action.extracted_values.guidance ?? null,
+        preserveSelectedPitch:
+          action.extracted_values.preserve_selected_pitch ?? false,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'select_pitch') {
+      await applyPitchSelection({
+        pitchId: action.extracted_values.pitch_id ?? null,
+        generationKey: action.extracted_values.generation_key ?? null,
+        pitchIndex: action.extracted_values.pitch_index ?? null,
+        title: action.extracted_values.title ?? null,
         origin: 'chat',
       })
       return
@@ -923,6 +998,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           action.action_type !== 'select_genre' &&
           action.action_type !== 'select_tone' &&
           action.action_type !== 'update_story_brief' &&
+          action.action_type !== 'regenerate_pitches' &&
+          action.action_type !== 'select_pitch' &&
           action.action_type !== 'open_finalize_view')
       ) {
         continue
@@ -1212,6 +1289,14 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 <StoryBriefStage
                   onPreviewStage={setPreviewStage}
                   onSaveStoryBrief={applyStoryBriefSave}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'pitches' ? (
+                <PitchSelectionStage
+                  onGeneratePitches={applyPitchGeneration}
+                  onPreviewStage={setPreviewStage}
+                  onSelectPitch={applyPitchSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />
