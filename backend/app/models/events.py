@@ -7,6 +7,7 @@ from typing import Any, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.composition_interruptions import CompositionInterruptionRequestView
 from app.models.intent_parser import ParsedChatIntentResponse
 from app.models.story_outline import StoryOutlineChangeImpact
 from app.models.workflow import WorkflowStage, WorkflowStageState
@@ -172,6 +173,7 @@ class CompositionProgressEventPayload(EventPayload):
     current_segment_index: int | None = None
     total_segments: int | None = None
     segment_id: str | None = None
+    interruption_request: CompositionInterruptionRequestView | None = None
 
 
 class AudioProgressEventPayload(EventPayload):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import Select, desc, func, select
+from sqlalchemy import Select, desc, func, insert, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import EventActorType, EventLogEntry
@@ -22,19 +23,32 @@ class EventLogRepository:
         payload: dict | None,
         stage: WorkflowStage | None = None,
     ) -> EventLogEntry:
-        entry = EventLogEntry(
-            session_id=session_id,
-            sequence_number=self._next_sequence_number(session_id),
-            actor_type=actor_type,
-            actor_id=actor_id,
-            event_type=event_type,
-            stage=stage,
-            summary=summary,
-            payload=payload,
+        values = {
+            "session_id": session_id,
+            "actor_type": actor_type,
+            "actor_id": actor_id,
+            "event_type": event_type,
+            "stage": stage,
+            "summary": summary,
+            "payload": payload,
+        }
+        for _attempt in range(5):
+            values["sequence_number"] = self._next_sequence_number(session_id)
+            try:
+                with self._session.begin_nested():
+                    stmt = insert(EventLogEntry).values(**values).returning(EventLogEntry.id)
+                    entry_id = self._session.execute(stmt).scalar_one()
+                entry = self._session.get(EventLogEntry, entry_id)
+                if entry is None:  # pragma: no cover - defensive guard
+                    raise RuntimeError("inserted event log entry could not be reloaded")
+                return entry
+            except IntegrityError as exc:
+                if not _is_event_sequence_conflict(exc):
+                    raise
+
+        raise RuntimeError(
+            "failed to allocate a unique event sequence number after retrying"
         )
-        self._session.add(entry)
-        self._session.flush()
-        return entry
 
     def get_latest_sequence_number(self, session_id: str) -> int | None:
         stmt = select(func.max(EventLogEntry.sequence_number)).where(
@@ -76,3 +90,11 @@ class EventLogRepository:
             EventLogEntry.session_id == session_id
         )
         return int(self._session.execute(stmt).scalar_one())
+
+
+def _is_event_sequence_conflict(error: IntegrityError) -> bool:
+    message = str(error.orig)
+    return (
+        "uq_event_log_entries_session_id_sequence_number" in message
+        or "event_log_entries.session_id, event_log_entries.sequence_number" in message
+    )

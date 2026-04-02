@@ -133,6 +133,7 @@ from app.models.composition_generation import (
     CompositionSegmentGenerationStructuredOutput,
     normalize_optional_composition_generation_text,
 )
+from app.models.composition_interruptions import CompositionInterruptionRequestView
 from app.models.composition_prompt import (
     COMPOSITION_PROMPT_ASSEMBLY_SCHEMA_VERSION,
     COMPOSITION_PROMPT_ASSEMBLY_VERSION,
@@ -456,6 +457,7 @@ __all__ = [
     "CompositionChunkEventPayload",
     "CompositionChunkKind",
     "CompositionChunkRealtimeEvent",
+    "CompositionInterruptionRequestView",
     "CompositionProgressEventPayload",
     "CompositionJobView",
     "CompositionToolResult",

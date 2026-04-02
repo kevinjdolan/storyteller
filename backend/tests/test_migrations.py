@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from alembic import command
@@ -13,6 +14,7 @@ EXPECTED_TABLES = {
     "beat_sheets",
     "character_sheets",
     "composition_jobs",
+    "composition_interruption_requests",
     "composition_segments",
     "continuity_bibles",
     "event_log_entries",
@@ -155,6 +157,25 @@ EXPECTED_COMPOSITION_SEGMENT_COLUMNS = {
     "created_at",
     "updated_at",
 }
+EXPECTED_COMPOSITION_INTERRUPTION_REQUEST_COLUMNS = {
+    "id",
+    "session_id",
+    "composition_job_id",
+    "request_kind",
+    "state",
+    "origin",
+    "instructions",
+    "rewrite_from_segment_index",
+    "requested_status",
+    "requested_segment_id",
+    "requested_segment_index",
+    "requested_progress_percent",
+    "resolution_summary",
+    "metadata_json",
+    "resolved_at",
+    "created_at",
+    "updated_at",
+}
 EXPECTED_MODEL_USAGE_EVENT_COLUMNS = {
     "id",
     "session_id",
@@ -243,6 +264,10 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
         database_url,
         "composition_segments",
     )
+    assert EXPECTED_COMPOSITION_INTERRUPTION_REQUEST_COLUMNS <= _get_column_names(
+        database_url,
+        "composition_interruption_requests",
+    )
     assert EXPECTED_MODEL_USAGE_EVENT_COLUMNS <= _get_column_names(
         database_url,
         "model_usage_events",
@@ -290,3 +315,15 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
         database_url,
         "continuity_bibles",
     )
+
+
+def test_migration_revision_ids_fit_the_alembic_version_column() -> None:
+    versions_dir = BACKEND_ROOT / "migrations" / "versions"
+    revision_pattern = re.compile(r'^revision = "([^"]+)"$', re.MULTILINE)
+
+    for migration_path in versions_dir.glob("*.py"):
+        revision_match = revision_pattern.search(migration_path.read_text())
+        assert revision_match is not None, f"missing revision id in {migration_path.name}"
+        assert len(revision_match.group(1)) <= 32, (
+            f"{migration_path.name} uses a revision id longer than 32 characters"
+        )

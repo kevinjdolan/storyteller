@@ -311,9 +311,12 @@ def _build_plan_summary_response(snapshot: SessionSnapshot) -> str:
             plan_parts.append(", ".join(setup_parts))
 
     if snapshot.active_composition_job is not None:
-        plan_parts.append(
-            f"writing is {snapshot.active_composition_job.status.replace('_', ' ')}"
-        )
+        if snapshot.active_composition_job.interruption_request is not None:
+            plan_parts.append(snapshot.active_composition_job.interruption_request.message)
+        else:
+            plan_parts.append(
+                f"writing is {snapshot.active_composition_job.status.replace('_', ' ')}"
+            )
     elif snapshot.active_audio_job is not None:
         plan_parts.append(
             f"audio is {snapshot.active_audio_job.status.replace('_', ' ')}"

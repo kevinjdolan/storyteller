@@ -19,6 +19,9 @@ from app.db import (
     AssetKind,
     AssetStatus,
     BackgroundJob,
+    CompositionInterruptionKind,
+    CompositionInterruptionRequest,
+    CompositionInterruptionState,
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
@@ -29,6 +32,7 @@ from app.db.base import utc_now
 from app.models import (
     COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
     ChatMessageRole,
+    CompositionInterruptionRequestView,
     CompositionPromptAssemblyInput,
     CompositionSegmentCarryoverContext,
     CompositionSegmentCarryoverItem,
@@ -39,6 +43,7 @@ from app.models import (
     WorkflowStage,
     WorkflowStageState,
 )
+from app.models.composition_interruptions import build_composition_interruption_message
 from app.services.assets import SessionAssetService
 from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
 from app.services.composition_streaming import (
@@ -83,6 +88,12 @@ class CompositionJobStartResult:
     job: CompositionJob
     first_segment: CompositionSegment
     total_segments: int
+
+
+@dataclass(frozen=True)
+class CompositionInterruptionActionResult:
+    request: CompositionInterruptionRequest
+    response_job_id: str
 
 
 @dataclass(frozen=True)
@@ -649,6 +660,7 @@ class CompositionJobService:
         composition_job_id: str,
         *,
         actor: SessionEventActor | None = None,
+        origin: str = "workspace",
     ) -> CompositionJob:
         job = self._require_job(session_id, composition_job_id)
         if job.status not in {JobStatus.QUEUED, JobStatus.IN_PROGRESS}:
@@ -657,31 +669,89 @@ class CompositionJobService:
             )
 
         current_segment = self._current_segment(job)
-        job.status = JobStatus.PAUSED
-        if current_segment is not None and current_segment.status in {
-            JobStatus.QUEUED,
-            JobStatus.IN_PROGRESS,
-        }:
-            current_segment.status = JobStatus.PAUSED
-        self._events.record_composition_progress(
-            session_id,
-            job_id=job.id,
-            status=JobStatus.PAUSED,
-            progress_percent=job.progress_percent,
-            current_segment_index=job.current_segment_index,
-            total_segments=_read_total_segments(job),
-            segment_id=current_segment.id if current_segment is not None else None,
-            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        request = self._queue_interruption_request(
+            job,
+            request_kind=CompositionInterruptionKind.PAUSE,
+            origin=origin,
+            actor=actor,
         )
-        self._sessions.update_stage_state(
-            session_id,
-            stage=WorkflowStage.COMPOSITION,
-            status=WorkflowStageState.IN_PROGRESS,
-            detail=f"Writing paused at {round(job.progress_percent)}% complete.",
-            actor=actor or DEFAULT_SYSTEM_ACTOR,
-        )
+        if job.status == JobStatus.QUEUED:
+            self._apply_pause_request(
+                job,
+                request,
+                current_segment=current_segment,
+                actor=actor,
+            )
+        else:
+            self._record_interruption_request_progress(
+                job,
+                current_segment=current_segment,
+                request=request,
+                actor=actor,
+            )
+            self._sessions.update_stage_state(
+                session_id,
+                stage=WorkflowStage.COMPOSITION,
+                status=WorkflowStageState.IN_PROGRESS,
+                detail=_build_interruption_message(request),
+                actor=actor or DEFAULT_SYSTEM_ACTOR,
+            )
         self._session.commit()
+        self._session.refresh(job)
         return job
+
+    def request_redirect(
+        self,
+        session_id: str,
+        composition_job_id: str,
+        *,
+        instructions: str,
+        rewrite_from_segment_index: int | None = None,
+        actor: SessionEventActor | None = None,
+        origin: str = "workspace",
+    ) -> CompositionInterruptionActionResult:
+        job = self._require_job(session_id, composition_job_id)
+        if job.status not in {JobStatus.QUEUED, JobStatus.IN_PROGRESS, JobStatus.PAUSED}:
+            raise CompositionJobStateError("redirect requires an active composition job")
+
+        request = self._queue_interruption_request(
+            job,
+            request_kind=CompositionInterruptionKind.REDIRECT,
+            origin=origin,
+            actor=actor,
+            instructions=instructions,
+            rewrite_from_segment_index=rewrite_from_segment_index,
+        )
+        current_segment = self._current_segment(job)
+        response_job_id = job.id
+        if job.status == JobStatus.IN_PROGRESS:
+            self._record_interruption_request_progress(
+                job,
+                current_segment=current_segment,
+                request=request,
+                actor=actor,
+            )
+            self._sessions.update_stage_state(
+                session_id,
+                stage=WorkflowStage.COMPOSITION,
+                status=WorkflowStageState.IN_PROGRESS,
+                detail=_build_interruption_message(request),
+                actor=actor or DEFAULT_SYSTEM_ACTOR,
+            )
+            self._session.commit()
+        else:
+            response_job_id = self._apply_redirect_request(
+                job,
+                request,
+                current_segment=current_segment,
+                actor=actor,
+            )
+            self._session.commit()
+
+        return CompositionInterruptionActionResult(
+            request=request,
+            response_job_id=response_job_id,
+        )
 
     def resume_job(
         self,
@@ -696,6 +766,11 @@ class CompositionJobService:
                 f"composition job {composition_job_id!r} can only resume from paused",
             )
 
+        self._resolve_interruption_requests(
+            job,
+            state=CompositionInterruptionState.SUPERSEDED,
+            resolution_summary="Resume cleared any pending interruption requests.",
+        )
         current_segment = self._current_segment(job)
         job.status = JobStatus.QUEUED
         job.stop_reason = None
@@ -792,6 +867,242 @@ class CompositionJobService:
             )
         self._session.flush()
 
+    def _queue_interruption_request(
+        self,
+        job: CompositionJob,
+        *,
+        request_kind: CompositionInterruptionKind,
+        origin: str,
+        actor: SessionEventActor | None,
+        instructions: str | None = None,
+        rewrite_from_segment_index: int | None = None,
+    ) -> CompositionInterruptionRequest:
+        existing_request = self._active_interruption_request(job)
+        if (
+            existing_request is not None
+            and existing_request.state == CompositionInterruptionState.APPLYING
+        ):
+            raise CompositionJobStateError(
+                "the active composition job is already applying another interruption request",
+            )
+        if existing_request is not None:
+            self._resolve_interruption_requests(
+                job,
+                state=CompositionInterruptionState.SUPERSEDED,
+                resolution_summary="Superseded by a newer interruption request.",
+            )
+
+        current_segment = self._current_segment(job)
+        normalized_instructions = instructions.strip() if instructions else None
+        normalized_origin = origin.strip() or "workspace"
+        request = CompositionInterruptionRequest(
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            request_kind=request_kind,
+            state=CompositionInterruptionState.REQUESTED,
+            origin=normalized_origin,
+            instructions=normalized_instructions,
+            rewrite_from_segment_index=(
+                rewrite_from_segment_index
+                if rewrite_from_segment_index is not None
+                else (
+                    current_segment.segment_index
+                    if current_segment is not None
+                    else job.current_segment_index
+                )
+                if request_kind == CompositionInterruptionKind.REDIRECT
+                else None
+            ),
+            requested_status=job.status,
+            requested_segment_id=current_segment.id if current_segment is not None else None,
+            requested_segment_index=(
+                current_segment.segment_index
+                if current_segment is not None
+                else job.current_segment_index
+            ),
+            requested_progress_percent=job.progress_percent,
+            metadata_json={
+                "current_segment_summary": (
+                    current_segment.planned_summary if current_segment is not None else None
+                ),
+                "latest_partial_output": _read_optional_prompt_text(
+                    _read_metadata(job),
+                    "latest_partial_output",
+                ),
+                "latest_segment_summary": _read_optional_prompt_text(
+                    _read_metadata(job),
+                    "latest_segment_summary",
+                ),
+            },
+        )
+        self._session.add(request)
+        self._session.flush()
+        return request
+
+    def _record_interruption_request_progress(
+        self,
+        job: CompositionJob,
+        *,
+        current_segment: CompositionSegment | None,
+        request: CompositionInterruptionRequest,
+        actor: SessionEventActor | None,
+    ) -> None:
+        self._events.record_composition_progress(
+            job.session_id,
+            job_id=job.id,
+            status=job.status,
+            progress_percent=job.progress_percent,
+            current_segment_index=job.current_segment_index,
+            total_segments=_read_total_segments(job),
+            segment_id=current_segment.id if current_segment is not None else None,
+            interruption_request=_build_composition_interruption_request_view(request),
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+
+    def _apply_pause_request(
+        self,
+        job: CompositionJob,
+        request: CompositionInterruptionRequest,
+        *,
+        current_segment: CompositionSegment | None,
+        actor: SessionEventActor | None,
+    ) -> None:
+        job.status = JobStatus.PAUSED
+        job.stop_reason = None
+        if current_segment is not None and current_segment.status in {
+            JobStatus.QUEUED,
+            JobStatus.IN_PROGRESS,
+        }:
+            current_segment.status = JobStatus.PAUSED
+        request.state = CompositionInterruptionState.APPLIED
+        request.resolution_summary = (
+            "Pause applied after saving the latest durable writing checkpoint."
+        )
+        request.resolved_at = utc_now()
+        self._events.record_composition_progress(
+            job.session_id,
+            job_id=job.id,
+            status=JobStatus.PAUSED,
+            progress_percent=job.progress_percent,
+            current_segment_index=job.current_segment_index,
+            total_segments=_read_total_segments(job),
+            segment_id=current_segment.id if current_segment is not None else None,
+            interruption_request=_build_composition_interruption_request_view(request),
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        self._sessions.update_stage_state(
+            job.session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=WorkflowStageState.IN_PROGRESS,
+            detail=f"Writing paused at {round(job.progress_percent)}% complete.",
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+
+    def _apply_redirect_request(
+        self,
+        job: CompositionJob,
+        request: CompositionInterruptionRequest,
+        *,
+        current_segment: CompositionSegment | None,
+        actor: SessionEventActor | None,
+    ) -> str:
+        request.state = CompositionInterruptionState.APPLYING
+        self._record_interruption_request_progress(
+            job,
+            current_segment=current_segment,
+            request=request,
+            actor=actor,
+        )
+        self._sessions.update_stage_state(
+            job.session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=WorkflowStageState.IN_PROGRESS,
+            detail=_build_interruption_message(request),
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        rewrite_from_segment_index = (
+            request.rewrite_from_segment_index
+            or job.current_segment_index
+            or (current_segment.segment_index if current_segment is not None else 1)
+        )
+        request.state = CompositionInterruptionState.APPLIED
+        request.resolution_summary = (
+            "Redirect applied from segment "
+            f"{rewrite_from_segment_index} after a durable checkpoint."
+        )
+        request.resolved_at = utc_now()
+        self._session.flush()
+        cancel_reason = (
+            "Stopped after saving the latest checkpoint so the redirect can restart the draft."
+        )
+        self._cancel_job_rows(job, reason=cancel_reason)
+        self._events.record_composition_progress(
+            job.session_id,
+            job_id=job.id,
+            status=JobStatus.CANCELLED,
+            progress_percent=job.progress_percent,
+            current_segment_index=job.current_segment_index,
+            total_segments=_read_total_segments(job),
+            segment_id=current_segment.id if current_segment is not None else None,
+            interruption_request=_build_composition_interruption_request_view(request),
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        start_result = self.start_job(
+            job.session_id,
+            job_kind=CompositionJobKind.REWRITE,
+            start_segment_index=rewrite_from_segment_index,
+            instructions=request.instructions,
+            actor=actor,
+            cancel_reason="Cancelled because a newer redirect replaced this composition pass.",
+        )
+        return start_result.job.id
+
+    def _active_interruption_request(
+        self,
+        job: CompositionJob,
+    ) -> CompositionInterruptionRequest | None:
+        stmt: Select[tuple[CompositionInterruptionRequest]] = (
+            select(CompositionInterruptionRequest)
+            .where(
+                CompositionInterruptionRequest.composition_job_id == job.id,
+                CompositionInterruptionRequest.state.in_(
+                    (
+                        CompositionInterruptionState.REQUESTED,
+                        CompositionInterruptionState.APPLYING,
+                    )
+                ),
+            )
+            .order_by(CompositionInterruptionRequest.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _resolve_interruption_requests(
+        self,
+        job: CompositionJob,
+        *,
+        state: CompositionInterruptionState,
+        resolution_summary: str,
+    ) -> None:
+        stmt: Select[tuple[CompositionInterruptionRequest]] = (
+            select(CompositionInterruptionRequest)
+            .where(
+                CompositionInterruptionRequest.composition_job_id == job.id,
+                CompositionInterruptionRequest.state.in_(
+                    (
+                        CompositionInterruptionState.REQUESTED,
+                        CompositionInterruptionState.APPLYING,
+                    )
+                ),
+            )
+            .order_by(CompositionInterruptionRequest.created_at.asc())
+        )
+        resolved_at = utc_now()
+        for request in self._session.execute(stmt).scalars().all():
+            request.state = state
+            request.resolution_summary = resolution_summary
+            request.resolved_at = resolved_at
+
     def run_job(
         self,
         composition_job_id: str,
@@ -810,6 +1121,7 @@ class CompositionJobService:
             raise CompositionJobStateError(
                 f"composition job {composition_job_id!r} does not have a current segment",
             )
+        active_request = self._active_interruption_request(job)
 
         if job.status == JobStatus.CANCELLED:
             return {
@@ -818,6 +1130,23 @@ class CompositionJobService:
                 "action": "noop_cancelled",
             }
         if job.status == JobStatus.PAUSED:
+            if (
+                active_request is not None
+                and active_request.request_kind == CompositionInterruptionKind.REDIRECT
+            ):
+                replacement_job_id = self._apply_redirect_request(
+                    job,
+                    active_request,
+                    current_segment=current_segment,
+                    actor=actor,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": replacement_job_id,
+                    "status": JobStatus.QUEUED.value,
+                    "action": "redirected",
+                    "replaced_job_id": job.id,
+                }
             return {
                 "composition_job_id": job.id,
                 "status": job.status.value,
@@ -828,6 +1157,33 @@ class CompositionJobService:
                 "composition_job_id": job.id,
                 "status": job.status.value,
                 "action": "noop_completed",
+            }
+        if job.status == JobStatus.QUEUED and active_request is not None:
+            if active_request.request_kind == CompositionInterruptionKind.PAUSE:
+                self._apply_pause_request(
+                    job,
+                    active_request,
+                    current_segment=current_segment,
+                    actor=actor,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": job.id,
+                    "status": JobStatus.PAUSED.value,
+                    "action": "paused",
+                }
+            replacement_job_id = self._apply_redirect_request(
+                job,
+                active_request,
+                current_segment=current_segment,
+                actor=actor,
+            )
+            self._session.commit()
+            return {
+                "composition_job_id": replacement_job_id,
+                "status": JobStatus.QUEUED.value,
+                "action": "redirected",
+                "replaced_job_id": job.id,
             }
 
         job.status = JobStatus.IN_PROGRESS
@@ -954,6 +1310,34 @@ class CompositionJobService:
 
             self._session.refresh(job)
             self._session.refresh(current_segment)
+            active_request = self._active_interruption_request(job)
+            if active_request is not None:
+                if active_request.request_kind == CompositionInterruptionKind.PAUSE:
+                    self._apply_pause_request(
+                        job,
+                        active_request,
+                        current_segment=current_segment,
+                        actor=actor,
+                    )
+                    self._session.commit()
+                    return {
+                        "composition_job_id": job.id,
+                        "status": JobStatus.PAUSED.value,
+                        "action": "paused",
+                    }
+                replacement_job_id = self._apply_redirect_request(
+                    job,
+                    active_request,
+                    current_segment=current_segment,
+                    actor=actor,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": replacement_job_id,
+                    "status": JobStatus.QUEUED.value,
+                    "action": "redirected",
+                    "replaced_job_id": job.id,
+                }
             if job.status == JobStatus.PAUSED:
                 current_segment.status = JobStatus.PAUSED
                 self._events.record_composition_progress(
@@ -1033,9 +1417,82 @@ class CompositionJobService:
             draft=draft,
         )
 
+        active_request = self._active_interruption_request(job)
         next_segment = self._next_queued_segment(
             job, after_segment_index=current_segment.segment_index
         )
+        if active_request is not None:
+            if active_request.request_kind == CompositionInterruptionKind.REDIRECT:
+                replacement_job_id = self._apply_redirect_request(
+                    job,
+                    active_request,
+                    current_segment=current_segment,
+                    actor=actor,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": replacement_job_id,
+                    "status": JobStatus.QUEUED.value,
+                    "action": "redirected",
+                    "replaced_job_id": job.id,
+                }
+            if next_segment is not None:
+                job.status = JobStatus.PAUSED
+                job.current_segment_index = next_segment.segment_index
+                job.progress_percent = _completed_segment_progress_percent(
+                    job=job,
+                    total_segments=total_segments,
+                    latest_completed_segment_index=current_segment.segment_index,
+                )
+                next_segment.status = JobStatus.PAUSED
+                job.metadata_json = {
+                    **_read_metadata(job),
+                    "accepted_story_so_far": build_accepted_story_so_far(
+                        completed_segments,
+                        current_segment.accepted_text,
+                    ),
+                    "latest_segment_summary": current_segment.accepted_summary,
+                    **_read_job_prompt_metadata(_read_mapping(next_segment.payload)),
+                    "latest_partial_output": current_segment.accepted_text,
+                    "current_segment_id": next_segment.id,
+                }
+                active_request.state = CompositionInterruptionState.APPLIED
+                active_request.resolution_summary = (
+                    "Pause applied after the current segment finished saving."
+                )
+                active_request.resolved_at = utc_now()
+                self._events.record_composition_progress(
+                    job.session_id,
+                    job_id=job.id,
+                    status=JobStatus.PAUSED,
+                    progress_percent=job.progress_percent,
+                    current_segment_index=next_segment.segment_index,
+                    total_segments=total_segments,
+                    segment_id=next_segment.id,
+                    interruption_request=_build_composition_interruption_request_view(
+                        active_request
+                    ),
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+                self._sessions.update_stage_state(
+                    job.session_id,
+                    stage=WorkflowStage.COMPOSITION,
+                    status=WorkflowStageState.IN_PROGRESS,
+                    detail=f"Writing paused at {round(job.progress_percent)}% complete.",
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+                self._session.commit()
+                return {
+                    "composition_job_id": job.id,
+                    "status": JobStatus.PAUSED.value,
+                    "action": "paused",
+                }
+            self._resolve_interruption_requests(
+                job,
+                state=CompositionInterruptionState.SUPERSEDED,
+                resolution_summary="The draft finished before the pause request needed to apply.",
+            )
+
         if next_segment is None:
             story_text = self._compile_story_text(job.session_id)
             story_location = _story_text_location(
@@ -1496,6 +1953,11 @@ class CompositionJobService:
         if not normalized_reason:
             raise ValueError("cancel reason must not be empty")
 
+        self._resolve_interruption_requests(
+            job,
+            state=CompositionInterruptionState.SUPERSEDED,
+            resolution_summary=normalized_reason,
+        )
         job.status = JobStatus.CANCELLED
         job.stop_reason = normalized_reason
         job.completed_at = job.completed_at or utc_now()
@@ -1537,6 +1999,39 @@ class CompositionJobService:
         if self._object_storage is None:
             self._object_storage = build_object_storage_service(get_settings())
         return self._object_storage
+
+
+def _build_composition_interruption_request_view(
+    request: CompositionInterruptionRequest,
+) -> CompositionInterruptionRequestView:
+    return CompositionInterruptionRequestView(
+        id=request.id,
+        request_kind=request.request_kind,
+        state=request.state,
+        origin=request.origin,
+        message=_build_interruption_message(request),
+        instructions=request.instructions,
+        rewrite_from_segment_index=request.rewrite_from_segment_index,
+        requested_status=request.requested_status,
+        requested_segment_id=request.requested_segment_id,
+        requested_segment_index=request.requested_segment_index,
+        requested_progress_percent=request.requested_progress_percent,
+        resolution_summary=request.resolution_summary,
+        created_at=request.created_at,
+        updated_at=request.updated_at,
+        resolved_at=request.resolved_at,
+    )
+
+
+def _build_interruption_message(request: CompositionInterruptionRequest) -> str:
+    return build_composition_interruption_message(
+        request_kind=request.request_kind,
+        state=request.state,
+        requested_progress_percent=request.requested_progress_percent,
+        requested_segment_index=request.requested_segment_index,
+        rewrite_from_segment_index=request.rewrite_from_segment_index,
+        resolution_summary=request.resolution_summary,
+    )
 
 
 def _build_segment_stage_detail(

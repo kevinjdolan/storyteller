@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from app.models.composition_interruptions import CompositionInterruptionRequestView
 from app.models.events import ChatMessageRole, SessionEventActor, WorkflowStageChangedEventPayload
 from app.models.workflow import WorkflowStage
 
@@ -175,6 +176,7 @@ class JobProgressEventPayload(RealtimeContractModel):
     latest_asset_id: str | None = None
     latest_asset_kind: str | None = None
     message: str | None = None
+    interruption_request: CompositionInterruptionRequestView | None = None
 
 
 class JobStatusEventPayload(RealtimeContractModel):
@@ -189,6 +191,7 @@ class JobStatusEventPayload(RealtimeContractModel):
     total_segments: int | None = Field(default=None, ge=1)
     latest_asset_id: str | None = None
     latest_asset_kind: str | None = None
+    interruption_request: CompositionInterruptionRequestView | None = None
 
 
 class ErrorNotificationEventPayload(RealtimeContractModel):

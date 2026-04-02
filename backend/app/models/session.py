@@ -11,6 +11,7 @@ from app.models.chat_actions import (
     CompositionStartMode,
     StoryBriefEditMode,
 )
+from app.models.composition_interruptions import CompositionInterruptionRequestView
 from app.models.continuity import ContinuityBibleView
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.model_usage import SessionUsageSummaryView
@@ -289,6 +290,7 @@ class CompositionJobView(BaseModel):
     accepted_story_so_far: str | None = None
     latest_partial_output: str | None = None
     latest_segment_summary: str | None = None
+    interruption_request: CompositionInterruptionRequestView | None = None
     attempt_count: int
     stop_reason: str | None = None
     error_message: str | None = None

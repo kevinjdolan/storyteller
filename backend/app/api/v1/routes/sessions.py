@@ -20,7 +20,7 @@ from app.api.dependencies import (
     get_intent_parser_adapter,
     get_pitch_generation_adapter,
 )
-from app.db import CompositionJob, JobStatus
+from app.db import CompositionJob
 from app.models import (
     CreateSessionRequest,
     EditSessionBeatSheetRequest,
@@ -633,37 +633,26 @@ def redirect_session_composition(
     db_session: Annotated[Session, Depends(get_db_session)],
 ) -> SessionCompositionResponse:
     session_service = SessionService(db_session)
+    composition_jobs = CompositionJobService(db_session)
 
     try:
-        job = db_session.get(CompositionJob, composition_job_id)
-        if job is None or job.session_id != session_id:
-            raise CompositionJobNotFoundError(
-                f"composition job {composition_job_id!r} does not belong to session {session_id!r}",
-            )
-        if job.status not in {JobStatus.QUEUED, JobStatus.IN_PROGRESS, JobStatus.PAUSED}:
-            raise CompositionJobStateError("redirect requires an active composition job")
-
-        result = StoryWorkflowToolService(db_session).execute(
-            tool_name=StoryWorkflowToolName.REWRITE_SEGMENTS,
-            session_id=session_id,
-            arguments={
-                "instructions": payload.instructions,
-                "rewrite_from_segment_index": (
-                    payload.rewrite_from_segment_index or job.current_segment_index or 1
-                ),
-                "preserve_completed_segments": False,
-            },
+        result = composition_jobs.request_redirect(
+            session_id,
+            composition_job_id,
+            instructions=payload.instructions,
+            rewrite_from_segment_index=payload.rewrite_from_segment_index,
+            origin=payload.origin,
         )
         snapshot = session_service.load_session_snapshot(session_id)
         job_view = _resolve_composition_job_view(
             snapshot=snapshot,
             db_session=db_session,
-            composition_job_id=result.composition_job_id,
+            composition_job_id=result.response_job_id,
         )
         event = _resolve_composition_response_event(
             session_service=session_service,
             session_id=session_id,
-            composition_job_id=result.composition_job_id,
+            composition_job_id=result.response_job_id,
         )
         return SessionCompositionResponse(snapshot=snapshot, event=event, job=job_view)
     except SessionNotFoundError as exc:

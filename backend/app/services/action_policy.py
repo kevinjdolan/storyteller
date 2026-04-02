@@ -38,8 +38,8 @@ from app.models.chat_actions import (
     DownloadAssetKind,
     OpenFinalizeViewAction,
     PauseJobAction,
-    RefineCharacterSheetAction,
     RedirectCompositionAction,
+    RefineCharacterSheetAction,
     RefinePitchAction,
     RegenerateBeatSheetAction,
     RegenerateCharacterSheetAction,
@@ -63,8 +63,8 @@ from app.models.workflow import (
     WorkflowStageState,
     get_invalidated_stages_after_edit,
 )
-from app.services.sessions import SessionService
 from app.services.character_sheet_changes import infer_character_change_impact
+from app.services.sessions import SessionService
 
 ACTIVE_JOB_STATUSES = {
     JobStatus.QUEUED,
@@ -111,6 +111,7 @@ class _PolicyState:
     selected_story_setup_id: str | None
     active_composition_job_id: str | None
     active_composition_job_status: JobStatus | None
+    active_composition_interruption_requested: bool
     active_audio_job_id: str | None
     active_audio_job_status: JobStatus | None
     ready_story_asset_kinds: set[AssetKind]
@@ -148,6 +149,10 @@ class _PolicyState:
                 JobStatus(snapshot.active_composition_job.status)
                 if snapshot.active_composition_job is not None
                 else None
+            ),
+            active_composition_interruption_requested=(
+                snapshot.active_composition_job is not None
+                and snapshot.active_composition_job.interruption_request is not None
             ),
             active_audio_job_id=snapshot.active_audio_job.id if snapshot.active_audio_job else None,
             active_audio_job_status=(
@@ -754,7 +759,10 @@ class SessionActionPolicyService:
             if len(character_sheets) > 1:
                 return _reject(
                     SessionActionReasonCode.SESSION_RESOURCE_AMBIGUOUS,
-                    "More than one character sheet matched that refinement request in this session.",
+                    (
+                        "More than one character sheet matched that refinement request "
+                        "in this session."
+                    ),
                     stage=WorkflowStage.CHARACTERS,
                 )
             if not character_sheets:
@@ -1034,6 +1042,15 @@ class SessionActionPolicyService:
                 f"There is no active {action.extracted_values.job_kind.value} job to pause.",
                 stage=action.target_stage,
             )
+        if (
+            action.extracted_values.job_kind == ChatToUIJobKind.COMPOSITION
+            and state.active_composition_interruption_requested
+        ):
+            return _reject(
+                SessionActionReasonCode.JOB_STATE_CONFLICT,
+                "The writing job is already handling another pause or redirect request.",
+                stage=action.target_stage,
+            )
         if job_status == JobStatus.PAUSED:
             return _reject(
                 SessionActionReasonCode.JOB_STATE_CONFLICT,
@@ -1111,6 +1128,12 @@ class SessionActionPolicyService:
                 "Start composition before redirecting it.",
                 stage=WorkflowStage.COMPOSITION,
                 prerequisite_action_types=[ChatToUIActionType.START_COMPOSITION],
+            )
+        if state.active_composition_interruption_requested:
+            return _reject(
+                SessionActionReasonCode.JOB_STATE_CONFLICT,
+                "The writing job is already handling another pause or redirect request.",
+                stage=WorkflowStage.COMPOSITION,
             )
 
         side_effects = self._build_stage_edit_side_effects(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Thread
+from time import sleep
 from urllib.parse import unquote
 
 import httpx
@@ -16,6 +18,8 @@ from app.db import (
     Base,
     BeatSheet,
     CharacterSheet,
+    CompositionInterruptionRequest,
+    CompositionInterruptionState,
     CompositionJob,
     CompositionJobKind,
     CompositionSegment,
@@ -95,6 +99,30 @@ def _build_session_factory(tmp_path: Path) -> sessionmaker[Session]:
     _enable_sqlite_foreign_keys(engine)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+def _wait_for_condition(
+    predicate,
+    *,
+    timeout_seconds: float = 3.0,
+    interval_seconds: float = 0.02,
+) -> None:
+    deadline = datetime.now(timezone.utc) + timedelta(seconds=timeout_seconds)
+    while datetime.now(timezone.utc) < deadline:
+        if predicate():
+            return
+        sleep(interval_seconds)
+
+    raise AssertionError("timed out waiting for condition")
+
+
+def _job_progress_percent(
+    session_factory: sessionmaker[Session],
+    composition_job_id: str,
+) -> float:
+    with session_factory() as session:
+        job = session.get(CompositionJob, composition_job_id)
+        return float(job.progress_percent if job is not None else 0)
 
 
 class FakeGCSJsonAPI:
@@ -955,6 +983,186 @@ def test_composition_job_service_resume_does_not_duplicate_runtime_attempts(
     assert composition_job is not None
     assert composition_job.status == JobStatus.QUEUED
     assert len(pending_for_job) == 1
+
+
+def test_composition_pause_request_is_durable_and_applies_after_checkpoint(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    worker_result: dict[str, object] = {}
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        def run_worker() -> None:
+            try:
+                with session_factory() as session:
+                    service = CompositionJobService(
+                        session,
+                        object_storage=object_storage,
+                        writer=SummaryCheckpointCompositionWriter(),
+                        chunk_delay_seconds=0.05,
+                    )
+                    worker_result["result"] = service.run_job(result.composition_job_id)
+            except Exception as exc:  # pragma: no cover - surfaced in assertion below
+                worker_result["error"] = exc
+
+        worker_thread = Thread(target=run_worker)
+        worker_thread.start()
+
+        _wait_for_condition(
+            lambda: _job_progress_percent(session_factory, result.composition_job_id) > 0
+        )
+
+        with session_factory() as session:
+            CompositionJobService(session).pause_job(
+                seeded["session_id"],
+                result.composition_job_id,
+            )
+
+        worker_thread.join(timeout=5)
+        assert not worker_thread.is_alive()
+        assert "error" not in worker_result, worker_result.get("error")
+
+        with session_factory() as session:
+            job = session.get(CompositionJob, result.composition_job_id)
+            request = session.execute(
+                select(CompositionInterruptionRequest)
+                .where(
+                    CompositionInterruptionRequest.composition_job_id
+                    == result.composition_job_id
+                )
+                .order_by(CompositionInterruptionRequest.created_at.desc())
+            ).scalar_one()
+            history = SessionEventLogService(session).list_session_history(
+                seeded["session_id"]
+            )
+
+        assert job is not None
+        criteria = {
+            "worker_paused_after_checkpoint": worker_result["result"]["action"] == "paused",
+            "job_status_paused": job.status == JobStatus.PAUSED,
+            "request_applied": request.state == CompositionInterruptionState.APPLIED,
+            "active_segment_captured": request.requested_segment_index == 1,
+            "progress_captured": request.requested_progress_percent is not None
+            and request.requested_progress_percent > 0,
+            "partial_output_captured": isinstance(request.metadata_json, dict)
+            and isinstance(request.metadata_json.get("latest_partial_output"), str)
+            and len(str(request.metadata_json.get("latest_partial_output"))) > 0,
+            "replay_event_mentions_pause_request": any(
+                getattr(getattr(event.payload, "interruption_request", None), "request_kind", None)
+                == "pause"
+                for event in history.events
+                if event.event_type == "composition.progress.recorded"
+            ),
+        }
+
+        assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_composition_redirect_request_is_durable_and_starts_rewrite_after_checkpoint(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    worker_result: dict[str, object] = {}
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        def run_worker() -> None:
+            try:
+                with session_factory() as session:
+                    service = CompositionJobService(
+                        session,
+                        object_storage=object_storage,
+                        writer=SummaryCheckpointCompositionWriter(),
+                        chunk_delay_seconds=0.05,
+                    )
+                    worker_result["result"] = service.run_job(result.composition_job_id)
+            except Exception as exc:  # pragma: no cover - surfaced in assertion below
+                worker_result["error"] = exc
+
+        worker_thread = Thread(target=run_worker)
+        worker_thread.start()
+
+        _wait_for_condition(
+            lambda: _job_progress_percent(session_factory, result.composition_job_id) > 0
+        )
+
+        with session_factory() as session:
+            CompositionJobService(session).request_redirect(
+                seeded["session_id"],
+                result.composition_job_id,
+                instructions="Soften the cove reveal and bring Pip in sooner.",
+                rewrite_from_segment_index=1,
+            )
+
+        worker_thread.join(timeout=5)
+        assert not worker_thread.is_alive()
+        assert "error" not in worker_result, worker_result.get("error")
+
+        rewrite_job_id = str(worker_result["result"]["composition_job_id"])
+        with session_factory() as session:
+            original_job = session.get(CompositionJob, result.composition_job_id)
+            rewrite_job = session.get(CompositionJob, rewrite_job_id)
+            request = session.execute(
+                select(CompositionInterruptionRequest)
+                .where(
+                    CompositionInterruptionRequest.composition_job_id
+                    == result.composition_job_id
+                )
+                .order_by(CompositionInterruptionRequest.created_at.desc())
+            ).scalar_one()
+            history = SessionEventLogService(session).list_session_history(
+                seeded["session_id"]
+            )
+
+        assert original_job is not None
+        assert rewrite_job is not None
+        criteria = {
+            "worker_redirected_after_checkpoint": worker_result["result"]["action"]
+            == "redirected",
+            "original_job_cancelled": original_job.status == JobStatus.CANCELLED,
+            "rewrite_job_created": rewrite_job.job_kind == CompositionJobKind.REWRITE,
+            "rewrite_job_queued": rewrite_job.status == JobStatus.QUEUED,
+            "rewrite_instructions_persisted": (
+                isinstance(rewrite_job.metadata_json, dict)
+                and rewrite_job.metadata_json.get("request_instructions")
+                == "Soften the cove reveal and bring Pip in sooner."
+            ),
+            "request_applied": request.state == CompositionInterruptionState.APPLIED,
+            "request_kept_user_change": request.instructions
+            == "Soften the cove reveal and bring Pip in sooner.",
+            "request_captured_segment": request.requested_segment_index == 1,
+            "replay_event_mentions_redirect": any(
+                getattr(getattr(event.payload, "interruption_request", None), "request_kind", None)
+                == "redirect"
+                for event in history.events
+                if event.event_type == "composition.progress.recorded"
+            ),
+        }
+
+        assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
 
 
 def test_split_text_for_streaming_preserves_exact_story_text() -> None:

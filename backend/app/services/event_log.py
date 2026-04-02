@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db import EventActorType, EventLogEntry
-from app.models import WorkflowStage, WorkflowStageState
+from app.models import CompositionInterruptionRequestView, WorkflowStage, WorkflowStageState
 from app.models.events import (
     AIOutputKind,
     AIOutputRecordedEventPayload,
@@ -392,6 +392,7 @@ class SessionEventLogService:
         current_segment_index: int | None = None,
         total_segments: int | None = None,
         segment_id: str | None = None,
+        interruption_request: CompositionInterruptionRequestView | None = None,
         actor: SessionEventActor | None = None,
     ) -> EventLogEntry:
         summary = (
@@ -412,6 +413,7 @@ class SessionEventLogService:
                 current_segment_index=current_segment_index,
                 total_segments=total_segments,
                 segment_id=segment_id,
+                interruption_request=interruption_request,
             ),
         )
         if _should_refresh_memory_for_job_status(_enum_value(status)):

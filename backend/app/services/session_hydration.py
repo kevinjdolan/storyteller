@@ -6,7 +6,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db import AudioJob, CompositionJob, JobStatus, SessionAsset
+from app.db import (
+    AudioJob,
+    CompositionInterruptionRequest,
+    CompositionInterruptionState,
+    CompositionJob,
+    JobStatus,
+    SessionAsset,
+)
 from app.models import (
     SAVE_THE_CAT_BEAT_LABELS,
     SAVE_THE_CAT_BEAT_SEQUENCE,
@@ -19,6 +26,7 @@ from app.models import (
     CharacterProfileView,
     CharacterSheetBatchView,
     CharacterSheetView,
+    CompositionInterruptionRequestView,
     CompositionJobView,
     CompositionProgressEventPayload,
     ContinuityBibleData,
@@ -51,6 +59,7 @@ from app.models import (
     get_workflow_stage_definition,
     resolve_resume_stage,
 )
+from app.models.composition_interruptions import build_composition_interruption_message
 from app.repositories import SessionAggregate, StorySessionRepository
 from app.services.agent_context import build_session_agent_context_summary
 from app.services.conversation_memory import SessionMemoryService
@@ -480,6 +489,13 @@ def merge_composition_job_view(
         if current_job is not None
         else 0
     )
+    interruption_request = (
+        payload.interruption_request
+        if payload.interruption_request is not None
+        else (current_job.interruption_request if current_job is not None else None)
+    )
+    if interruption_request is not None and interruption_request.state in {"applied", "superseded"}:
+        interruption_request = None
     return CompositionJobView(
         id=payload.job_id,
         job_kind=current_job.job_kind if current_job is not None else "draft",
@@ -509,6 +525,10 @@ def merge_composition_job_view(
         latest_partial_output=(
             current_job.latest_partial_output if current_job is not None else None
         ),
+        latest_segment_summary=(
+            current_job.latest_segment_summary if current_job is not None else None
+        ),
+        interruption_request=interruption_request,
         attempt_count=current_job.attempt_count if current_job is not None else 1,
         stop_reason=current_job.stop_reason if current_job is not None else None,
         error_message=current_job.error_message if current_job is not None else None,
@@ -635,6 +655,8 @@ def build_composition_job_detail(
 ) -> str:
     if job is None:
         return fallback_summary
+    if job.interruption_request is not None:
+        return job.interruption_request.message
     if job.error_message:
         return job.error_message
     if job.stop_reason:
@@ -1615,6 +1637,57 @@ def build_continuity_bible_view(row) -> ContinuityBibleView | None:
     )
 
 
+def build_composition_interruption_request_view(
+    row: CompositionInterruptionRequest | None,
+) -> CompositionInterruptionRequestView | None:
+    if row is None:
+        return None
+
+    return CompositionInterruptionRequestView(
+        id=row.id,
+        request_kind=row.request_kind,
+        state=row.state,
+        origin=row.origin,
+        message=build_composition_interruption_message(
+            request_kind=row.request_kind,
+            state=row.state,
+            requested_progress_percent=row.requested_progress_percent,
+            requested_segment_index=row.requested_segment_index,
+            rewrite_from_segment_index=row.rewrite_from_segment_index,
+            resolution_summary=row.resolution_summary,
+        ),
+        instructions=row.instructions,
+        rewrite_from_segment_index=row.rewrite_from_segment_index,
+        requested_status=row.requested_status,
+        requested_segment_id=row.requested_segment_id,
+        requested_segment_index=row.requested_segment_index,
+        requested_progress_percent=row.requested_progress_percent,
+        resolution_summary=row.resolution_summary,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        resolved_at=row.resolved_at,
+    )
+
+
+def _resolve_active_composition_interruption_request(
+    row: CompositionJob,
+) -> CompositionInterruptionRequest | None:
+    active_requests = [
+        request
+        for request in getattr(row, "interruption_requests", [])
+        if request.state
+        in {
+            CompositionInterruptionState.REQUESTED,
+            CompositionInterruptionState.APPLYING,
+        }
+    ]
+    if not active_requests:
+        return None
+
+    active_requests.sort(key=lambda request: request.created_at, reverse=True)
+    return active_requests[0]
+
+
 def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView | None:
     if row is None:
         return None
@@ -1630,6 +1703,9 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
     accepted_story_so_far = _read_optional_mapping_text(metadata, "accepted_story_so_far")
     latest_partial_output = _read_optional_mapping_text(metadata, "latest_partial_output")
     latest_segment_summary = _read_optional_mapping_text(metadata, "latest_segment_summary")
+    interruption_request = build_composition_interruption_request_view(
+        _resolve_active_composition_interruption_request(row)
+    )
 
     return CompositionJobView(
         id=row.id,
@@ -1660,6 +1736,7 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         accepted_story_so_far=accepted_story_so_far,
         latest_partial_output=latest_partial_output,
         latest_segment_summary=latest_segment_summary,
+        interruption_request=interruption_request,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
         error_message=row.error_message,

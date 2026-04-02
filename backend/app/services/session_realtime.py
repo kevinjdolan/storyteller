@@ -404,6 +404,7 @@ class SessionRealtimeService:
         message = _build_composition_message(
             job=job,
             current_segment_index=current_segment_index,
+            interruption_request=payload.interruption_request,
             planned_summary=segment.planned_summary if segment is not None else None,
             progress_percent=payload.progress_percent,
             status=status,
@@ -430,6 +431,7 @@ class SessionRealtimeService:
                     error_message=job.error_message if job is not None else None,
                     current_segment_index=current_segment_index,
                     total_segments=total_segments,
+                    interruption_request=payload.interruption_request,
                 ),
             )
 
@@ -457,6 +459,7 @@ class SessionRealtimeService:
                 segment_id=payload.segment_id,
                 segment_status=segment.status.value if segment is not None else None,
                 message=message,
+                interruption_request=payload.interruption_request,
             ),
         )
 
@@ -692,11 +695,15 @@ def _build_composition_message(
     *,
     job: CompositionJob | None,
     current_segment_index: int | None,
+    interruption_request,
     planned_summary: str | None,
     progress_percent: float | None,
     status: RealtimeJobStatus,
     total_segments: int | None,
 ) -> str:
+    if interruption_request is not None:
+        return interruption_request.message
+
     if status == RealtimeJobStatus.QUEUED:
         if job is not None and job.job_kind == CompositionJobKind.REWRITE:
             return (

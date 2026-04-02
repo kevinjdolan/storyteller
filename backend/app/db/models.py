@@ -54,6 +54,18 @@ class CompositionJobKind(str, Enum):
     REWRITE = "rewrite"
 
 
+class CompositionInterruptionKind(str, Enum):
+    PAUSE = "pause"
+    REDIRECT = "redirect"
+
+
+class CompositionInterruptionState(str, Enum):
+    REQUESTED = "requested"
+    APPLYING = "applying"
+    APPLIED = "applied"
+    SUPERSEDED = "superseded"
+
+
 class AssetKind(str, Enum):
     DRAFT_TEXT_SNAPSHOT = "draft_text_snapshot"
     COMPOSITION_SEGMENT = "composition_segment"
@@ -75,6 +87,14 @@ WORKFLOW_STAGE_ENUM = build_enum(WorkflowStage, "workflow_stage")
 WORKFLOW_STAGE_STATE_ENUM = build_enum(WorkflowStageState, "workflow_stage_state")
 JOB_STATUS_ENUM = build_enum(JobStatus, "job_status")
 COMPOSITION_JOB_KIND_ENUM = build_enum(CompositionJobKind, "composition_job_kind")
+COMPOSITION_INTERRUPTION_KIND_ENUM = build_enum(
+    CompositionInterruptionKind,
+    "composition_interruption_kind",
+)
+COMPOSITION_INTERRUPTION_STATE_ENUM = build_enum(
+    CompositionInterruptionState,
+    "composition_interruption_state",
+)
 ASSET_KIND_ENUM = build_enum(AssetKind, "asset_kind")
 ASSET_STATUS_ENUM = build_enum(AssetStatus, "asset_status")
 EVENT_ACTOR_TYPE_ENUM = build_enum(EventActorType, "event_actor_type")
@@ -197,6 +217,12 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     composition_jobs: Mapped[list["CompositionJob"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
+    )
+    composition_interruption_requests: Mapped[list["CompositionInterruptionRequest"]] = (
+        relationship(
+            back_populates="session",
+            cascade="all, delete-orphan",
+        )
     )
     background_jobs: Mapped[list["BackgroundJob"]] = relationship(
         back_populates="session",
@@ -831,6 +857,10 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="composition_job",
         cascade="all, delete-orphan",
     )
+    interruption_requests: Mapped[list["CompositionInterruptionRequest"]] = relationship(
+        back_populates="composition_job",
+        cascade="all, delete-orphan",
+    )
     assets: Mapped[list["SessionAsset"]] = relationship(back_populates="composition_job")
 
     __table_args__ = (
@@ -839,6 +869,67 @@ class CompositionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_composition_jobs_session_id_job_kind", "session_id", "job_kind"),
         Index("ix_composition_jobs_plan_revision_id", "plan_revision_id"),
+    )
+
+
+class CompositionInterruptionRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "composition_interruption_requests"
+
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("story_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    composition_job_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("composition_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    request_kind: Mapped[CompositionInterruptionKind] = mapped_column(
+        COMPOSITION_INTERRUPTION_KIND_ENUM,
+        nullable=False,
+    )
+    state: Mapped[CompositionInterruptionState] = mapped_column(
+        COMPOSITION_INTERRUPTION_STATE_ENUM,
+        nullable=False,
+        default=CompositionInterruptionState.REQUESTED,
+    )
+    origin: Mapped[str] = mapped_column(String(64), nullable=False, default="workspace")
+    instructions: Mapped[str | None] = mapped_column(Text)
+    rewrite_from_segment_index: Mapped[int | None] = mapped_column(Integer)
+    requested_status: Mapped[JobStatus | None] = mapped_column(JOB_STATUS_ENUM)
+    requested_segment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("composition_segments.id", ondelete="SET NULL"),
+    )
+    requested_segment_index: Mapped[int | None] = mapped_column(Integer)
+    requested_progress_percent: Mapped[float | None] = mapped_column(
+        Numeric(5, 2, asdecimal=False)
+    )
+    resolution_summary: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped["StorySession"] = relationship(
+        back_populates="composition_interruption_requests"
+    )
+    composition_job: Mapped["CompositionJob"] = relationship(
+        back_populates="interruption_requests"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_comp_interruptions_job_state_created_at",
+            "composition_job_id",
+            "state",
+            "created_at",
+        ),
+        Index(
+            "ix_comp_interruptions_session_state_created_at",
+            "session_id",
+            "state",
+            "created_at",
+        ),
     )
 
 

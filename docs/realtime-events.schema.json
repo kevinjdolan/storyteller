@@ -360,6 +360,149 @@
           "title": "CompositionChunkRealtimeEvent",
           "type": "object"
         },
+        "CompositionInterruptionRequestView": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Instructions"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "origin": {
+              "title": "Origin",
+              "type": "string"
+            },
+            "request_kind": {
+              "title": "Request Kind",
+              "type": "string"
+            },
+            "requested_progress_percent": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Progress Percent"
+            },
+            "requested_segment_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Segment Id"
+            },
+            "requested_segment_index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Segment Index"
+            },
+            "requested_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Status"
+            },
+            "resolution_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Resolution Summary"
+            },
+            "resolved_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Resolved At"
+            },
+            "rewrite_from_segment_index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rewrite From Segment Index"
+            },
+            "state": {
+              "title": "State",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "request_kind",
+            "state",
+            "origin",
+            "message",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "CompositionInterruptionRequestView",
+          "type": "object"
+        },
         "ErrorNotificationEventPayload": {
           "additionalProperties": false,
           "properties": {
@@ -635,6 +778,17 @@
               "default": null,
               "title": "Eta Seconds"
             },
+            "interruption_request": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompositionInterruptionRequestView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "job_id": {
               "minLength": 1,
               "title": "Job Id",
@@ -886,6 +1040,17 @@
               ],
               "default": null,
               "title": "Error Message"
+            },
+            "interruption_request": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompositionInterruptionRequestView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "job_id": {
               "minLength": 1,
