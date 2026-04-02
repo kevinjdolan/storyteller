@@ -53,9 +53,10 @@
     "50-story-length-duration-and-chapter-setup.md",
     "51-correlation-heuristics.md",
     "52-bedtime-safety-and-content-guidelines.md",
-    "53-outline-drill-down.md"
+    "53-outline-drill-down.md",
+    "54-chapter-scene-card-editor.md"
   ],
-  "current_success_ref": "c6ecac3140db859a4ecfbf0af485d23903fad484",
+  "current_success_ref": "6ae7c2fe56083f4f68b3f98cac4e589b1c79ed2c",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
