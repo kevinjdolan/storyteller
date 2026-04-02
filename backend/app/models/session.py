@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.brief_normalization import NormalizedBriefPreferences
-from app.models.chat_actions import StoryBriefEditMode
+from app.models.chat_actions import CharacterChangeImpact, StoryBriefEditMode
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
@@ -119,6 +119,9 @@ class CharacterSheetView(BaseModel):
     source_character_sheet_id: str | None = None
     source_character_sheet_title: str | None = None
     refinement_instructions: str | None = None
+    focus_character_names: list[str] = Field(default_factory=list)
+    change_summary: str | None = None
+    change_impact: CharacterChangeImpact | None = None
     selection_rationale: str | None = None
     is_selected: bool = False
     accepted_at: datetime | None = None
@@ -137,6 +140,9 @@ class CharacterSheetBatchView(BaseModel):
     source_character_sheet_id: str | None = None
     source_character_sheet_title: str | None = None
     refinement_instructions: str | None = None
+    focus_character_names: list[str] = Field(default_factory=list)
+    change_summary: str | None = None
+    change_impact: CharacterChangeImpact | None = None
     character_sheets: list[CharacterSheetView] = Field(default_factory=list)
 
 
@@ -387,6 +393,7 @@ class RefineSessionCharacterSheetRequest(BaseModel):
     instructions: str = Field(min_length=1)
     focus_character_names: list[str] = Field(default_factory=list)
     change_summary: str | None = Field(default=None, min_length=1)
+    change_impact: CharacterChangeImpact | None = None
     origin: str = Field(default="workspace", min_length=1)
 
 

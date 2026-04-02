@@ -150,6 +150,6 @@ def test_gemini_intent_parser_adapter_requests_json_schema_and_parses_response()
     )
     assert result.structured_output.status == IntentParserStatus.PARSED
     assert result.structured_output.proposed_actions.actions[0].action_type == "refine_beat_sheet"
-    assert result.invocation.prompt_version == "intent_parser.v2"
+    assert result.invocation.prompt_version == "intent_parser.v3"
 
     adapter.close()

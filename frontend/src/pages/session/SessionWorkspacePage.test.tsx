@@ -3066,6 +3066,7 @@ describe('SessionWorkspacePage', () => {
         instructions: 'Make the support cast siblings who settle together.',
         focus_character_names: [],
         change_summary: null,
+        change_impact: 'major',
         origin: 'workspace',
       },
     ])
@@ -3077,7 +3078,7 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
     expect(
       await screen.findByText(
-        'Selected character sheet: Juniper Keeper Cast: Revised',
+        /Selected character sheet: Juniper Keeper Cast: Revised/,
       ),
     ).toBeInTheDocument()
   })

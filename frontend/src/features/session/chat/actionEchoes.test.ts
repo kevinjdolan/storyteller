@@ -218,6 +218,50 @@ describe('actionEchoes', () => {
     )
   })
 
+  it('includes character refinement rationale in selection echoes when present', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 1,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'selection.recorded',
+            stage: 'characters',
+            summary: 'Selected character sheet: Lantern Keeper Cast: Softer.',
+            payload: {
+              schema_version: 1,
+              selection_kind: 'character_sheet',
+              label: 'Lantern Keeper Cast: Softer',
+              rationale:
+                'Refined from "Lantern Keeper Cast" with: Soften Mira\'s voice. Change impact: minor.',
+              accepted: true,
+              source: 'workspace',
+            },
+            created_at: '2026-04-01T08:14:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'characters',
+      } as never,
+    )
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: 'action_echo',
+        body:
+          'Selected character sheet: Lantern Keeper Cast: Softer. Refined from "Lantern Keeper Cast" with: Soften Mira\'s voice. Change impact: minor.',
+      }),
+    )
+  })
+
   it('includes pitch refinement rationale in selection echoes when present', () => {
     const messages = buildSessionChatMessagesFromHistory(
       {

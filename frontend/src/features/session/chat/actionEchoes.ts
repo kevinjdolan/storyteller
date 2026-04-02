@@ -117,7 +117,9 @@ function buildSelectionEcho(event: SessionHistoryEvent) {
   }
 
   if (selectionKind === 'character_sheet') {
-    return `Selected character sheet: ${label}`
+    return rationale != null
+      ? `Selected character sheet: ${label}. ${rationale}`
+      : `Selected character sheet: ${label}`
   }
 
   if (selectionKind === 'beat_sheet') {

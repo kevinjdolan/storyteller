@@ -8,6 +8,7 @@ from app.models import (
     ChatToUIActionBatch,
     ChatToUIActionDefaultPolicy,
     ChatToUIActionType,
+    RefineCharacterSheetAction,
     RefineBeatSheetAction,
     RefinePitchAction,
     SelectGenreAction,
@@ -107,6 +108,36 @@ def test_chat_to_ui_action_contract_rejects_confirm_first_actions_without_confir
                 ],
             }
         )
+
+
+def test_chat_to_ui_action_contract_supports_targeted_character_refinement() -> None:
+    batch = ChatToUIActionBatch.model_validate(
+        {
+            "schema_version": 1,
+            "actions": [
+                {
+                    "schema_version": 1,
+                    "action_type": "refine_character_sheet",
+                    "target_stage": "characters",
+                    "confidence": 0.86,
+                    "rationale": "The user asked to soften Mira's voice on revision two.",
+                    "requires_confirmation": True,
+                    "extracted_values": {
+                        "revision_number": 2,
+                        "title": "Lantern Keeper Cast",
+                        "instructions": "Soften Mira's voice and keep the same comfort ritual.",
+                        "focus_character_names": ["Mira"],
+                        "change_summary": "Keep the same arc but make the dialogue gentler.",
+                        "change_impact": "minor",
+                    },
+                }
+            ],
+        }
+    )
+
+    assert isinstance(batch.actions[0], RefineCharacterSheetAction)
+    assert batch.actions[0].extracted_values.revision_number == 2
+    assert batch.actions[0].extracted_values.change_impact.value == "minor"
 
 
 def test_chat_to_ui_action_contract_rejects_missing_structured_values() -> None:

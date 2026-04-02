@@ -124,6 +124,9 @@ class StorySessionRepository:
     def list_character_sheets(self, session_id: str) -> list[CharacterSheet]:
         return self._list_character_sheets(session_id)
 
+    def get_selected_beat_sheet(self, session_id: str) -> BeatSheet | None:
+        return self._get_selected_beat_sheet(session_id)
+
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)

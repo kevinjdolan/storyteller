@@ -12,59 +12,55 @@ def build_session_agent_context_summary(
     use_conversation_memory: bool = True,
 ) -> str:
     if use_conversation_memory and snapshot.conversation_memory is not None:
-        return snapshot.conversation_memory.summary_text
+        lines = [snapshot.conversation_memory.summary_text]
+    else:
+        lines = [
+            f"Session title: {snapshot.display_title}",
+            f"Overall status: {snapshot.overall_status.value}",
+            (
+                "Current stage: "
+                f"{snapshot.current_stage.value} "
+                f"({_find_stage_state(snapshot, snapshot.current_stage).status.value})"
+            ),
+            f"Resume stage: {snapshot.resume_stage.value}",
+        ]
 
-    lines = [
-        f"Session title: {snapshot.display_title}",
-        f"Overall status: {snapshot.overall_status.value}",
-        (
-            "Current stage: "
-            f"{snapshot.current_stage.value} "
-            f"({_find_stage_state(snapshot, snapshot.current_stage).status.value})"
-        ),
-        f"Resume stage: {snapshot.resume_stage.value}",
-    ]
+        if snapshot.selected_genre is not None:
+            lines.append(f"Selected genre: {snapshot.selected_genre.label}")
 
-    if snapshot.selected_genre is not None:
-        lines.append(f"Selected genre: {snapshot.selected_genre.label}")
+        if snapshot.selected_tone_profile is not None:
+            lines.append(f"Selected tone: {snapshot.selected_tone_profile.label}")
 
-    if snapshot.selected_tone_profile is not None:
-        lines.append(f"Selected tone: {snapshot.selected_tone_profile.label}")
-
-    if snapshot.story_brief is not None:
-        lines.append(
-            "Story brief: "
-            + _truncate(
-                snapshot.story_brief.normalized_summary
-                or snapshot.story_brief.story_idea
-                or snapshot.story_brief.raw_brief
-            )
-        )
-        lines.extend(_build_brief_preference_lines(snapshot.story_brief.normalized_preferences))
-
-    if snapshot.selected_pitch is not None:
-        lines.append(f"Selected pitch: {snapshot.selected_pitch.title}")
-        lines.append(f"Pitch logline: {_truncate(snapshot.selected_pitch.logline)}")
-        if snapshot.selected_pitch.selection_rationale:
+        if snapshot.story_brief is not None:
             lines.append(
-                "Pitch refinement note: "
-                + _truncate(snapshot.selected_pitch.selection_rationale)
+                "Story brief: "
+                + _truncate(
+                    snapshot.story_brief.normalized_summary
+                    or snapshot.story_brief.story_idea
+                    or snapshot.story_brief.raw_brief
+                )
+            )
+            lines.extend(
+                _build_brief_preference_lines(snapshot.story_brief.normalized_preferences)
             )
 
-    if snapshot.selected_character_sheet is not None:
-        character_summary = snapshot.selected_character_sheet.title or "Character sheet selected"
-        if snapshot.selected_character_sheet.protagonist_name:
-            character_summary += (
-                f" (protagonist: {snapshot.selected_character_sheet.protagonist_name})"
-            )
-        lines.append(character_summary)
+        if snapshot.selected_pitch is not None:
+            lines.append(f"Selected pitch: {snapshot.selected_pitch.title}")
+            lines.append(f"Pitch logline: {_truncate(snapshot.selected_pitch.logline)}")
+            if snapshot.selected_pitch.selection_rationale:
+                lines.append(
+                    "Pitch refinement note: "
+                    + _truncate(snapshot.selected_pitch.selection_rationale)
+                )
 
-    if snapshot.selected_beat_sheet is not None and snapshot.selected_beat_sheet.summary:
-        lines.append(f"Beat sheet: {_truncate(snapshot.selected_beat_sheet.summary)}")
+        if snapshot.selected_beat_sheet is not None and snapshot.selected_beat_sheet.summary:
+            lines.append(f"Beat sheet: {_truncate(snapshot.selected_beat_sheet.summary)}")
 
-    story_setup_summary = _build_story_setup_summary(snapshot)
-    if story_setup_summary is not None:
-        lines.append(story_setup_summary)
+        story_setup_summary = _build_story_setup_summary(snapshot)
+        if story_setup_summary is not None:
+            lines.append(story_setup_summary)
+
+    lines.extend(_build_character_context_lines(snapshot))
 
     current_stage_detail = _find_stage_state(snapshot, snapshot.current_stage).detail
     if current_stage_detail:
@@ -102,6 +98,56 @@ def build_session_agent_context_summary(
         )
 
     return "\n".join(lines)
+
+
+def _build_character_context_lines(snapshot: SessionSnapshot) -> list[str]:
+    lines: list[str] = []
+
+    if snapshot.selected_character_sheet is not None:
+        character_summary = snapshot.selected_character_sheet.title or "Character sheet selected"
+        if snapshot.selected_character_sheet.protagonist_name:
+            character_summary += (
+                f" (protagonist: {snapshot.selected_character_sheet.protagonist_name})"
+            )
+        lines.append(character_summary)
+        if snapshot.selected_character_sheet.selection_rationale:
+            lines.append(
+                "Character refinement note: "
+                + _truncate(snapshot.selected_character_sheet.selection_rationale)
+            )
+
+    latest_batch = snapshot.character_sheet_batches[0] if snapshot.character_sheet_batches else None
+    if latest_batch is None or not latest_batch.character_sheets:
+        return lines
+
+    option_summaries = []
+    for character_sheet in latest_batch.character_sheets[:3]:
+        option_label = (
+            character_sheet.title
+            or character_sheet.protagonist_name
+            or f"Revision {character_sheet.revision_number}"
+        )
+        protagonist_tail = (
+            f" ({character_sheet.protagonist_name})"
+            if character_sheet.protagonist_name
+            and character_sheet.protagonist_name != character_sheet.title
+            else ""
+        )
+        option_summaries.append(
+            f"Rev {character_sheet.revision_number}: {option_label}{protagonist_tail}"
+        )
+
+    lines.append("Latest character options: " + "; ".join(option_summaries))
+
+    if latest_batch.change_summary:
+        impact_prefix = (
+            f"{latest_batch.change_impact.value.capitalize()} character change"
+            if latest_batch.change_impact is not None
+            else "Character refinement"
+        )
+        lines.append(f"{impact_prefix}: {_truncate(latest_batch.change_summary)}")
+
+    return lines
 
 
 def _build_story_setup_summary(snapshot: SessionSnapshot) -> str | None:

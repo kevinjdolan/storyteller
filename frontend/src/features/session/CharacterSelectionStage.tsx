@@ -25,7 +25,10 @@ type CharacterSelectionStageProps = {
   onRefineCharacterSheet: (selection: {
     instructions: string
     origin: string
+    changeImpact?: 'minor' | 'major' | null
+    changeSummary?: string | null
     characterSheetId?: string | null
+    focusCharacterNames?: string[]
     revisionNumber?: number | null
     title?: string | null
   }) => Promise<{
@@ -134,7 +137,9 @@ function buildBatchSummary(
     batch.source_character_sheet_title != null &&
     batch.refinement_instructions != null
   ) {
-    return `Refined from ${batch.source_character_sheet_title}. ${batch.refinement_instructions}`
+    const summaryTail =
+      batch.change_summary != null ? ` ${batch.change_summary}` : ''
+    return `Refined from ${batch.source_character_sheet_title}. ${batch.refinement_instructions}${summaryTail}`
   }
 
   if (
@@ -185,6 +190,13 @@ function buildRevisionHelp(
   }
 }
 
+function parseFocusedCharacterNames(value: string) {
+  return value
+    .split(/[\n,]/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 export function CharacterSelectionStage({
   onGenerateCharacterSheets,
   onPreviewStage,
@@ -206,6 +218,11 @@ export function CharacterSelectionStage({
   const [guidance, setGuidance] = useState('')
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [refinementInstructions, setRefinementInstructions] = useState('')
+  const [refinementFocusNames, setRefinementFocusNames] = useState('')
+  const [refinementChangeSummary, setRefinementChangeSummary] = useState('')
+  const [refinementChangeImpact, setRefinementChangeImpact] = useState<
+    'minor' | 'major'
+  >('major')
   const [refinementError, setRefinementError] = useState<string | null>(null)
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -319,9 +336,15 @@ export function CharacterSelectionStage({
         revisionNumber: refinementBaseCharacterSheet.revision_number,
         title: refinementBaseCharacterSheet.title ?? null,
         instructions: refinementInstructions.trim(),
+        focusCharacterNames: parseFocusedCharacterNames(refinementFocusNames),
+        changeSummary: refinementChangeSummary.trim() || null,
+        changeImpact: refinementChangeImpact,
         origin: 'workspace',
       })
       setRefinementInstructions('')
+      setRefinementFocusNames('')
+      setRefinementChangeSummary('')
+      setRefinementChangeImpact('major')
     } catch (error) {
       setRefinementError(
         error instanceof Error
@@ -352,7 +375,17 @@ export function CharacterSelectionStage({
           tone={
             snapshot.selected_character_sheet != null ? 'accent' : 'default'
           }
-        />
+        >
+          {snapshot.selected_character_sheet?.change_impact != null ? (
+            <div className="workspace-stage-detail__badges">
+              <Badge tone="accent">
+                {snapshot.selected_character_sheet.change_impact === 'major'
+                  ? 'Major refinement'
+                  : 'Minor refinement'}
+              </Badge>
+            </div>
+          ) : null}
+        </SummaryPanel>
 
         <SummaryPanel
           description={
@@ -374,6 +407,13 @@ export function CharacterSelectionStage({
               <Badge tone="brand">{latestBatch.generation_key}</Badge>
               {latestBatch.generation_kind === 'refinement' ? (
                 <Badge tone="accent">Refinement</Badge>
+              ) : null}
+              {latestBatch.change_impact != null ? (
+                <Badge tone="neutral">
+                  {latestBatch.change_impact === 'major'
+                    ? 'Major change'
+                    : 'Minor change'}
+                </Badge>
               ) : null}
             </div>
           ) : null}
@@ -541,6 +581,43 @@ export function CharacterSelectionStage({
             rows={4}
             value={refinementInstructions}
           />
+
+          <TextArea
+            description="Optional. Focus the change on specific characters. Separate names with commas or line breaks."
+            disabled={selectedStage.availability === 'locked' || isRefining}
+            label="Focus characters"
+            onChange={(event) => {
+              setRefinementFocusNames(event.currentTarget.value)
+            }}
+            rows={3}
+            value={refinementFocusNames}
+          />
+
+          <TextArea
+            description="Optional. Save a concise durable summary that will show up later in chat and in the saved character history."
+            disabled={selectedStage.availability === 'locked' || isRefining}
+            label="Change summary"
+            onChange={(event) => {
+              setRefinementChangeSummary(event.currentTarget.value)
+            }}
+            rows={3}
+            value={refinementChangeSummary}
+          />
+
+          <SelectField
+            disabled={selectedStage.availability === 'locked' || isRefining}
+            label="Planning impact"
+            onChange={(event) => {
+              setRefinementChangeImpact(
+                event.currentTarget.value === 'minor' ? 'minor' : 'major',
+              )
+            }}
+            options={[
+              { label: 'Major change', value: 'major' },
+              { label: 'Minor polish', value: 'minor' },
+            ]}
+            value={refinementChangeImpact}
+          />
         </CardGrid>
 
         <div className="cta-row">
@@ -638,7 +715,11 @@ export function CharacterSelectionStage({
                         </Badge>
                       ) : null}
                       {characterSheet.refinement_instructions != null ? (
-                        <Badge tone="accent">Refined</Badge>
+                        <Badge tone="accent">
+                          {characterSheet.change_impact === 'minor'
+                            ? 'Refined · Minor'
+                            : 'Refined'}
+                        </Badge>
                       ) : null}
                       {selected ? <Badge tone="success">Selected</Badge> : null}
                     </div>

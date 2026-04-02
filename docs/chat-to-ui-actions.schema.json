@@ -129,6 +129,14 @@
           "title": "AcceptBeatSheetValues",
           "type": "object"
         },
+        "CharacterChangeImpact": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "CharacterChangeImpact",
+          "type": "string"
+        },
         "ChatToUIExtractedValues": {
           "additionalProperties": false,
           "properties": {},
@@ -696,6 +704,45 @@
         "RefineCharacterSheetValues": {
           "additionalProperties": false,
           "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
             "instructions": {
               "minLength": 1,
               "title": "Instructions",
@@ -720,6 +767,17 @@
               ],
               "default": null,
               "title": "Change Summary"
+            },
+            "change_impact": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CharacterChangeImpact"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "required": [
@@ -2436,6 +2494,14 @@
           "title": "AcceptBeatSheetValues",
           "type": "object"
         },
+        "CharacterChangeImpact": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "CharacterChangeImpact",
+          "type": "string"
+        },
         "ChatToUIExtractedValues": {
           "additionalProperties": false,
           "properties": {},
@@ -3003,6 +3069,45 @@
         "RefineCharacterSheetValues": {
           "additionalProperties": false,
           "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
             "instructions": {
               "minLength": 1,
               "title": "Instructions",
@@ -3027,6 +3132,17 @@
               ],
               "default": null,
               "title": "Change Summary"
+            },
+            "change_impact": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CharacterChangeImpact"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "required": [

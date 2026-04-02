@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.chat_actions import ChatToUIActionType
+from app.models.chat_actions import CharacterChangeImpact, ChatToUIActionType
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 STORY_WORKFLOW_TOOL_SCHEMA_VERSION = 1
@@ -103,9 +103,11 @@ class GenerateCharacterSheetsToolInput(StoryWorkflowToolModel):
 class RefineCharacterSheetToolInput(StoryWorkflowToolModel):
     character_sheet_id: str | None = Field(default=None, min_length=1)
     revision_number: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
     instructions: str = Field(min_length=1)
     focus_character_names: list[str] = Field(default_factory=list)
     change_summary: str | None = Field(default=None, min_length=1)
+    change_impact: CharacterChangeImpact | None = None
 
 
 class GenerateBeatSheetToolInput(StoryWorkflowToolModel):
@@ -217,4 +219,3 @@ class StartAudioGenerationToolResult(StoryWorkflowToolResultBase):
     stage_status: WorkflowStageState
     audio_job_id: str
     estimated_duration_seconds: int = Field(ge=0)
-

@@ -11,6 +11,7 @@ from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
     AIOutputKind,
+    CharacterChangeImpact,
     ExistingCharacterSheetContext,
     ExistingSelectedPitchContext,
     NormalizedBriefPreferences,
@@ -46,6 +47,7 @@ from app.services.character_generation import (
     CharacterGenerationService,
     build_character_model_output,
 )
+from app.services.character_sheet_changes import infer_character_change_impact
 from app.services.event_log import SessionEventLogService
 from app.services.pitch_generation import PitchGenerationService, build_pitch_model_output
 from app.services.session_hydration import (
@@ -1244,6 +1246,7 @@ class SessionService:
         title: str | None = None,
         focus_character_names: list[str] | None = None,
         change_summary: str | None = None,
+        change_impact: CharacterChangeImpact | None = None,
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
         character_generation_service: CharacterGenerationService | None = None,
@@ -1263,6 +1266,16 @@ class SessionService:
             raise SessionCharacterSheetGenerationError(
                 "character-sheet refinement instructions are required"
             )
+        normalized_change_summary = _normalize_optional_text(change_summary)
+        normalized_focus_character_names = [
+            normalized_name
+            for character_name in (focus_character_names or [])
+            if (normalized_name := _normalize_optional_text(character_name)) is not None
+        ]
+        resolved_change_impact = change_impact or infer_character_change_impact(
+            instructions=normalized_instructions,
+            change_summary=normalized_change_summary,
+        )
 
         source_character_sheet = _resolve_source_character_sheet(
             self._sessions.list_character_sheets(session_id),
@@ -1344,8 +1357,8 @@ class SessionService:
                 active_brief.normalized_preferences if active_brief is not None else {}
             ),
             guidance=normalized_instructions,
-            change_summary=change_summary,
-            focus_character_names=focus_character_names or [],
+            change_summary=normalized_change_summary,
+            focus_character_names=normalized_focus_character_names,
             existing_character_sheet=_build_existing_character_sheet_context(
                 source_character_sheet
             ),
@@ -1372,7 +1385,9 @@ class SessionService:
         refinement_rationale = _build_character_sheet_refinement_rationale(
             source_character_sheet,
             normalized_instructions,
-            focus_character_names=focus_character_names or [],
+            focus_character_names=normalized_focus_character_names,
+            change_summary=normalized_change_summary,
+            change_impact=resolved_change_impact,
         )
         generation_key = _build_character_generation_key()
         model_output = _build_character_persistence_metadata(
@@ -1383,7 +1398,9 @@ class SessionService:
             selected_pitch=selected_pitch,
             source_character_sheet=source_character_sheet,
             selection_rationale=refinement_rationale,
-            change_summary=change_summary,
+            change_summary=normalized_change_summary,
+            focus_character_names=normalized_focus_character_names,
+            change_impact=resolved_change_impact,
         )
         refined_candidate = generation_result.character_sheets[0]
         refined_character_sheet = CharacterSheet(
@@ -1419,11 +1436,23 @@ class SessionService:
         stage_snapshot.started_at = stage_snapshot.started_at or now
         stage_snapshot.completed_at = now
 
-        invalidated_stages = self._invalidate_dependent_stages(
-            stage_map,
-            stage=WorkflowStage.CHARACTERS,
-            detail=_build_character_sheet_invalidation_detail(refined_character_sheet),
-        )
+        invalidated_stages: list[WorkflowStage] = []
+        if resolved_change_impact == CharacterChangeImpact.MAJOR:
+            invalidated_stages = self._invalidate_dependent_stages(
+                stage_map,
+                stage=WorkflowStage.CHARACTERS,
+                detail=_build_character_sheet_invalidation_detail(
+                    refined_character_sheet,
+                    change_impact=resolved_change_impact,
+                ),
+            )
+        else:
+            selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
+            if (
+                selected_beat_sheet is not None
+                and selected_beat_sheet.character_sheet_id == source_character_sheet.id
+            ):
+                selected_beat_sheet.character_sheet_id = refined_character_sheet.id
         self._apply_rollups(story_session, stage_map)
 
         stage_event = None
@@ -1584,6 +1613,7 @@ class SessionService:
             stage=WorkflowStage.CHARACTERS,
             label=_read_character_sheet_label(selected_character_sheet),
             selection_id=selected_character_sheet.id,
+            rationale=_read_character_sheet_selection_rationale(selected_character_sheet),
             previous_selection_id=(
                 previous_selected_character_sheet.id
                 if previous_selected_character_sheet is not None
@@ -1937,13 +1967,22 @@ def _build_character_sheet_refinement_rationale(
     instructions: str,
     *,
     focus_character_names: list[str],
+    change_summary: str | None,
+    change_impact: CharacterChangeImpact,
 ) -> str:
     focus_tail = ""
     if focus_character_names:
         focus_tail = f" Focus characters: {', '.join(focus_character_names)}."
+    change_tail = ""
+    if change_summary:
+        change_tail = f" Requested change: {change_summary}."
+    impact_tail = f" Change impact: {change_impact.value}."
 
     label = _read_character_sheet_label(character_sheet)
-    return f'Refined from "{label}" with: {instructions}.{focus_tail}'
+    return (
+        f'Refined from "{label}" with: {instructions}.'
+        f"{change_tail}{focus_tail}{impact_tail}"
+    )
 
 
 def _build_pitch_refinement_summary_text(refined_pitch: Pitch, *, source_pitch: Pitch) -> str:
@@ -1968,13 +2007,23 @@ def _build_pitch_selection_detail(pitch: Pitch) -> str:
 
 def _build_character_sheet_selection_detail(character_sheet: CharacterSheet) -> str:
     label = _read_character_sheet_label(character_sheet)
+    change_summary = _read_character_sheet_change_summary(character_sheet)
+    change_impact = _read_character_sheet_change_impact(character_sheet)
+    refinement_tail = ""
+    if change_summary is not None:
+        impact_label = (
+            f"{change_impact.value.capitalize()} refinement"
+            if change_impact is not None
+            else "Refinement"
+        )
+        refinement_tail = f" {impact_label}: {change_summary}."
     if character_sheet.protagonist_name:
         return (
             f"Selected character sheet: {label}. Lead character: "
-            f"{character_sheet.protagonist_name}."
+            f"{character_sheet.protagonist_name}.{refinement_tail}"
         )
 
-    return f"Selected character sheet: {label}."
+    return f"Selected character sheet: {label}.{refinement_tail}"
 
 
 def _build_pitch_invalidation_detail(pitch: Pitch) -> str:
@@ -1984,10 +2033,14 @@ def _build_pitch_invalidation_detail(pitch: Pitch) -> str:
     )
 
 
-def _build_character_sheet_invalidation_detail(character_sheet: CharacterSheet) -> str:
+def _build_character_sheet_invalidation_detail(
+    character_sheet: CharacterSheet,
+    *,
+    change_impact: CharacterChangeImpact = CharacterChangeImpact.MAJOR,
+) -> str:
     label = _read_character_sheet_label(character_sheet)
     return (
-        f"Character sheet changed to {label}. Refresh beats and any downstream "
+        f"{change_impact.value.capitalize()} character change accepted in {label}. Refresh beats and any downstream "
         "planning."
     )
 
@@ -2096,6 +2149,8 @@ def _build_character_persistence_metadata(
     source_character_sheet: CharacterSheet | None = None,
     selection_rationale: str | None = None,
     change_summary: str | None = None,
+    focus_character_names: list[str] | None = None,
+    change_impact: CharacterChangeImpact | None = None,
 ) -> dict[str, Any]:
     payload = build_character_model_output(result)
     payload["batch_metadata"] = {
@@ -2116,8 +2171,52 @@ def _build_character_persistence_metadata(
             "refinement_instructions": guidance,
             "selection_rationale": selection_rationale,
             "change_summary": change_summary,
+            "focus_character_names": list(focus_character_names or []),
+            "change_impact": change_impact.value if change_impact is not None else None,
         }
     return payload
+
+
+def _read_character_sheet_selection_rationale(character_sheet: CharacterSheet) -> str | None:
+    if not isinstance(character_sheet.character_data, Mapping):
+        return None
+
+    refinement = character_sheet.character_data.get("refinement")
+    if not isinstance(refinement, Mapping):
+        return None
+
+    rationale = refinement.get("selection_rationale")
+    return rationale if isinstance(rationale, str) and rationale else None
+
+
+def _read_character_sheet_change_summary(character_sheet: CharacterSheet) -> str | None:
+    if not isinstance(character_sheet.character_data, Mapping):
+        return None
+
+    refinement = character_sheet.character_data.get("refinement")
+    if not isinstance(refinement, Mapping):
+        return None
+
+    summary = refinement.get("change_summary")
+    return summary if isinstance(summary, str) and summary else None
+
+
+def _read_character_sheet_change_impact(
+    character_sheet: CharacterSheet,
+) -> CharacterChangeImpact | None:
+    if not isinstance(character_sheet.character_data, Mapping):
+        return None
+
+    refinement = character_sheet.character_data.get("refinement")
+    if not isinstance(refinement, Mapping):
+        return None
+
+    change_impact = refinement.get("change_impact")
+    if change_impact == CharacterChangeImpact.MINOR.value:
+        return CharacterChangeImpact.MINOR
+    if change_impact == CharacterChangeImpact.MAJOR.value:
+        return CharacterChangeImpact.MAJOR
+    return None
 
 
 def _build_existing_character_sheet_context(

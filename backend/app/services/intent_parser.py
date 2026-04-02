@@ -185,12 +185,7 @@ def _build_prompt_context(
             current_stage_status=current_stage_state.status,
             current_stage_detail=current_stage_state.detail,
         ),
-        session_summary=(
-            snapshot.conversation_memory.summary_text
-            if snapshot.conversation_memory is not None
-            else snapshot.agent_context_summary
-            or build_session_agent_context_summary(snapshot)
-        ),
+        session_summary=build_session_agent_context_summary(snapshot),
         user_message=user_message,
     )
 

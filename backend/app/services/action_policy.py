@@ -38,6 +38,7 @@ from app.models.chat_actions import (
     DownloadAssetKind,
     OpenFinalizeViewAction,
     PauseJobAction,
+    RefineCharacterSheetAction,
     RedirectCompositionAction,
     RefinePitchAction,
     RegenerateBeatSheetAction,
@@ -63,6 +64,7 @@ from app.models.workflow import (
     get_invalidated_stages_after_edit,
 )
 from app.services.sessions import SessionService
+from app.services.character_sheet_changes import infer_character_change_impact
 
 ACTIVE_JOB_STATUSES = {
     JobStatus.QUEUED,
@@ -289,6 +291,7 @@ class SessionActionPolicyService:
             )
         if action.action_type == ChatToUIActionType.REFINE_CHARACTER_SHEET:
             return self._evaluate_refine_character_sheet(
+                session_id,
                 action,
                 state,
                 confirmation_granted=confirmation_granted,
@@ -717,7 +720,8 @@ class SessionActionPolicyService:
 
     def _evaluate_refine_character_sheet(
         self,
-        action: ChatToUIAction,
+        session_id: str,
+        action: RefineCharacterSheetAction,
         state: _PolicyState,
         *,
         confirmation_granted: bool,
@@ -732,7 +736,12 @@ class SessionActionPolicyService:
                 stage=WorkflowStage.CHARACTERS,
                 prerequisite_action_types=[ChatToUIActionType.SELECT_PITCH],
             )
-        if state.selected_character_sheet_id is None:
+        has_explicit_target = (
+            action.extracted_values.character_sheet_id is not None
+            or action.extracted_values.revision_number is not None
+            or action.extracted_values.title is not None
+        )
+        if state.selected_character_sheet_id is None and not has_explicit_target:
             return _reject(
                 SessionActionReasonCode.PREREQUISITE_SELECTION_MISSING,
                 "Select a character sheet before refining it.",
@@ -740,7 +749,47 @@ class SessionActionPolicyService:
                 prerequisite_action_types=[ChatToUIActionType.SELECT_CHARACTER_SHEET],
             )
 
-        side_effects = self._build_stage_edit_side_effects(state, WorkflowStage.CHARACTERS)
+        if has_explicit_target:
+            character_sheets = self._find_character_sheets(session_id, action)
+            if len(character_sheets) > 1:
+                return _reject(
+                    SessionActionReasonCode.SESSION_RESOURCE_AMBIGUOUS,
+                    "More than one character sheet matched that refinement request in this session.",
+                    stage=WorkflowStage.CHARACTERS,
+                )
+            if not character_sheets:
+                return _reject(
+                    SessionActionReasonCode.SESSION_RESOURCE_NOT_FOUND,
+                    "No character sheet matched that refinement request in this session.",
+                    stage=WorkflowStage.CHARACTERS,
+                )
+
+            character_sheet = character_sheets[0]
+            if (
+                character_sheet.pitch_id is not None
+                and character_sheet.pitch_id != state.selected_pitch_id
+            ):
+                return _reject(
+                    SessionActionReasonCode.SESSION_RESOURCE_NOT_FOUND,
+                    (
+                        "That character sheet belongs to a different pitch than the one "
+                        "currently selected."
+                    ),
+                    stage=WorkflowStage.CHARACTERS,
+                )
+
+        change_impact = (
+            action.extracted_values.change_impact
+            or infer_character_change_impact(
+                instructions=action.extracted_values.instructions,
+                change_summary=action.extracted_values.change_summary,
+            )
+        )
+        side_effects = (
+            self._build_stage_edit_side_effects(state, WorkflowStage.CHARACTERS)
+            if change_impact.value == "major"
+            else []
+        )
         return self._finalize_change_action(
             action,
             side_effects=side_effects,
@@ -1611,7 +1660,7 @@ class SessionActionPolicyService:
     def _find_character_sheets(
         self,
         session_id: str,
-        action: SelectCharacterSheetAction,
+        action: SelectCharacterSheetAction | RefineCharacterSheetAction,
     ) -> list[CharacterSheet]:
         values = action.extracted_values
         stmt: Select[tuple[CharacterSheet]] = select(CharacterSheet).where(

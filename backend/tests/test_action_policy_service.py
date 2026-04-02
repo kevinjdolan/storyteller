@@ -23,6 +23,7 @@ from app.db import (
     make_engine,
 )
 from app.models import (
+    CharacterChangeImpact,
     SessionActionDecision,
     SessionActionPolicyEvaluationRequest,
     SessionActionReasonCode,
@@ -257,6 +258,57 @@ def test_policy_requires_confirmation_for_pitch_refinement_and_resolves_source_p
 
     assert preview.evaluated_actions[0].decision == SessionActionDecision.REQUIRES_CONFIRMATION
     assert applied.evaluated_actions[0].decision == SessionActionDecision.ACCEPTED_WITH_SIDE_EFFECTS
+
+
+def test_policy_treats_minor_character_refinement_as_non_invalidating(
+    db_session,
+) -> None:
+    catalog = _seed_catalog(db_session)
+    seeded = _create_story_setup_session(db_session, catalog)
+    request = SessionActionPolicyEvaluationRequest.model_validate(
+        {
+            "actions": [
+                {
+                    "action": {
+                        "schema_version": 1,
+                        "action_type": "refine_character_sheet",
+                        "target_stage": "characters",
+                        "confidence": 0.87,
+                        "rationale": "The user only wants a softer character voice.",
+                        "requires_confirmation": True,
+                        "extracted_values": {
+                            "instructions": "Soften Mira's voice and make the reassurance warmer.",
+                            "change_summary": "Keep the same arc but make the dialogue gentler.",
+                            "change_impact": CharacterChangeImpact.MINOR.value,
+                        },
+                    }
+                }
+            ]
+        }
+    )
+
+    preview = SessionActionPolicyService(db_session).evaluate_request(
+        seeded["session_id"],
+        request=request,
+    )
+    confirmed = SessionActionPolicyEvaluationRequest.model_validate(
+        {
+            "actions": [
+                {
+                    **request.model_dump(mode="json")["actions"][0],
+                    "confirmation_granted": True,
+                }
+            ]
+        }
+    )
+    applied = SessionActionPolicyService(db_session).evaluate_request(
+        seeded["session_id"],
+        request=confirmed,
+    )
+
+    assert preview.evaluated_actions[0].decision == SessionActionDecision.REQUIRES_CONFIRMATION
+    assert preview.evaluated_actions[0].side_effects == []
+    assert applied.evaluated_actions[0].decision == SessionActionDecision.ACCEPTED
 
 
 def test_policy_rejects_audio_generation_when_story_text_is_not_ready(db_session) -> None:

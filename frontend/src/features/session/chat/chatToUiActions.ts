@@ -68,6 +68,7 @@ export type StoryBriefEditMode = (typeof storyBriefEditModes)[number]
 export type CompositionStartMode = (typeof compositionStartModes)[number]
 export type FinalizeView = (typeof finalizeViews)[number]
 export type DownloadAssetKind = (typeof downloadAssetKinds)[number]
+export type CharacterChangeImpact = 'minor' | 'major'
 
 export type SelectGenreValues = {
   genre_id?: string | null
@@ -121,9 +122,13 @@ export type SelectCharacterSheetValues = {
 }
 
 export type RefineCharacterSheetValues = {
+  character_sheet_id?: string | null
+  revision_number?: number | null
+  title?: string | null
   instructions: string
   focus_character_names: string[]
   change_summary?: string | null
+  change_impact?: CharacterChangeImpact | null
 }
 
 export type RegenerateCharacterSheetValues = {
@@ -763,6 +768,7 @@ function parseChatToUiAction(record: JsonRecord): ChatToUiAction | null {
       const instructions = readRequiredString(extractedValues, 'instructions')
       const focusCharacterNames =
         readStringArray(extractedValues, 'focus_character_names') ?? []
+      const changeImpact = readOptionalString(extractedValues, 'change_impact')
 
       return instructions == null
         ? null
@@ -772,12 +778,25 @@ function parseChatToUiAction(record: JsonRecord): ChatToUiAction | null {
             action_type: 'refine_character_sheet',
             target_stage: 'characters',
             extracted_values: {
+              character_sheet_id: readOptionalString(
+                extractedValues,
+                'character_sheet_id',
+              ),
+              revision_number: readOptionalInteger(
+                extractedValues,
+                'revision_number',
+              ),
+              title: readOptionalString(extractedValues, 'title'),
               instructions,
               focus_character_names: focusCharacterNames,
               change_summary: readOptionalString(
                 extractedValues,
                 'change_summary',
               ),
+              change_impact:
+                changeImpact === 'minor' || changeImpact === 'major'
+                  ? changeImpact
+                  : null,
             },
           }
     }

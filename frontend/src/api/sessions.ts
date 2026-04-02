@@ -146,6 +146,9 @@ export type CharacterSheetView = {
   source_character_sheet_id?: string | null
   source_character_sheet_title?: string | null
   refinement_instructions?: string | null
+  focus_character_names?: string[]
+  change_summary?: string | null
+  change_impact?: 'minor' | 'major' | null
   selection_rationale?: string | null
   is_selected?: boolean
   accepted_at?: string | null
@@ -164,6 +167,9 @@ export type CharacterSheetBatchView = {
   source_character_sheet_id?: string | null
   source_character_sheet_title?: string | null
   refinement_instructions?: string | null
+  focus_character_names?: string[]
+  change_summary?: string | null
+  change_impact?: 'minor' | 'major' | null
   character_sheets: CharacterSheetView[]
 }
 
@@ -435,6 +441,7 @@ export type RefineSessionCharacterSheetRequest = {
   instructions: string
   focus_character_names?: string[]
   change_summary?: string | null
+  change_impact?: 'minor' | 'major' | null
   origin?: string
 }
 

@@ -110,9 +110,13 @@ _ACTION_CATALOG = (
         "stage": "characters",
         "description": "Request character-sheet edits with concrete instructions.",
         "common_fields": [
+            "character_sheet_id",
+            "revision_number",
+            "title",
             "instructions",
             "focus_character_names",
             "change_summary",
+            "change_impact",
         ],
     },
     {

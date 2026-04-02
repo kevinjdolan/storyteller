@@ -472,6 +472,7 @@ def refine_session_character_sheet(
             instructions=payload.instructions,
             focus_character_names=payload.focus_character_names,
             change_summary=payload.change_summary,
+            change_impact=payload.change_impact,
             origin=payload.origin,
             character_generation_service=CharacterGenerationService(
                 adapter=character_generation_adapter,

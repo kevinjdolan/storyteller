@@ -45,6 +45,11 @@ class ChatToUIJobKind(str, Enum):
     AUDIO = "audio"
 
 
+class CharacterChangeImpact(str, Enum):
+    MINOR = "minor"
+    MAJOR = "major"
+
+
 class StoryBriefEditMode(str, Enum):
     REPLACE = "replace"
     APPEND = "append"
@@ -257,9 +262,13 @@ class SelectCharacterSheetValues(ChatToUIExtractedValues):
 
 
 class RefineCharacterSheetValues(ChatToUIExtractedValues):
+    character_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
     instructions: str = Field(min_length=1)
     focus_character_names: list[str] = Field(default_factory=list)
     change_summary: str | None = Field(default=None, min_length=1)
+    change_impact: CharacterChangeImpact | None = None
 
 
 class RegenerateCharacterSheetValues(ChatToUIExtractedValues):

@@ -28,6 +28,7 @@ from app.models import (
     BriefNormalizationResult,
     CharacterBatchEvaluation,
     CharacterBatchEvaluationCriterion,
+    CharacterChangeImpact,
     CharacterGenerationResult,
     GeneratedCharacterProfile,
     GeneratedCharacterSheetCandidate,
@@ -177,6 +178,66 @@ class StubCharacterGenerationService:
                         name="candidate_count_matches_request",
                         passed=True,
                         measured_value=requested_count,
+                    )
+                ],
+            ),
+            raw_response={"stub": True},
+        )
+
+
+class MinorCharacterRefinementService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object | None]] = []
+
+    def generate_character_sheets(self, **kwargs) -> CharacterGenerationResult:
+        self.calls.append(kwargs)
+        existing_character_sheet = kwargs.get("existing_character_sheet")
+        assert existing_character_sheet is not None
+
+        protagonist = existing_character_sheet.protagonist
+        assert protagonist is not None
+
+        return CharacterGenerationResult(
+            source="stub",
+            model_id="stub-character-generator",
+            prompt_version="character_generation.test",
+            character_sheets=[
+                GeneratedCharacterSheetCandidate(
+                    title=f"{existing_character_sheet.title}: Softer",
+                    summary=(
+                        "The same harbor cast now speaks with a gentler, more reassuring voice."
+                    ),
+                    story_function=(
+                        "The existing beats still fit because the character arc and relationships "
+                        "stay intact."
+                    ),
+                    bedtime_safety_notes=(
+                        "The narration language softens, but the same helpers and emotional "
+                        "repairs stay in place."
+                    ),
+                    visual_motifs=["lantern glow", "moonlit docks", "soft ferry rope"],
+                    protagonist=GeneratedCharacterProfile(
+                        name=protagonist.name,
+                        role=protagonist.role,
+                        goal=protagonist.goal,
+                        flaw=protagonist.flaw,
+                        comfort_trait=protagonist.comfort_trait,
+                        bedtime_safety_notes=(
+                            "The lead still feels safe and supported, just with calmer phrasing."
+                        ),
+                        relationships=list(protagonist.relationships),
+                        visual_anchors=list(protagonist.visual_anchors),
+                    ),
+                    supporting_cast=list(existing_character_sheet.supporting_cast),
+                )
+            ],
+            evaluation=CharacterBatchEvaluation(
+                passed=True,
+                criteria=[
+                    CharacterBatchEvaluationCriterion(
+                        name="candidate_count_matches_request",
+                        passed=True,
+                        measured_value=1,
                     )
                 ],
             ),
@@ -1091,6 +1152,74 @@ def test_refine_character_sheet_creates_a_selected_revision_without_overwriting_
     history = service.load_session_history(snapshot.id)
     assert history.events[-2].event_type == "ai.output.recorded"
     assert history.events[-1].event_type == "selection.recorded"
+
+
+def test_minor_character_sheet_refinement_preserves_completed_beats_and_relinks_them(
+    db_session,
+) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Minor Character Refinement")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea="A child and an otter guardian follow floating lanterns across a harbor.",
+    )
+    generated_pitches = service.generate_pitches(snapshot.id, candidate_count=3)
+    service.select_pitch(
+        snapshot.id,
+        pitch_id=generated_pitches.snapshot.pitch_batches[0].pitches[0].id,
+    )
+    generated_characters = service.generate_character_sheets(
+        snapshot.id,
+        candidate_count=3,
+        character_generation_service=StubCharacterGenerationService(),
+    )
+    source_character_sheet = (
+        generated_characters.snapshot.character_sheet_batches[0].character_sheets[0]
+    )
+    service.select_character_sheet(
+        snapshot.id,
+        character_sheet_id=source_character_sheet.id,
+    )
+
+    beat_sheet = BeatSheet(
+        session_id=snapshot.id,
+        character_sheet_id=source_character_sheet.id,
+        revision_number=1,
+        summary="A gentle harbor beat sheet.",
+        is_selected=True,
+        accepted_at=datetime.now(timezone.utc),
+    )
+    db_session.add(beat_sheet)
+    db_session.flush()
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.BEATS,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted beat sheet.",
+    )
+
+    result = service.refine_character_sheet(
+        snapshot.id,
+        character_sheet_id=source_character_sheet.id,
+        instructions="Soften the protagonist voice so the reassurance feels warmer.",
+        change_summary="Keep the same arc but make the dialogue gentler.",
+        change_impact=CharacterChangeImpact.MINOR,
+        character_generation_service=MinorCharacterRefinementService(),
+    )
+
+    refreshed_beat_sheet = db_session.get(BeatSheet, beat_sheet.id)
+    assert refreshed_beat_sheet is not None
+    assert result.snapshot.selected_character_sheet is not None
+    assert result.snapshot.selected_character_sheet.change_impact == CharacterChangeImpact.MINOR
+    assert result.snapshot.stage_states[5].status == WorkflowStageState.COMPLETED
+    assert refreshed_beat_sheet.character_sheet_id == result.snapshot.selected_character_sheet.id
+    assert "Minor refinement" in result.snapshot.stage_states[4].detail
 
 
 def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:

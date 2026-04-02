@@ -863,6 +863,13 @@ def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: s
     return value if isinstance(value, str) else None
 
 
+def _read_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    return [entry for entry in value if isinstance(entry, str)]
+
+
 def _resolve_character_batch_key(row) -> str:
     return _read_character_batch_metadata(row).get(
         "generation_key",
@@ -996,6 +1003,9 @@ def build_character_sheet_view(row) -> CharacterSheetView | None:
         source_character_sheet_id=refinement_metadata.get("source_character_sheet_id"),
         source_character_sheet_title=refinement_metadata.get("source_character_sheet_title"),
         refinement_instructions=refinement_metadata.get("refinement_instructions"),
+        focus_character_names=_read_string_list(refinement_metadata.get("focus_character_names")),
+        change_summary=_read_optional_mapping_text(refinement_metadata, "change_summary"),
+        change_impact=_read_optional_mapping_text(refinement_metadata, "change_impact"),
         selection_rationale=refinement_metadata.get("selection_rationale"),
         is_selected=row.is_selected,
         accepted_at=row.accepted_at,
@@ -1051,6 +1061,19 @@ def build_character_sheet_batch_views(rows) -> list[CharacterSheetBatchView]:
             refinement_instructions=_read_character_refinement_metadata(
                 batches[generation_key][0]
             ).get("refinement_instructions"),
+            focus_character_names=_read_string_list(
+                _read_character_refinement_metadata(batches[generation_key][0]).get(
+                    "focus_character_names"
+                )
+            ),
+            change_summary=_read_optional_mapping_text(
+                _read_character_refinement_metadata(batches[generation_key][0]),
+                "change_summary",
+            ),
+            change_impact=_read_optional_mapping_text(
+                _read_character_refinement_metadata(batches[generation_key][0]),
+                "change_impact",
+            ),
             character_sheets=[
                 build_character_sheet_view(row)
                 for row in sorted(

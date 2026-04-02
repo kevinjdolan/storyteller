@@ -153,4 +153,41 @@ describe('chatToUiActions', () => {
       'confirm_first',
     )
   })
+
+  it('parses targeted character refinements with impact metadata', () => {
+    const batch = parseChatToUiActionBatch({
+      schema_version: 1,
+      actions: [
+        {
+          schema_version: 1,
+          action_type: 'refine_character_sheet',
+          target_stage: 'characters',
+          confidence: 0.84,
+          rationale:
+            "The user wants to soften Mira's voice on the saved Lantern Keeper cast.",
+          requires_confirmation: true,
+          extracted_values: {
+            revision_number: 2,
+            title: 'Lantern Keeper Cast',
+            instructions: "Soften Mira's voice and keep the same comfort ritual.",
+            focus_character_names: ['Mira'],
+            change_summary:
+              'Keep the same arc but make the dialogue gentler.',
+            change_impact: 'minor',
+          },
+        },
+      ],
+    })
+
+    expect(batch).not.toBeNull()
+    expect(batch?.actions[0]).toMatchObject({
+      action_type: 'refine_character_sheet',
+      extracted_values: {
+        revision_number: 2,
+        title: 'Lantern Keeper Cast',
+        focus_character_names: ['Mira'],
+        change_impact: 'minor',
+      },
+    })
+  })
 })

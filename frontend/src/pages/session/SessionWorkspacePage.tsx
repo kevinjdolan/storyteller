@@ -983,6 +983,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     instructions: string
     origin: string
     changeSummary?: string | null
+    changeImpact?: 'minor' | 'major' | null
     characterSheetId?: string | null
     focusCharacterNames?: string[]
     revisionNumber?: number | null
@@ -995,6 +996,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       instructions: options.instructions,
       focus_character_names: options.focusCharacterNames ?? [],
       change_summary: options.changeSummary ?? null,
+      change_impact: options.changeImpact ?? null,
       origin: options.origin,
     })
 
@@ -1102,10 +1104,14 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
     if (action.action_type === 'refine_character_sheet') {
       await applyCharacterSheetRefinement({
+        characterSheetId: action.extracted_values.character_sheet_id ?? null,
+        revisionNumber: action.extracted_values.revision_number ?? null,
+        title: action.extracted_values.title ?? null,
         instructions: action.extracted_values.instructions,
         focusCharacterNames:
           action.extracted_values.focus_character_names ?? [],
         changeSummary: action.extracted_values.change_summary ?? null,
+        changeImpact: action.extracted_values.change_impact ?? null,
         origin: 'chat',
       })
       return

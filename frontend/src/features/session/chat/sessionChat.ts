@@ -147,6 +147,40 @@ export function buildInitialSessionChatMessages(
     )
   }
 
+  const latestCharacterBatch = snapshot.character_sheet_batches?.[0]
+  if (
+    snapshot.selected_character_sheet == null &&
+    latestCharacterBatch != null &&
+    latestCharacterBatch.candidate_count > 0
+  ) {
+    messages.push(
+      createSessionChatMessage({
+        id: 'character-batch-ready',
+        role: 'assistant',
+        body: `Character options ready: ${latestCharacterBatch.candidate_count} candidates are waiting in the newest batch.`,
+        createdAt: latestCharacterBatch.created_at,
+      }),
+    )
+  }
+
+  if (snapshot.selected_character_sheet != null) {
+    const selectedCharacterLabel =
+      snapshot.selected_character_sheet.title ??
+      snapshot.selected_character_sheet.protagonist_name ??
+      'Selected character sheet'
+    messages.push(
+      createSessionChatMessage({
+        id: 'accepted-character-sheet',
+        role: 'assistant',
+        body:
+          snapshot.selected_character_sheet.selection_rationale != null
+            ? `Selected character sheet: ${selectedCharacterLabel}. ${snapshot.selected_character_sheet.selection_rationale}`
+            : `Selected character sheet: ${selectedCharacterLabel}.`,
+        createdAt: getStageTimestamp(snapshot, 'characters'),
+      }),
+    )
+  }
+
   const currentStage = snapshot.stage_states.find(
     (stage) => stage.stage === snapshot.current_stage,
   )

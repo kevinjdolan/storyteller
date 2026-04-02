@@ -4,7 +4,16 @@ from datetime import datetime, timezone
 
 import pytest
 from app.ai import IntentParserTransportError
-from app.db import Base, Genre, StoryBrief, StorySession, ToneProfile, make_engine
+from app.db import (
+    Base,
+    CharacterSheet,
+    Genre,
+    Pitch,
+    StoryBrief,
+    StorySession,
+    ToneProfile,
+    make_engine,
+)
 from app.models import (
     ChatToUIActionType,
     IntentParserStatus,
@@ -242,6 +251,37 @@ def test_intent_parser_service_uses_updated_ui_context_in_prompt_summary(db_sess
     )
 
 
+def test_intent_parser_service_includes_latest_character_options_in_prompt_summary(
+    db_session,
+) -> None:
+    session_id = _create_beats_session(db_session)
+    adapter = StubIntentParserAdapter(
+        IntentParserStructuredOutput.model_validate(
+            {
+                "schema_version": 1,
+                "status": "needs_clarification",
+                "needs_clarification": True,
+                "assistant_response": "Which saved character sheet should I refine?",
+                "clarification_reason": "Need the specific character sheet target.",
+                "proposed_actions": {
+                    "schema_version": 1,
+                    "actions": [],
+                },
+            }
+        )
+    )
+
+    SessionIntentParserService(db_session, adapter).parse_user_message(
+        session_id,
+        message="Refine the softer character sheet and make her voice warmer.",
+    )
+
+    assert adapter.invocations
+    assert "Latest character options:" in adapter.invocations[0].rendered_prompt
+    assert "Rev 1: Harbor Listener Cast" in adapter.invocations[0].rendered_prompt
+    assert "Rev 2: Lantern Keeper Cast" in adapter.invocations[0].rendered_prompt
+
+
 def _create_beats_session(db_session) -> str:
     genre = Genre(
         slug="quest-fantasy",
@@ -294,6 +334,61 @@ def _create_beats_session(db_session) -> str:
             is_active=True,
             accepted_at=datetime.now(timezone.utc),
         )
+    )
+    db_session.flush()
+    db_session.add(
+        Pitch(
+            session_id=snapshot.id,
+            generation_key="pitch-batch-1",
+            pitch_index=1,
+            title="Lanterns Over Moon Harbor",
+            logline="A harbor child follows a moonlit clue before bedtime.",
+            is_selected=True,
+            accepted_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.flush()
+    db_session.add_all(
+        [
+            CharacterSheet(
+                session_id=snapshot.id,
+                pitch_id=None,
+                revision_number=1,
+                title="Harbor Listener Cast",
+                protagonist_name="Mira",
+                summary="A quieter harbor cast with a listening-first lead.",
+                is_selected=False,
+                character_data={
+                    "batch_metadata": {
+                        "generation_key": "character-batch-1",
+                        "generation_kind": "generated",
+                        "candidate_index": 1,
+                    }
+                },
+            ),
+            CharacterSheet(
+                session_id=snapshot.id,
+                pitch_id=None,
+                revision_number=2,
+                title="Lantern Keeper Cast",
+                protagonist_name="Pip",
+                summary="A steadier harbor cast with a visible comfort ritual.",
+                is_selected=True,
+                accepted_at=datetime.now(timezone.utc),
+                character_data={
+                    "batch_metadata": {
+                        "generation_key": "character-batch-1",
+                        "generation_kind": "generated",
+                        "candidate_index": 2,
+                    },
+                    "refinement": {
+                        "selection_rationale": "Refined from Harbor Listener Cast with a calmer lead voice.",
+                        "change_summary": "Keep the same harbor arc but make the comfort ritual clearer.",
+                        "change_impact": "minor",
+                    },
+                },
+            ),
+        ]
     )
     db_session.commit()
     return snapshot.id
