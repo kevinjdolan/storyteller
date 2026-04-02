@@ -1,0 +1,159 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' 53-outline-drill-down.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' .codex/skills/odysseus-webapp-visual-qa/SKILL.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' base_prompt.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"vi\\\\.mock\\\\(.*api/sessions|mockImplementation\\\\(|spyOn\\\\(.*api/sessions\\\" frontend/src/pages/session/SessionWorkspacePage.test.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_outline_generation_service.py backend/tests/test_story_tools.py backend/tests/test_session_api.py backend/tests/test_migrations.py backend/tests/test_db_models.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend test -- --run frontend/src/features/session/StorySetupStage.test.tsx frontend/src/pages/session/SessionWorkspacePage.test.tsx frontend/src/features/session/chat/actionEchoes.test.ts frontend/src/features/session/chat/sessionChat.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend test -- --run src/features/session/StorySetupStage.test.tsx src/pages/session/SessionWorkspacePage.test.tsx src/features/session/chat/actionEchoes.test.ts src/features/session/chat/chatCommands.test.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"curl -s http://127.0.0.1:8565/api/v1/sessions/recent | jq '.[0:5] | map({id, display_title, resume_stage, overall_status})'\"",
+        "exit_code": 5,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' tools/webapp-qa/README.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/tests/test_outline_generation_service.py backend/tests/test_story_tools.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T09:41:34.365836Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 571,
+    "file_paths": [
+      "backend/app/models/story_outline.py",
+      "backend/app/db/models.py",
+      "backend/app/db/__init__.py",
+      "backend/app/models/session.py",
+      "backend/app/models/story_tools.py",
+      "backend/app/models/events.py",
+      "backend/app/models/__init__.py",
+      "backend/app/services/outline_generation.py",
+      "backend/app/repositories/sessions.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/services/conversation_memory.py",
+      "backend/app/services/agent_context.py",
+      "backend/app/services/__init__.py",
+      "backend/app/services/story_tools.py",
+      "backend/app/api/v1/routes/sessions.py",
+      "backend/migrations/versions/20260402_02_add_story_outlines.py",
+      "backend/tests/test_migrations.py",
+      "backend/tests/test_db_models.py",
+      "backend/tests/test_outline_generation_service.py",
+      "backend/tests/test_story_tools.py",
+      "backend/tests/test_session_api.py",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/StorySetupStage.tsx",
+      "frontend/src/features/session/StorySetupStage.test.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/features/session/chat/sessionChat.ts",
+      "frontend/src/styles/index.css",
+      "frontend/src/pages/session/SessionWorkspacePage.test.tsx",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/53_outline_drill_down_from_beats_to_chapters_or_scenes/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4d85-f104-7032-8437-7e47c2917e29",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 26453248,
+      "input_tokens": 28315498,
+      "output_tokens": 96466,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T09:41:34.365836Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+  ],
+  "head_commit": "c6ecac3140db859a4ecfbf0af485d23903fad484",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "53-outline-drill-down.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_53_outline_drill_down_from_beats_to_chapters_or_scenes",
+  "task_name_human": "53 outline drill down from beats to chapters or scenes",
+  "task_name_system": "53_outline_drill_down_from_beats_to_chapters_or_scenes",
+  "timing": {
+    "duration_seconds": 2638.0,
+    "finished_at": "2026-04-02T03:12:33-07:00",
+    "started_at": "2026-04-02T02:28:35-07:00"
+  }
+}

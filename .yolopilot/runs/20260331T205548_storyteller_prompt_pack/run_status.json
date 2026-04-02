@@ -52,9 +52,10 @@
     "49-beat-sheet-refinement-ui-and-chat.md",
     "50-story-length-duration-and-chapter-setup.md",
     "51-correlation-heuristics.md",
-    "52-bedtime-safety-and-content-guidelines.md"
+    "52-bedtime-safety-and-content-guidelines.md",
+    "53-outline-drill-down.md"
   ],
-  "current_success_ref": "bc455078f42f174a64f2be49ea326e0e4da1f9f7",
+  "current_success_ref": "c6ecac3140db859a4ecfbf0af485d23903fad484",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
