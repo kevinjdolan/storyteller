@@ -32,6 +32,7 @@ Current prefix conventions:
 
 | Artifact type | Bucket | Key shape | Example |
 | --- | --- | --- | --- |
+| Rolling draft snapshot | Sessions | `sessions/{session_id}/composition/drafts/latest-stable.{ext}` | `sessions/sess-42/composition/drafts/latest-stable.md` |
 | Partial draft segment | Sessions | `sessions/{session_id}/composition/jobs/{job_id}/segments/{segment_index:04d}.{ext}` | `sessions/sess-42/composition/jobs/compose-9/segments/0003.md` |
 | Audio segment | Audio | `sessions/{session_id}/audio/jobs/{job_id}/segments/{segment_index:04d}.{ext}` | `sessions/sess-42/audio/jobs/audio-2/segments/0007.mp3` |
 | Final audio | Audio | `sessions/{session_id}/audio/jobs/{job_id}/final/{file_stem}.{ext}` | `sessions/sess-42/audio/jobs/audio-2/final/story.mp3` |

@@ -66,6 +66,22 @@ class SessionAssetRepository:
     def get_by_id(self, asset_id: str) -> SessionAsset | None:
         return self._session.get(SessionAsset, asset_id)
 
+    def get_by_storage_location(
+        self,
+        *,
+        storage_bucket: str,
+        object_path: str,
+    ) -> SessionAsset | None:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
+            .where(
+                SessionAsset.storage_bucket == storage_bucket,
+                SessionAsset.object_path == object_path,
+            )
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
     def list_for_session(
         self,
         session_id: str,

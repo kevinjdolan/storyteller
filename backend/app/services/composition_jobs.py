@@ -8,6 +8,7 @@ from time import perf_counter, sleep
 from typing import Any, Protocol
 from uuid import uuid4
 
+import httpx
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
@@ -64,7 +65,7 @@ from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.plan_revisions import PlanRevisionService
 from app.services.sessions import SessionService
 from app.settings import get_settings
-from app.storage import ObjectStorageService, build_object_storage_service
+from app.storage import ObjectStorageService, StorageError, build_object_storage_service
 
 COMPOSITION_RUNTIME_JOB_TYPE = "story.run_composition_job"
 _SEGMENT_CHUNK_PARAGRAPHS = 3
@@ -72,6 +73,7 @@ _COMPLETION_DETAIL = "Writing finished and the latest draft is ready for review.
 _COMPOSITION_SUMMARY_PROGRESS_CHECKPOINTS = (0.34, 0.67)
 _COMPOSITION_SUMMARY_FINAL_CHECKPOINT = "segment-complete"
 _COMPOSITION_SUMMARY_METADATA_KEY = "emitted_summary_checkpoints"
+_DRAFT_SNAPSHOT_CHUNK_CADENCE = 2
 _SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]")
 
 
@@ -1325,6 +1327,7 @@ class CompositionJobService:
         chunk_index = 0
         for chunk in draft.remaining_chunks:
             current_text += chunk
+            stable_story_text = build_accepted_story_so_far(completed_segments, current_text)
             current_segment.accepted_text = current_text
             current_segment.text_content = current_text
             current_segment.word_count = _count_words(current_text)
@@ -1336,10 +1339,7 @@ class CompositionJobService:
             )
             job.metadata_json = {
                 **_read_metadata(job),
-                "accepted_story_so_far": build_accepted_story_so_far(
-                    completed_segments,
-                    current_text,
-                ),
+                "accepted_story_so_far": stable_story_text,
                 "latest_partial_output": current_text,
                 "current_segment_id": current_segment.id,
             }
@@ -1348,6 +1348,18 @@ class CompositionJobService:
                 current_text,
                 content_type="text/markdown; charset=utf-8",
             )
+            if _should_autosave_draft_snapshot(
+                chunk_position=chunk_index + 1,
+                chunk_count=chunk_count,
+            ):
+                self._persist_draft_snapshot(
+                    job=job,
+                    story_text=stable_story_text,
+                    current_segment=current_segment,
+                    total_segments=total_segments,
+                    progress_percent=job.progress_percent,
+                    checkpoint_reason="autosave",
+                )
             checkpoint = summary_checkpoints.get(chunk_index + 1)
             if checkpoint is not None:
                 self._record_composition_summary_checkpoint(
@@ -1377,6 +1389,14 @@ class CompositionJobService:
             active_request = self._active_interruption_request(job)
             if active_request is not None:
                 if active_request.request_kind == CompositionInterruptionKind.PAUSE:
+                    self._persist_draft_snapshot(
+                        job=job,
+                        story_text=stable_story_text,
+                        current_segment=current_segment,
+                        total_segments=total_segments,
+                        progress_percent=job.progress_percent,
+                        checkpoint_reason="pause",
+                    )
                     self._apply_pause_request(
                         job,
                         active_request,
@@ -1403,6 +1423,14 @@ class CompositionJobService:
                     "replaced_job_id": job.id,
                 }
             if job.status == JobStatus.PAUSED:
+                self._persist_draft_snapshot(
+                    job=job,
+                    story_text=stable_story_text,
+                    current_segment=current_segment,
+                    total_segments=total_segments,
+                    progress_percent=job.progress_percent,
+                    checkpoint_reason="pause",
+                )
                 current_segment.status = JobStatus.PAUSED
                 self._events.record_composition_progress(
                     job.session_id,
@@ -1468,6 +1496,10 @@ class CompositionJobService:
         current_segment.stale_at = None
         current_segment.stale_by_job_id = None
         current_segment.completed_at = utc_now()
+        current_segment_story_text = build_accepted_story_so_far(
+            completed_segments,
+            current_segment.accepted_text,
+        )
         self._record_composition_summary_checkpoint(
             job=job,
             segment=current_segment,
@@ -1481,6 +1513,14 @@ class CompositionJobService:
             segment_storage_location,
             draft.accepted_text,
             content_type="text/markdown; charset=utf-8",
+        )
+        self._persist_draft_snapshot(
+            job=job,
+            story_text=current_segment_story_text,
+            current_segment=current_segment,
+            total_segments=total_segments,
+            progress_percent=job.progress_percent,
+            checkpoint_reason="segment_complete",
         )
         if not _job_requires_acceptance(job):
             self._replace_prior_segment_revision(current_segment)
@@ -1522,10 +1562,7 @@ class CompositionJobService:
                 next_segment.status = JobStatus.PAUSED
                 job.metadata_json = {
                     **_read_metadata(job),
-                    "accepted_story_so_far": build_accepted_story_so_far(
-                        completed_segments,
-                        current_segment.accepted_text,
-                    ),
+                    "accepted_story_so_far": current_segment_story_text,
                     "latest_segment_summary": current_segment.accepted_summary,
                     **_read_job_prompt_metadata(_read_mapping(next_segment.payload)),
                     "latest_partial_output": current_segment.accepted_text,
@@ -1575,12 +1612,7 @@ class CompositionJobService:
                 job.completed_at = utc_now()
                 job.metadata_json = {
                     **_read_metadata(job),
-                    "accepted_story_so_far": build_accepted_story_so_far(
-                        self._latest_completed_segment_texts(
-                            job.session_id,
-                            prefer_job_id=job.id,
-                        )
-                    ),
+                    "accepted_story_so_far": current_segment_story_text,
                     "latest_segment_summary": current_segment.accepted_summary,
                     "latest_partial_output": draft.accepted_text,
                     "current_segment_id": current_segment.id,
@@ -1691,10 +1723,7 @@ class CompositionJobService:
         )
         job.metadata_json = {
             **_read_metadata(job),
-            "accepted_story_so_far": build_accepted_story_so_far(
-                completed_segments,
-                current_segment.accepted_text,
-            ),
+            "accepted_story_so_far": current_segment_story_text,
             "latest_segment_summary": current_segment.accepted_summary,
             **_read_job_prompt_metadata(_read_mapping(next_segment.payload)),
             "latest_partial_output": current_segment.accepted_text,
@@ -2306,6 +2335,19 @@ class CompositionJobService:
             "latest_partial_output": current_story_text,
             "rewrite_rejected": True,
         }
+        if current_story_text:
+            current_segment = self._current_story_segment_for_index(
+                session_id,
+                ordered_candidate_segments[-1].segment_index,
+            )
+            self._persist_draft_snapshot(
+                job=job,
+                story_text=current_story_text,
+                current_segment=current_segment,
+                total_segments=_read_total_segments(job),
+                progress_percent=job.progress_percent,
+                checkpoint_reason="rewrite_rejected",
+            )
         self._sessions.update_stage_state(
             session_id,
             stage=WorkflowStage.COMPOSITION,
@@ -2589,6 +2631,76 @@ class CompositionJobService:
             "latest_partial_output": story_text,
             **dict(metadata_json or {}),
         }
+        current_segment = (
+            self._current_story_segment_for_index(job.session_id, segment_index)
+            or self._current_segment(job)
+        )
+        self._persist_draft_snapshot(
+            job=job,
+            story_text=story_text,
+            current_segment=current_segment,
+            total_segments=_read_total_segments(job),
+            progress_percent=job.progress_percent,
+            checkpoint_reason="manuscript_update",
+        )
+
+    def _persist_draft_snapshot(
+        self,
+        *,
+        job: CompositionJob,
+        story_text: str | None,
+        current_segment: CompositionSegment | None,
+        total_segments: int | None,
+        progress_percent: float | None,
+        checkpoint_reason: str,
+    ) -> None:
+        normalized_story_text = story_text.strip() if story_text is not None else ""
+        if not normalized_story_text:
+            return
+
+        linked_segment = (
+            current_segment
+            if current_segment is not None and current_segment.composition_job_id == job.id
+            else None
+        )
+        draft_location = _draft_snapshot_location(
+            self._storage(),
+            session_id=job.session_id,
+        )
+        try:
+            draft_metadata = self._storage().upload_text(
+                draft_location,
+                normalized_story_text,
+                content_type="text/markdown; charset=utf-8",
+            )
+        except (StorageError, httpx.HTTPError):
+            return
+        self._assets.upsert_asset_record(
+            session_id=job.session_id,
+            asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,
+            storage_bucket=draft_location.bucket,
+            object_path=draft_location.key,
+            mime_type="text/markdown",
+            status=AssetStatus.READY,
+            composition_job_id=job.id,
+            composition_segment_id=linked_segment.id if linked_segment is not None else None,
+            segment_index=current_segment.segment_index if current_segment is not None else None,
+            byte_size=draft_metadata.size_bytes,
+            metadata_json={
+                "orchestration_version": "composition_draft_snapshot.v1",
+                "checkpoint_reason": checkpoint_reason,
+                "autosave_strategy": "rolling_session_latest",
+                "job_kind": job.job_kind.value,
+                "job_status": job.status.value,
+                "current_segment_id": current_segment.id if current_segment is not None else None,
+                "current_segment_index": (
+                    current_segment.segment_index if current_segment is not None else None
+                ),
+                "total_segments": total_segments,
+                "progress_percent": progress_percent,
+                "word_count": _count_words(normalized_story_text),
+            },
+        )
 
     def _clear_stale_segment_flags(self, session_id: str) -> None:
         stmt = select(CompositionSegment).where(
@@ -2850,6 +2962,31 @@ def _story_text_location(
         artifact_name=artifact_name,
         extension="md",
     )
+
+
+def _draft_snapshot_location(
+    storage: ObjectStorageService,
+    *,
+    session_id: str,
+):
+    return storage.paths.draft_text_snapshot(session_id=session_id)
+
+
+def _should_autosave_draft_snapshot(
+    *,
+    chunk_position: int,
+    chunk_count: int,
+) -> bool:
+    if chunk_position <= 0 or chunk_position > chunk_count:
+        return False
+
+    if chunk_position == 1:
+        return True
+
+    if chunk_position == chunk_count:
+        return False
+
+    return chunk_position % _DRAFT_SNAPSHOT_CHUNK_CADENCE == 0
 
 
 def _segment_progress_percent(

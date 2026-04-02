@@ -1042,11 +1042,27 @@ def test_composition_pause_request_is_durable_and_applies_after_checkpoint(
                 )
                 .order_by(CompositionInterruptionRequest.created_at.desc())
             ).scalar_one()
+            draft_snapshot_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.session_id == seeded["session_id"],
+                        SessionAsset.asset_kind == AssetKind.DRAFT_TEXT_SNAPSHOT,
+                    )
+                ).scalars()
+            )
             history = SessionEventLogService(session).list_session_history(
                 seeded["session_id"]
             )
 
         assert job is not None
+        assert len(draft_snapshot_assets) == 1
+        draft_snapshot_asset = draft_snapshot_assets[0]
+        draft_snapshot_text = object_storage.download_text(
+            StorageObjectLocation(
+                bucket=draft_snapshot_asset.storage_bucket,
+                key=draft_snapshot_asset.object_path,
+            )
+        )
         criteria = {
             "worker_paused_after_checkpoint": worker_result["result"]["action"] == "paused",
             "job_status_paused": job.status == JobStatus.PAUSED,
@@ -1057,6 +1073,14 @@ def test_composition_pause_request_is_durable_and_applies_after_checkpoint(
             "partial_output_captured": isinstance(request.metadata_json, dict)
             and isinstance(request.metadata_json.get("latest_partial_output"), str)
             and len(str(request.metadata_json.get("latest_partial_output"))) > 0,
+            "draft_snapshot_is_rolling": (
+                draft_snapshot_asset.object_path
+                == f"sessions/{seeded['session_id']}/composition/drafts/latest-stable.md"
+            ),
+            "draft_snapshot_ready": draft_snapshot_asset.status == AssetStatus.READY,
+            "draft_snapshot_points_at_job": draft_snapshot_asset.composition_job_id
+            == result.composition_job_id,
+            "draft_snapshot_text_saved": len(draft_snapshot_text.strip()) > 0,
             "replay_event_mentions_pause_request": any(
                 getattr(getattr(event.payload, "interruption_request", None), "request_kind", None)
                 == "pause"

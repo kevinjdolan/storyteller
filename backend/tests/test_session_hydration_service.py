@@ -43,6 +43,14 @@ def db_session():
         engine.dispose()
 
 
+class FakeDraftSnapshotStorage:
+    def __init__(self, payloads: dict[tuple[str, str], str]) -> None:
+        self._payloads = payloads
+
+    def download_text(self, location) -> str:
+        return self._payloads[(location.bucket, location.key)]
+
+
 def _complete_stage_prefix(
     session_service: SessionService,
     session_id: str,
@@ -236,6 +244,83 @@ def test_hydrate_session_limits_recent_history_window(db_session) -> None:
     assert hydrated.recent_history.latest_sequence_number == 3
     assert hydrated.hydration.history_event_count == 2
     assert hydrated.hydration.history_window_truncated is True
+
+
+def test_hydrate_session_recovers_draft_text_from_snapshot_asset(db_session) -> None:
+    session_service = SessionService(db_session)
+    snapshot = session_service.create_session(working_title="Hydration Draft Snapshot")
+    _complete_stage_prefix(
+        session_service,
+        snapshot.id,
+        through=WorkflowStage.STORY_SETUP,
+    )
+    session_service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.COMPOSITION,
+        status=WorkflowStageState.IN_PROGRESS,
+        detail="Writing paused after an autosave checkpoint.",
+    )
+
+    composition_job = CompositionJob(
+        session_id=snapshot.id,
+        job_kind=CompositionJobKind.DRAFT,
+        status=JobStatus.PAUSED,
+        progress_percent=38.0,
+        current_segment_index=2,
+        metadata_json={
+            "total_segments": 3,
+            "start_segment_index": 1,
+        },
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+
+    draft_asset = SessionAsset(
+        session_id=snapshot.id,
+        composition_job_id=composition_job.id,
+        asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-sessions",
+        object_path="sessions/hydration-draft/composition/drafts/latest-stable.md",
+        mime_type="text/markdown",
+        segment_index=2,
+        ready_at=datetime.now(timezone.utc),
+    )
+    db_session.add(draft_asset)
+    db_session.commit()
+
+    storage = FakeDraftSnapshotStorage(
+        {
+            (
+                draft_asset.storage_bucket,
+                draft_asset.object_path,
+            ): (
+                "Draft segment 1 settles the harbor.\n\n"
+                "Draft segment 2 keeps the bell audible while the cove stays calm."
+            )
+        }
+    )
+
+    hydrated = SessionHydrationService(
+        db_session,
+        object_storage=storage,  # type: ignore[arg-type]
+    ).hydrate_session(snapshot.id)
+
+    assert hydrated.snapshot.active_composition_job is not None
+    assert hydrated.snapshot.latest_composition_job is not None
+    assert (
+        hydrated.snapshot.active_composition_job.accepted_story_so_far
+        == "Draft segment 1 settles the harbor.\n\n"
+        "Draft segment 2 keeps the bell audible while the cove stays calm."
+    )
+    assert (
+        hydrated.snapshot.active_composition_job.latest_partial_output
+        == hydrated.snapshot.active_composition_job.accepted_story_so_far
+    )
+    assert (
+        hydrated.snapshot.latest_composition_job.accepted_story_so_far
+        == hydrated.snapshot.active_composition_job.accepted_story_so_far
+    )
 
 
 def test_hydrate_session_raises_for_missing_session(db_session) -> None:

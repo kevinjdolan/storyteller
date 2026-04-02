@@ -202,6 +202,60 @@ def test_asset_service_marks_assets_ready_and_failed(db_session) -> None:
     assert stored_failed.error_message == "docx assembly timed out"
 
 
+def test_asset_service_upserts_existing_asset_records_by_storage_location(db_session) -> None:
+    story_session = StorySession(working_title="Rolling Draft Snapshot")
+    db_session.add(story_session)
+    db_session.flush()
+
+    composition_job = CompositionJob(
+        session_id=story_session.id,
+        job_kind=CompositionJobKind.DRAFT,
+        status=JobStatus.IN_PROGRESS,
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+
+    service = SessionAssetService(db_session)
+    created_asset = service.upsert_asset_record(
+        session_id=story_session.id,
+        asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,
+        storage_bucket="storyteller-sessions",
+        object_path="sessions/story-rolling/composition/drafts/latest-stable.md",
+        mime_type="text/markdown",
+        status=AssetStatus.READY,
+        composition_job_id=composition_job.id,
+        byte_size=512,
+        metadata_json={"checkpoint_reason": "autosave", "word_count": 80},
+    )
+    updated_asset = service.upsert_asset_record(
+        session_id=story_session.id,
+        asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,
+        storage_bucket="storyteller-sessions",
+        object_path="sessions/story-rolling/composition/drafts/latest-stable.md",
+        mime_type="text/markdown",
+        status=AssetStatus.READY,
+        composition_job_id=composition_job.id,
+        byte_size=768,
+        metadata_json={"checkpoint_reason": "segment_complete", "word_count": 120},
+    )
+
+    stored_assets = (
+        db_session.query(SessionAsset)
+        .filter(SessionAsset.session_id == story_session.id)
+        .order_by(SessionAsset.created_at.asc())
+        .all()
+    )
+
+    assert created_asset.id == updated_asset.id
+    assert len(stored_assets) == 1
+    assert stored_assets[0].byte_size == 768
+    assert stored_assets[0].ready_at is not None
+    assert stored_assets[0].metadata_json == {
+        "checkpoint_reason": "segment_complete",
+        "word_count": 120,
+    }
+
+
 def test_asset_service_rejects_missing_sessions_and_cross_session_links(db_session) -> None:
     primary_session = StorySession(working_title="Primary")
     other_session = StorySession(working_title="Other")

@@ -106,6 +106,114 @@ class SessionAssetService:
         self._session.commit()
         return _build_session_asset_view(asset)
 
+    def upsert_asset_record(
+        self,
+        *,
+        session_id: str,
+        asset_kind: AssetKind,
+        storage_bucket: str,
+        object_path: str,
+        mime_type: str,
+        status: AssetStatus = AssetStatus.PENDING,
+        composition_job_id: str | None = None,
+        composition_segment_id: str | None = None,
+        audio_job_id: str | None = None,
+        segment_index: int | None = None,
+        byte_size: int | None = None,
+        checksum_sha256: str | None = None,
+        metadata_json: dict | list | None = None,
+        error_message: str | None = None,
+    ) -> SessionAssetView:
+        normalized_bucket = _normalize_required_text(
+            storage_bucket,
+            field_name="storage_bucket",
+        )
+        normalized_object_path = _normalize_required_text(
+            object_path,
+            field_name="object_path",
+        )
+        normalized_mime_type = _normalize_required_text(
+            mime_type,
+            field_name="mime_type",
+        )
+        normalized_error = _normalize_optional_text(error_message)
+        self._require_session(session_id)
+
+        composition_job = self._validate_composition_job(session_id, composition_job_id)
+        composition_segment = self._validate_composition_segment(session_id, composition_segment_id)
+        audio_job = self._validate_audio_job(session_id, audio_job_id)
+        if composition_job is None and composition_segment is not None:
+            composition_job = composition_segment.composition_job
+        self._validate_asset_links(
+            asset_kind=asset_kind,
+            composition_job=composition_job,
+            composition_segment=composition_segment,
+            audio_job=audio_job,
+        )
+
+        resolved_segment_index = segment_index
+        if resolved_segment_index is None and composition_segment is not None:
+            resolved_segment_index = composition_segment.segment_index
+        if asset_kind == AssetKind.AUDIO_SEGMENT and resolved_segment_index is None:
+            raise ValueError("audio_segment assets require segment_index")
+
+        if status == AssetStatus.FAILED and not normalized_error:
+            raise ValueError("failed asset records require an error_message")
+
+        existing_asset = self._assets.get_by_storage_location(
+            storage_bucket=normalized_bucket,
+            object_path=normalized_object_path,
+        )
+        if existing_asset is None:
+            return self.save_asset_record(
+                session_id=session_id,
+                asset_kind=asset_kind,
+                storage_bucket=normalized_bucket,
+                object_path=normalized_object_path,
+                mime_type=normalized_mime_type,
+                status=status,
+                composition_job_id=composition_job.id if composition_job is not None else None,
+                composition_segment_id=(
+                    composition_segment.id if composition_segment is not None else None
+                ),
+                audio_job_id=audio_job.id if audio_job is not None else None,
+                segment_index=resolved_segment_index,
+                byte_size=byte_size,
+                checksum_sha256=checksum_sha256,
+                metadata_json=metadata_json,
+                error_message=normalized_error,
+            )
+
+        if existing_asset.session_id != session_id:
+            raise AssetOwnershipError(
+                f"asset at {normalized_bucket}/{normalized_object_path} does not belong to "
+                f"session {session_id!r}"
+            )
+        if existing_asset.asset_kind != asset_kind:
+            raise ValueError(
+                "existing asset kind does not match the requested upsert asset_kind"
+            )
+
+        existing_asset.status = status
+        existing_asset.mime_type = normalized_mime_type
+        existing_asset.composition_job_id = composition_job.id if composition_job else None
+        existing_asset.composition_segment_id = (
+            composition_segment.id if composition_segment else None
+        )
+        existing_asset.audio_job_id = audio_job.id if audio_job else None
+        existing_asset.segment_index = resolved_segment_index
+        existing_asset.byte_size = byte_size
+        existing_asset.checksum_sha256 = _normalize_optional_text(checksum_sha256)
+        existing_asset.metadata_json = metadata_json
+        existing_asset.error_message = normalized_error
+        existing_asset.superseded_at = None
+
+        now = utc_now()
+        existing_asset.ready_at = now if status == AssetStatus.READY else None
+        existing_asset.failed_at = now if status == AssetStatus.FAILED else None
+        self._session.commit()
+        return _build_session_asset_view(existing_asset)
+
     def mark_asset_ready(
         self,
         asset_id: str,

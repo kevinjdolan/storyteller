@@ -72,6 +72,20 @@ class SessionArtifactStoragePaths:
             ),
         )
 
+    def draft_text_snapshot(
+        self,
+        *,
+        session_id: str,
+        extension: str = "md",
+    ) -> StorageObjectLocation:
+        return StorageObjectLocation(
+            bucket=self.sessions_bucket,
+            key=(
+                f"{self._session_prefix(session_id)}/composition/drafts/"
+                f"latest-stable{_normalize_extension(extension)}"
+            ),
+        )
+
     def audio_segment(
         self,
         *,

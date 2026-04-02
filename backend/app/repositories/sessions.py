@@ -57,6 +57,7 @@ class SessionAggregate:
     active_composition_job: CompositionJob | None
     active_audio_job: AudioJob | None
     composition_segments: list[CompositionSegment]
+    latest_draft_snapshot_asset: SessionAsset | None
     latest_story_asset: SessionAsset | None
     latest_audio_asset: SessionAsset | None
     selected_continuity_bible: ContinuityBible | None
@@ -122,6 +123,7 @@ class StorySessionRepository:
             active_composition_job=self._get_active_composition_job(session_id),
             active_audio_job=self._get_active_audio_job(session_id),
             composition_segments=self._list_composition_segments(session_id),
+            latest_draft_snapshot_asset=self._get_latest_draft_snapshot_asset(session_id),
             latest_story_asset=self._get_latest_story_asset(session_id),
             latest_audio_asset=self._get_latest_audio_asset(session_id),
             selected_continuity_bible=self._get_selected_continuity_bible(session_id),
@@ -346,6 +348,19 @@ class StorySessionRepository:
                 SessionAsset.status == AssetStatus.READY,
             )
             .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_latest_draft_snapshot_asset(self, session_id: str) -> SessionAsset | None:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
+            .where(
+                SessionAsset.session_id == session_id,
+                SessionAsset.asset_kind == AssetKind.DRAFT_TEXT_SNAPSHOT,
+                SessionAsset.status == AssetStatus.READY,
+            )
+            .order_by(SessionAsset.ready_at.desc(), SessionAsset.updated_at.desc())
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()

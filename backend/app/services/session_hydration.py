@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.db import (
@@ -67,6 +68,14 @@ from app.services.agent_context import build_session_agent_context_summary
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
 from app.services.model_usage import SessionModelUsageService
+from app.settings import get_settings
+from app.storage import (
+    ObjectNotFoundError,
+    ObjectStorageService,
+    StorageError,
+    StorageObjectLocation,
+    build_object_storage_service,
+)
 
 _ACTIVE_JOB_STATUS_VALUES = {
     JobStatus.QUEUED.value,
@@ -84,22 +93,30 @@ class SessionHydrationNotFoundError(SessionHydrationServiceError):
 
 
 class SessionHydrationService:
-    def __init__(self, session: Session):
+    def __init__(
+        self,
+        session: Session,
+        *,
+        object_storage: ObjectStorageService | None = None,
+    ):
         self._session = session
         self._sessions = StorySessionRepository(session)
         self._memory = SessionMemoryService(session)
         self._events = SessionEventLogService(session)
+        self._object_storage = object_storage
 
     def load_session_snapshot(self, session_id: str) -> SessionSnapshot:
         aggregate = self._sessions.get_aggregate(session_id)
         if aggregate is None:
             raise SessionHydrationNotFoundError(f"session {session_id!r} was not found")
 
-        return build_session_snapshot(
+        snapshot = build_session_snapshot(
             aggregate,
             conversation_memory=self._memory.load_latest_snapshot(session_id),
             usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
         )
+        self._apply_draft_snapshot_fallback(snapshot, aggregate.latest_draft_snapshot_asset)
+        return snapshot
 
     def hydrate_session(
         self,
@@ -119,6 +136,10 @@ class SessionHydrationService:
             aggregate,
             conversation_memory=conversation_memory,
             usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
+        )
+        self._apply_draft_snapshot_fallback(
+            base_snapshot,
+            aggregate.latest_draft_snapshot_asset,
         )
         recent_history = self._events.list_session_history(session_id, limit=history_limit)
         materialized_sequence = resolve_materialized_sequence_number(
@@ -168,6 +189,61 @@ class SessionHydrationService:
                 ),
             ),
         )
+
+    def _apply_draft_snapshot_fallback(
+        self,
+        snapshot: SessionSnapshot,
+        draft_snapshot_asset: SessionAsset | None,
+    ) -> None:
+        target_fields = [
+            field_name
+            for field_name in ("active_composition_job", "latest_composition_job")
+            if _job_needs_draft_snapshot_fallback(
+                getattr(snapshot, field_name),
+                draft_snapshot_asset,
+            )
+        ]
+        if not target_fields or draft_snapshot_asset is None:
+            return
+
+        draft_text = self._load_draft_snapshot_text(draft_snapshot_asset)
+        if draft_text is None:
+            return
+
+        for field_name in target_fields:
+            current_job = getattr(snapshot, field_name)
+            if current_job is None:
+                continue
+            setattr(
+                snapshot,
+                field_name,
+                current_job.model_copy(
+                    update={
+                        "accepted_story_so_far": (
+                            current_job.accepted_story_so_far or draft_text
+                        ),
+                        "latest_partial_output": (
+                            current_job.latest_partial_output or draft_text
+                        ),
+                    }
+                ),
+            )
+
+    def _load_draft_snapshot_text(self, draft_snapshot_asset: SessionAsset) -> str | None:
+        try:
+            return self._storage().download_text(
+                StorageObjectLocation(
+                    bucket=draft_snapshot_asset.storage_bucket,
+                    key=draft_snapshot_asset.object_path,
+                )
+            )
+        except (ObjectNotFoundError, StorageError, httpx.HTTPError):
+            return None
+
+    def _storage(self) -> ObjectStorageService:
+        if self._object_storage is None:
+            self._object_storage = build_object_storage_service(get_settings())
+        return self._object_storage
 
 
 def build_recent_session_summary(story_session) -> RecentSessionSummary:
@@ -1907,6 +1983,25 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _job_needs_draft_snapshot_fallback(
+    job: CompositionJobView | None,
+    draft_snapshot_asset: SessionAsset | None,
+) -> bool:
+    if job is None or draft_snapshot_asset is None:
+        return False
+
+    if job.accepted_story_so_far and job.latest_partial_output:
+        return False
+
+    if (
+        draft_snapshot_asset.composition_job_id is not None
+        and draft_snapshot_asset.composition_job_id != job.id
+    ):
+        return False
+
+    return True
 
 
 def resolve_display_title(
