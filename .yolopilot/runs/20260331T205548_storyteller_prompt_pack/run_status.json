@@ -67,9 +67,10 @@
     "64-agent-summary-messages-during-composition.md",
     "65-interrupt-and-redirect-composition.md",
     "66-rewrite-prior-segments.md",
-    "67-diff-and-compare-ui.md"
+    "67-diff-and-compare-ui.md",
+    "68-autosave-drafts-and-partials.md"
   ],
-  "current_success_ref": "3b421c9b1eb0e4a7d273423764d3ae0e718fe1d1",
+  "current_success_ref": "f9f204e449065e18b7b54ee39ab14e2545616170",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
