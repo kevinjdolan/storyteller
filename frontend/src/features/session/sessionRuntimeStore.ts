@@ -53,11 +53,28 @@ export type SessionEventStreamState = {
   events: SessionFeedEvent[]
 }
 
+export type SessionCompositionStreamSource = 'none' | 'snapshot' | 'live'
+
+export type SessionCompositionStreamState = {
+  jobId: string | null
+  status: string | null
+  currentSegmentId: string | null
+  currentSegmentIndex: number | null
+  totalSegments: number | null
+  storyText: string
+  latestPartialOutput: string
+  latestSegmentSummary: string | null
+  lastChunkText: string | null
+  source: SessionCompositionStreamSource
+  updatedAt: string | null
+}
+
 export type SessionRuntimeState = {
   sessionSnapshot: SessionSnapshot | null
   chat: {
     messages: SessionChatMessage[]
   }
+  composition: SessionCompositionStreamState
   pendingActions: PendingSessionAction[]
   eventStream: SessionEventStreamState
 }
@@ -132,6 +149,64 @@ function appendChatMessageIfMissing(
   return [...messages, message].slice(-maxBufferedChatMessages)
 }
 
+function createInitialCompositionStreamState(): SessionCompositionStreamState {
+  return {
+    jobId: null,
+    status: null,
+    currentSegmentId: null,
+    currentSegmentIndex: null,
+    totalSegments: null,
+    storyText: '',
+    latestPartialOutput: '',
+    latestSegmentSummary: null,
+    lastChunkText: null,
+    source: 'none',
+    updatedAt: null,
+  }
+}
+
+function buildCompositionStreamFromSnapshot(
+  snapshot: SessionSnapshot | null,
+  currentState: SessionCompositionStreamState,
+): SessionCompositionStreamState {
+  const compositionJob =
+    snapshot?.active_composition_job ?? snapshot?.latest_composition_job ?? null
+
+  if (compositionJob == null) {
+    return createInitialCompositionStreamState()
+  }
+
+  const snapshotStoryText = compositionJob.accepted_story_so_far ?? ''
+  const shouldPreserveLiveStoryText =
+    currentState.jobId === compositionJob.id &&
+    currentState.storyText.length > snapshotStoryText.length &&
+    currentState.source === 'live'
+
+  return {
+    jobId: compositionJob.id,
+    status: compositionJob.status,
+    currentSegmentId: compositionJob.current_segment_id ?? null,
+    currentSegmentIndex: compositionJob.current_segment_index ?? null,
+    totalSegments: compositionJob.total_segments ?? null,
+    storyText: shouldPreserveLiveStoryText
+      ? currentState.storyText
+      : snapshotStoryText,
+    latestPartialOutput:
+      compositionJob.latest_partial_output ??
+      (shouldPreserveLiveStoryText ? currentState.latestPartialOutput : ''),
+    latestSegmentSummary:
+      compositionJob.latest_segment_summary ??
+      (shouldPreserveLiveStoryText ? currentState.latestSegmentSummary : null),
+    lastChunkText: shouldPreserveLiveStoryText ? currentState.lastChunkText : null,
+    source:
+      snapshotStoryText.length > 0 || compositionJob.status.length > 0
+        ? 'snapshot'
+        : 'none',
+    updatedAt:
+      compositionJob.updated_at ?? snapshot?.updated_at ?? currentState.updatedAt,
+  }
+}
+
 function bufferRealtimeEvent(event: SessionRealtimeEvent): SessionFeedEvent {
   return {
     eventId: event.event_id,
@@ -152,6 +227,52 @@ function updateStageState(
   return {
     ...stageState,
     ...update,
+  }
+}
+
+function applyCompositionChunkEvent(
+  composition: SessionCompositionStreamState,
+  event: Extract<SessionRealtimeEvent, { type: 'composition.chunk' }>,
+): SessionCompositionStreamState {
+  if (event.payload.chunk_kind === 'segment_start') {
+    return {
+      ...composition,
+      jobId: event.payload.job_id,
+      currentSegmentId: event.payload.segment_id,
+      currentSegmentIndex: event.payload.segment_index,
+      latestPartialOutput: '',
+      lastChunkText: null,
+      source: 'live',
+      updatedAt: event.created_at,
+    }
+  }
+
+  if (event.payload.chunk_kind === 'segment_summary') {
+    return {
+      ...composition,
+      jobId: event.payload.job_id,
+      currentSegmentId: event.payload.segment_id,
+      currentSegmentIndex: event.payload.segment_index,
+      latestPartialOutput: '',
+      latestSegmentSummary: event.payload.summary ?? composition.latestSegmentSummary,
+      lastChunkText: null,
+      source: 'live',
+      updatedAt: event.created_at,
+    }
+  }
+
+  const delta = event.payload.text ?? ''
+
+  return {
+    ...composition,
+    jobId: event.payload.job_id,
+    currentSegmentId: event.payload.segment_id,
+    currentSegmentIndex: event.payload.segment_index,
+    storyText: `${composition.storyText}${delta}`,
+    latestPartialOutput: `${composition.latestPartialOutput}${delta}`,
+    lastChunkText: delta,
+    source: 'live',
+    updatedAt: event.created_at,
   }
 }
 
@@ -418,6 +539,40 @@ function applyJobProgressEvent(
   )
 }
 
+function applyCompositionJobEvent(
+  composition: SessionCompositionStreamState,
+  event:
+    | Extract<SessionRealtimeEvent, { type: 'job.progress' }>
+    | Extract<SessionRealtimeEvent, { type: 'job.status' }>,
+) {
+  if (event.payload.job_kind !== 'composition') {
+    return composition
+  }
+
+  const isSameJob = composition.jobId === event.payload.job_id
+  const segmentId =
+    event.type === 'job.progress' ? event.payload.segment_id ?? null : null
+
+  return {
+    ...composition,
+    jobId: event.payload.job_id,
+    status: event.payload.status,
+    currentSegmentId:
+      segmentId ?? (isSameJob ? composition.currentSegmentId : null),
+    currentSegmentIndex:
+      event.payload.current_segment_index ??
+      (isSameJob ? composition.currentSegmentIndex : null),
+    totalSegments:
+      event.payload.total_segments ??
+      (isSameJob ? composition.totalSegments : null),
+    latestPartialOutput: isSameJob ? composition.latestPartialOutput : '',
+    latestSegmentSummary: isSameJob ? composition.latestSegmentSummary : null,
+    lastChunkText: isSameJob ? composition.lastChunkText : null,
+    source: isSameJob ? composition.source : 'snapshot',
+    updatedAt: event.created_at,
+  }
+}
+
 function applyRealtimeEventToSnapshot(
   snapshot: SessionSnapshot | null,
   event: SessionRealtimeEvent,
@@ -483,6 +638,7 @@ export function createInitialSessionRuntimeState(): SessionRuntimeState {
     chat: {
       messages: [],
     },
+    composition: createInitialCompositionStreamState(),
     pendingActions: [],
     eventStream: {
       connectionState: 'idle',
@@ -527,6 +683,7 @@ export function createSessionRuntimeStore(): SessionRuntimeStore {
       setState({
         ...state,
         sessionSnapshot: snapshot,
+        composition: buildCompositionStreamFromSnapshot(snapshot, state.composition),
       })
     },
     replaceChatMessages: (messages) => {
@@ -624,6 +781,12 @@ export function createSessionRuntimeStore(): SessionRuntimeStore {
           state.sessionSnapshot,
           event,
         ),
+        composition:
+          event.type === 'composition.chunk'
+            ? applyCompositionChunkEvent(state.composition, event)
+            : event.type === 'job.progress' || event.type === 'job.status'
+              ? applyCompositionJobEvent(state.composition, event)
+              : state.composition,
         chat: {
           messages: nextMessages,
         },

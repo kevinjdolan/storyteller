@@ -143,6 +143,19 @@ describe('sessionRuntimeStore', () => {
       chat: {
         messages: [],
       },
+      composition: {
+        jobId: null,
+        status: null,
+        currentSegmentId: null,
+        currentSegmentIndex: null,
+        totalSegments: null,
+        storyText: '',
+        latestPartialOutput: '',
+        latestSegmentSummary: null,
+        lastChunkText: null,
+        source: 'none',
+        updatedAt: null,
+      },
       pendingActions: [],
       eventStream: {
         connectionState: 'idle',
@@ -361,6 +374,131 @@ describe('sessionRuntimeStore', () => {
       status: 'in_progress',
       detail: 'Writing the harbor crossing.',
       last_event_type: 'job.progress',
+    })
+  })
+
+  it('hydrates and extends the live composition manuscript without duplicating snapshot text', () => {
+    const store = createSessionRuntimeStore()
+
+    store.hydrateSessionSnapshot({
+      ...buildSampleSnapshot(),
+      active_composition_job: {
+        id: 'composition-job-1',
+        status: 'in_progress',
+        progress_percent: 33,
+        current_segment_id: 'segment-2',
+        current_segment_index: 2,
+        total_segments: 3,
+        accepted_story_so_far: 'Draft segment 1 settles into calm.\n\n',
+        latest_partial_output: '',
+        latest_segment_summary:
+          'Segment 1 established the harbor and the promise.',
+        updated_at: '2026-04-01T08:12:00Z',
+      },
+      latest_composition_job: {
+        id: 'composition-job-1',
+        status: 'in_progress',
+        progress_percent: 33,
+        current_segment_id: 'segment-2',
+        current_segment_index: 2,
+        total_segments: 3,
+        accepted_story_so_far: 'Draft segment 1 settles into calm.\n\n',
+        latest_partial_output: '',
+        latest_segment_summary:
+          'Segment 1 established the harbor and the promise.',
+        updated_at: '2026-04-01T08:12:00Z',
+      },
+    })
+
+    store.applyRealtimeEvent({
+      schema_version: 1,
+      event_id: 'rt-chunk-start',
+      type: 'composition.chunk',
+      session_id: 'session-123',
+      channel: 'session:session-123',
+      actor: {
+        actor_type: 'system',
+        actor_id: 'worker',
+      },
+      stage: 'composition',
+      created_at: '2026-04-01T08:12:05Z',
+      delivery: 'live',
+      replayable: false,
+      payload: {
+        schema_version: 1,
+        job_id: 'composition-job-1',
+        segment_id: 'segment-2',
+        segment_index: 2,
+        chunk_index: 0,
+        chunk_kind: 'segment_start',
+        is_final_chunk: false,
+      },
+    })
+    store.applyRealtimeEvent({
+      schema_version: 1,
+      event_id: 'rt-chunk-1',
+      type: 'composition.chunk',
+      session_id: 'session-123',
+      channel: 'session:session-123',
+      actor: {
+        actor_type: 'system',
+        actor_id: 'worker',
+      },
+      stage: 'composition',
+      created_at: '2026-04-01T08:12:06Z',
+      delivery: 'live',
+      replayable: false,
+      payload: {
+        schema_version: 1,
+        job_id: 'composition-job-1',
+        segment_id: 'segment-2',
+        segment_index: 2,
+        chunk_index: 1,
+        chunk_kind: 'delta',
+        text: 'Mira followed the bell toward the quieter cove. ',
+        cumulative_character_count: 78,
+        cumulative_word_count: 13,
+        is_final_chunk: false,
+      },
+    })
+    store.applyRealtimeEvent({
+      schema_version: 1,
+      event_id: 'rt-chunk-summary',
+      type: 'composition.chunk',
+      session_id: 'session-123',
+      channel: 'session:session-123',
+      actor: {
+        actor_type: 'system',
+        actor_id: 'worker',
+      },
+      stage: 'composition',
+      created_at: '2026-04-01T08:12:08Z',
+      delivery: 'live',
+      replayable: false,
+      payload: {
+        schema_version: 1,
+        job_id: 'composition-job-1',
+        segment_id: 'segment-2',
+        segment_index: 2,
+        chunk_index: 2,
+        chunk_kind: 'segment_summary',
+        summary: 'Segment 2 moved Mira into the quieter cove.',
+        cumulative_character_count: 78,
+        cumulative_word_count: 13,
+        is_final_chunk: false,
+      },
+    })
+
+    expect(store.getState().composition).toMatchObject({
+      jobId: 'composition-job-1',
+      currentSegmentId: 'segment-2',
+      currentSegmentIndex: 2,
+      totalSegments: 3,
+      storyText:
+        'Draft segment 1 settles into calm.\n\nMira followed the bell toward the quieter cove. ',
+      latestPartialOutput: '',
+      latestSegmentSummary: 'Segment 2 moved Mira into the quieter cove.',
+      source: 'live',
     })
   })
 })

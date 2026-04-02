@@ -304,4 +304,47 @@ describe('actionEchoes', () => {
       }),
     )
   })
+
+  it('renders composition progress history as a compact action echo', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 1,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'system',
+              actor_id: 'worker',
+            },
+            event_type: 'composition.progress.recorded',
+            stage: 'composition',
+            summary: 'Composition progress 42.0%.',
+            payload: {
+              schema_version: 1,
+              job_id: 'composition-job-1',
+              status: 'paused',
+              progress_percent: 42,
+              current_segment_index: 2,
+              total_segments: 4,
+              segment_id: 'segment-2',
+            },
+            created_at: '2026-04-01T08:16:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'composition',
+      } as never,
+    )
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: 'action_echo',
+        body: 'Writing paused at 42% complete.',
+      }),
+    )
+  })
 })

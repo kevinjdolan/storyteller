@@ -23,6 +23,7 @@ type SessionRealtimeConnectionOptions = {
   sessionId: string
   getLastSequenceNumber?: () => number | null
   onEvent: (event: SessionRealtimeEvent) => void
+  onSubscribed?: (ack: SessionSubscriptionAck) => void
   onConnectionStateChange?: (update: SessionFeedConnectionStatusUpdate) => void
 }
 
@@ -167,6 +168,7 @@ export function createSessionRealtimeClient(
       getLastSequenceNumber,
       onConnectionStateChange,
       onEvent,
+      onSubscribed,
       sessionId,
     }) => {
       let activeSocket: WebSocketLike | null = null
@@ -231,6 +233,7 @@ export function createSessionRealtimeClient(
           activeRetryCount = 0
           lastConnectedAt = message.accepted_at
           lastKnownChannel = message.channel
+          onSubscribed?.(message)
           emitConnectionState({
             connectionState: 'open',
             connectionDetail: buildAckDetail(message),

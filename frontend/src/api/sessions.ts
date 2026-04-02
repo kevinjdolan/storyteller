@@ -339,7 +339,12 @@ export type CompositionJobView = {
   story_setup_revision_number?: number | null
   story_outline_id?: string | null
   story_outline_revision_number?: number | null
+  current_segment_id?: string | null
   current_segment_index?: number | null
+  total_segments?: number | null
+  accepted_story_so_far?: string | null
+  latest_partial_output?: string | null
+  latest_segment_summary?: string | null
   attempt_count?: number
   stop_reason?: string | null
   error_message?: string | null
@@ -613,6 +618,19 @@ export type SaveSessionStoryOutlineRequest = {
   origin?: string
 }
 
+export type StartSessionCompositionRequest = {
+  mode?: 'fresh' | 'continue' | 'rewrite'
+  instructions?: string | null
+  restart_from_segment_index?: number | null
+  origin?: string
+}
+
+export type RedirectSessionCompositionRequest = {
+  instructions: string
+  rewrite_from_segment_index?: number | null
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
@@ -692,6 +710,12 @@ export type SessionStoryOutlineResponse = {
   event: SessionHistoryEvent
 }
 
+export type SessionCompositionResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+  job: CompositionJobView
+}
+
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
 export function fetchRecentSessions(limit = 20) {
@@ -756,6 +780,54 @@ export function saveSessionStoryOutline(
 ) {
   return postJson<SessionStoryOutlineResponse>(
     `/api/v1/sessions/${sessionId}/story-outline`,
+    body,
+  )
+}
+
+export function startSessionComposition(
+  sessionId: string,
+  body: StartSessionCompositionRequest,
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/start`,
+    body,
+  )
+}
+
+export function pauseSessionComposition(
+  sessionId: string,
+  compositionJobId: string,
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/pause`,
+  )
+}
+
+export function resumeSessionComposition(
+  sessionId: string,
+  compositionJobId: string,
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/resume`,
+  )
+}
+
+export function cancelSessionComposition(
+  sessionId: string,
+  compositionJobId: string,
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/cancel`,
+  )
+}
+
+export function redirectSessionComposition(
+  sessionId: string,
+  compositionJobId: string,
+  body: RedirectSessionCompositionRequest,
+) {
+  return postJson<SessionCompositionResponse>(
+    `/api/v1/sessions/${sessionId}/composition/${compositionJobId}/redirect`,
     body,
   )
 }

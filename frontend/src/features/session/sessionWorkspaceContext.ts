@@ -55,6 +55,10 @@ export function useSessionCurrentSnapshot() {
   return useSessionRuntimeSelector((state) => state.sessionSnapshot)
 }
 
+export function useSessionCompositionStream() {
+  return useSessionRuntimeSelector((state) => state.composition)
+}
+
 export function useSessionEventStream() {
   return useSessionRuntimeSelector((state) => state.eventStream)
 }

@@ -36,6 +36,12 @@ function readBoolean(record: JsonRecord, key: string) {
   return typeof value === 'boolean' ? value : null
 }
 
+function readNumber(record: JsonRecord, key: string) {
+  const value = record[key]
+
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function readStringArray(record: JsonRecord, key: string) {
   const value = record[key]
 
@@ -219,6 +225,69 @@ function buildAiOutputEcho(event: SessionHistoryEvent) {
     }
 
     return `Generated ${countLabel}character sheets.`
+  }
+
+  return event.summary
+}
+
+function buildJobProgressEcho(event: SessionHistoryEvent) {
+  if (!isRecord(event.payload)) {
+    return event.summary
+  }
+
+  const status = readString(event.payload, 'status')
+  const progressPercent = readNumber(event.payload, 'progress_percent')
+  const currentSegmentIndex = readNumber(event.payload, 'current_segment_index')
+  const totalSegments = readNumber(event.payload, 'total_segments')
+
+  if (event.event_type === 'composition.progress.recorded') {
+    if (
+      status === 'queued' &&
+      currentSegmentIndex != null &&
+      totalSegments != null
+    ) {
+      return progressPercent != null && progressPercent > 0
+        ? `Queued writing to resume at segment ${currentSegmentIndex} of ${totalSegments}.`
+        : `Queued writing from segment ${currentSegmentIndex} of ${totalSegments}.`
+    }
+
+    if (
+      status === 'in_progress' &&
+      currentSegmentIndex != null &&
+      totalSegments != null
+    ) {
+      return `Writing segment ${currentSegmentIndex} of ${totalSegments}.`
+    }
+
+    if (status === 'paused' && progressPercent != null) {
+      return `Writing paused at ${Math.round(progressPercent)}% complete.`
+    }
+
+    if (status === 'completed') {
+      return 'Writing finished and the latest draft is ready for review.'
+    }
+
+    if (status === 'cancelled') {
+      return 'Writing was cancelled.'
+    }
+
+    if (status === 'failed') {
+      return 'Writing failed and needs another attempt.'
+    }
+  }
+
+  if (event.event_type === 'audio.progress.recorded') {
+    if (status === 'completed') {
+      return 'Narration completed.'
+    }
+
+    if (progressPercent != null) {
+      return `Narration ${Math.round(progressPercent)}% complete.`
+    }
+
+    if (status != null) {
+      return `Narration ${humanizeToken(status)}.`
+    }
   }
 
   return event.summary
@@ -470,6 +539,20 @@ function buildMessagesForHistoryEvent(
         id: event.id,
         role: 'assistant',
         body: buildAiOutputEcho(event),
+        createdAt: event.created_at,
+      }),
+    ]
+  }
+
+  if (
+    event.event_type === 'composition.progress.recorded' ||
+    event.event_type === 'audio.progress.recorded'
+  ) {
+    return [
+      createSessionChatMessage({
+        id: event.id,
+        role: 'action_echo',
+        body: buildJobProgressEcho(event),
         createdAt: event.created_at,
       }),
     ]

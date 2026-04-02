@@ -2325,6 +2325,85 @@ h4 {
   gap: var(--space-4);
 }
 
+.composition-stage__panel {
+  overflow: hidden;
+}
+
+.composition-stage__status {
+  display: inline-flex;
+  align-items: center;
+}
+
+.composition-stage__actions {
+  flex-wrap: wrap;
+}
+
+.composition-stage__manuscript-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top left, rgba(169, 116, 60, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(24, 35, 49, 0.98), rgba(16, 24, 34, 0.96));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 18px 36px rgba(15, 23, 42, 0.16);
+}
+
+.composition-stage__manuscript,
+.composition-stage__empty {
+  min-height: 22rem;
+  padding: clamp(1.2rem, 2vw, 1.75rem);
+}
+
+.composition-stage__manuscript {
+  position: relative;
+}
+
+.composition-stage__manuscript pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-family-mono);
+  font-size: 0.98rem;
+  line-height: 1.75;
+  color: rgba(245, 238, 228, 0.94);
+}
+
+.composition-stage__cursor {
+  display: inline-flex;
+  width: 0.72rem;
+  height: 1.2rem;
+  margin-left: 0.18rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd49c, #d98d4d);
+  box-shadow: 0 0 16px rgba(217, 141, 77, 0.4);
+  animation: composition-cursor-blink 1s steps(1, end) infinite;
+}
+
+.composition-stage__empty {
+  display: grid;
+  place-items: center;
+}
+
+.composition-stage__empty p {
+  max-width: 34rem;
+  margin: 0;
+  text-align: center;
+  color: rgba(245, 238, 228, 0.84);
+}
+
+@keyframes composition-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
 .story-setup-stage__heuristic,
 .story-setup-stage__suggestion {
   display: grid;

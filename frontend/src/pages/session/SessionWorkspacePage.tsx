@@ -3,15 +3,19 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
+  cancelSessionComposition,
   editSessionBeatSheet,
   generateSessionBeatSheet,
   generateSessionCharacterSheets,
   generateSessionPitches,
   parseSessionChatIntent,
+  pauseSessionComposition,
+  redirectSessionComposition,
   refineSessionBeatSheet,
   refineSessionCharacterSheet,
   refineSessionPitch,
   recordSessionUiAction,
+  resumeSessionComposition,
   restoreSessionPlanRevision,
   saveSessionStoryBrief,
   saveSessionStoryOutline,
@@ -22,12 +26,14 @@ import {
   type NormalizedBriefPreferencesView,
   type SessionHistoryEvent,
   type SessionSnapshot,
+  startSessionComposition,
 } from '../../api/sessions.ts'
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import { BeatSheetStage } from '../../features/session/BeatSheetStage.tsx'
 import { CharacterSelectionStage } from '../../features/session/CharacterSelectionStage.tsx'
+import { CompositionStage } from '../../features/session/CompositionStage.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
 import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
@@ -35,6 +41,7 @@ import { StorySetupStage } from '../../features/session/StorySetupStage.tsx'
 import { ToneSelectionStage } from '../../features/session/ToneSelectionStage.tsx'
 import {
   useSessionChatMessages,
+  useSessionCompositionStream,
   useCurrentSessionHydrationQuery,
   useSessionCurrentSnapshot,
   useSessionEventStream,
@@ -484,6 +491,14 @@ function buildPendingChatConfirmationTitle(action: ChatToUiAction) {
       return 'Accept this beat sheet'
     case 'update_story_setup':
       return 'Save this story setup'
+    case 'start_composition':
+      return 'Start composition'
+    case 'pause_job':
+      return 'Pause writing'
+    case 'resume_job':
+      return 'Resume writing'
+    case 'redirect_composition':
+      return 'Queue a composition rewrite'
     default:
       return 'Apply chat change'
   }
@@ -505,6 +520,12 @@ function canApplyChatAction(action: ChatToUiAction) {
     action.action_type === 'refine_beat_sheet' ||
     action.action_type === 'accept_beat_sheet' ||
     action.action_type === 'update_story_setup' ||
+    action.action_type === 'start_composition' ||
+    (action.action_type === 'pause_job' &&
+      action.target_stage === 'composition') ||
+    (action.action_type === 'resume_job' &&
+      action.target_stage === 'composition') ||
+    action.action_type === 'redirect_composition' ||
     action.action_type === 'open_finalize_view'
   )
 }
@@ -656,6 +677,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const hydrationQuery = useCurrentSessionHydrationQuery()
   const runtimeSnapshot = useSessionCurrentSnapshot()
   const chatMessages = useSessionChatMessages()
+  const composition = useSessionCompositionStream()
   const eventStream = useSessionEventStream()
   const runtimeStore = useSessionRuntimeActions()
   const snapshot = runtimeSnapshot ?? hydrationQuery.data?.snapshot
@@ -1270,6 +1292,83 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  function resolveCompositionJobId() {
+    return (
+      snapshot?.active_composition_job?.id ??
+      snapshot?.latest_composition_job?.id ??
+      null
+    )
+  }
+
+  async function applyCompositionStart(options: {
+    mode?: 'continue' | 'fresh' | 'rewrite'
+    instructions?: string | null
+    origin: string
+    restartFromSegmentIndex?: number | null
+  }) {
+    const result = await startSessionComposition(sessionId, {
+      mode: options.mode ?? 'fresh',
+      instructions: options.instructions ?? null,
+      restart_from_segment_index: options.restartFromSegmentIndex ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
+  async function applyCompositionPause(options: { jobId: string }) {
+    const result = await pauseSessionComposition(sessionId, options.jobId)
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
+  async function applyCompositionResume(options: { jobId: string }) {
+    const result = await resumeSessionComposition(sessionId, options.jobId)
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
+  async function applyCompositionCancel(options: { jobId: string }) {
+    const result = await cancelSessionComposition(sessionId, options.jobId)
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
+  async function applyCompositionRedirect(options: {
+    instructions: string
+    jobId: string
+    origin: string
+    rewriteFromSegmentIndex?: number | null
+  }) {
+    const result = await redirectSessionComposition(sessionId, options.jobId, {
+      instructions: options.instructions,
+      rewrite_from_segment_index: options.rewriteFromSegmentIndex ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage('composition')
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1427,6 +1526,68 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         guidanceNotes: action.extracted_values.guidance_notes,
         origin: 'chat',
         previewCurrentStage: false,
+      })
+      return
+    }
+
+    if (action.action_type === 'start_composition') {
+      await applyCompositionStart({
+        mode: action.extracted_values.mode ?? 'fresh',
+        instructions: action.extracted_values.instructions ?? null,
+        restartFromSegmentIndex:
+          action.extracted_values.restart_from_segment_index ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (
+      action.action_type === 'pause_job' &&
+      action.target_stage === 'composition'
+    ) {
+      const jobId = action.extracted_values.job_id ?? resolveCompositionJobId()
+
+      if (jobId == null) {
+        throw new Error('No active composition job is available to pause.')
+      }
+
+      await applyCompositionPause({
+        jobId,
+      })
+      return
+    }
+
+    if (
+      action.action_type === 'resume_job' &&
+      action.target_stage === 'composition'
+    ) {
+      const jobId = action.extracted_values.job_id ?? resolveCompositionJobId()
+
+      if (jobId == null) {
+        throw new Error('No paused composition job is available to resume.')
+      }
+
+      await applyCompositionResume({
+        jobId,
+      })
+      return
+    }
+
+    if (action.action_type === 'redirect_composition') {
+      const jobId = resolveCompositionJobId()
+
+      if (jobId == null) {
+        throw new Error('No active composition job is available to redirect.')
+      }
+
+      await applyCompositionRedirect({
+        jobId,
+        instructions: action.extracted_values.instructions,
+        rewriteFromSegmentIndex:
+          action.extracted_values.rewrite_from_segment_index ??
+          snapshot?.active_composition_job?.current_segment_index ??
+          1,
+        origin: 'chat',
       })
       return
     }
@@ -1860,6 +2021,53 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onSaveStoryOutline={applyStoryOutlineSave}
                   onSaveStorySetup={applyStorySetupSave}
                   selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'composition' ? (
+                <CompositionStage
+                  composition={composition}
+                  connectionState={eventStream.connectionState}
+                  onCancelComposition={async (jobId) =>
+                    applyCompositionCancel({
+                      jobId,
+                    })
+                  }
+                  onPauseComposition={async (jobId) =>
+                    applyCompositionPause({
+                      jobId,
+                    })
+                  }
+                  onRedirectComposition={async (options) => {
+                    const jobId = resolveCompositionJobId()
+
+                    if (jobId == null) {
+                      throw new Error(
+                        'No active composition job is available to redirect.',
+                      )
+                    }
+
+                    return applyCompositionRedirect({
+                      jobId,
+                      instructions: options.instructions,
+                      rewriteFromSegmentIndex:
+                        options.rewriteFromSegmentIndex ?? null,
+                      origin: 'workspace',
+                    })
+                  }}
+                  onResumeComposition={async (jobId) =>
+                    applyCompositionResume({
+                      jobId,
+                    })
+                  }
+                  onStartComposition={async (body) =>
+                    applyCompositionStart({
+                      mode: body.mode ?? 'fresh',
+                      instructions: body.instructions ?? null,
+                      restartFromSegmentIndex:
+                        body.restart_from_segment_index ?? null,
+                      origin: body.origin ?? 'workspace',
+                    })
+                  }
                   snapshot={snapshot}
                 />
               ) : (

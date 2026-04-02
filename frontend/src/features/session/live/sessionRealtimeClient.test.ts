@@ -77,6 +77,7 @@ describe('sessionRealtimeClient', () => {
       connectionState: string
       retryCount?: number
     }> = []
+    const acknowledgements: string[] = []
     const events: Array<{ sequenceNumber: number | null; type: string }> = []
     let latestSequenceNumber: number | null = null
 
@@ -100,6 +101,9 @@ describe('sessionRealtimeClient', () => {
           sequenceNumber: event.sequence_number ?? null,
           type: event.type,
         })
+      },
+      onSubscribed: (ack) => {
+        acknowledgements.push(ack.connection_id)
       },
       onConnectionStateChange: (update) => {
         statuses.push({
@@ -147,6 +151,7 @@ describe('sessionRealtimeClient', () => {
       channel: 'session:session-123',
       retryCount: 0,
     })
+    expect(acknowledgements).toEqual(['conn-1'])
 
     sockets[0]?.emitMessage({
       schema_version: 1,
