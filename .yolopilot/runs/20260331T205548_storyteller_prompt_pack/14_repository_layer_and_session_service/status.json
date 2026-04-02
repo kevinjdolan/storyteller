@@ -1,0 +1,108 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/14_repository_layer_and_session_service/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/app backend/tests'",
+        "exit_code": 127,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_session_service.py backend/tests/test_workflow.py backend/tests/test_db_models.py'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_session_service.py backend/tests/test_workflow.py backend/tests/test_db_models.py'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/app backend/tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_session_service.py backend/tests/test_workflow.py backend/tests/test_db_models.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-01T06:27:42.105738Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 157,
+    "file_paths": [
+      "backend/app/models/__init__.py",
+      "backend/app/models/session.py",
+      "backend/app/repositories/__init__.py",
+      "backend/app/repositories/sessions.py",
+      "backend/app/services/sessions.py",
+      "backend/tests/test_session_service.py",
+      "backend/app/services/__init__.py",
+      "prompts/14-repositories-and-session-service.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d47b3-f0ba-7ee2-a20d-3c16ddd9d5bd",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 2881664,
+      "input_tokens": 3015526,
+      "output_tokens": 39320,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-01T06:27:42.105738Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+  ],
+  "head_commit": "c55d39d71de6201e686764b52d20057ffb5f233f",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "14-repositories-and-session-service.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-14-repositories-and-session-service",
+  "task_name_human": "14 \u2014 Repository Layer and Session Service",
+  "task_name_system": "14_repository_layer_and_session_service",
+  "timing": {
+    "duration_seconds": 873.0,
+    "finished_at": "2026-03-31T23:35:39-07:00",
+    "started_at": "2026-03-31T23:21:06-07:00"
+  }
+}

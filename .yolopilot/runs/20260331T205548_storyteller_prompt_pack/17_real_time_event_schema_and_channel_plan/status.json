@@ -1,0 +1,86 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/17_real_time_event_schema_and_channel_plan/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc './.venv/bin/ruff check app/models/realtime.py app/models/__init__.py tests/test_realtime_contracts.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-01T07:27:09.869334Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 155,
+    "file_paths": [
+      "backend/app/models/realtime.py",
+      "backend/app/models/__init__.py",
+      "backend/tests/test_realtime_contracts.py",
+      "docs/realtime-events.md",
+      "docs/README.md",
+      "prompts/17-realtime-event-schema.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d47e6-14d6-7b52-a8a6-6e4cb959847a",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 3338752,
+      "input_tokens": 3766284,
+      "output_tokens": 36353,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-01T07:27:09.869334Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:"
+  ],
+  "head_commit": "274a6a0d5059cb3c37cc6028e89c99f763e8e561",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "17-realtime-event-schema.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-17-realtime-event-schema",
+  "task_name_human": "17 \u2014 Real-Time Event Schema and Channel Plan",
+  "task_name_system": "17_real_time_event_schema_and_channel_plan",
+  "timing": {
+    "duration_seconds": 1055.0,
+    "finished_at": "2026-04-01T00:33:27-07:00",
+    "started_at": "2026-04-01T00:15:52-07:00"
+  }
+}

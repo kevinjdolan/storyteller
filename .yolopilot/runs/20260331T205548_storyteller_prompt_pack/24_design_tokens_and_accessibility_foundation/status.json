@@ -1,0 +1,106 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/24_design_tokens_and_accessibility_foundation/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'docker compose ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd infra/compose && docker compose run --rm browser npm run check -- --spec /workspace/tools/webapp-qa/examples/homepage.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run lint'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run format:check'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 233,
+    "file_paths": [
+      "frontend/src/shared/ui/primitives.tsx",
+      "frontend/src/shared/ui/ConnectionStatusBadge.tsx",
+      "frontend/src/shared/ui/ToastRegion.tsx",
+      "frontend/src/app/AppShell.tsx",
+      "frontend/src/pages/home/HomePage.tsx",
+      "frontend/src/pages/not-found/NotFoundPage.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/shared/ui/primitives.test.tsx",
+      "docs/frontend-design-foundation.md",
+      "tools/webapp-qa/examples/prompt-24-foundation-flow.spec.json",
+      "tools/webapp-qa/examples/prompt-24-home-mobile.spec.json",
+      "frontend/src/shared/ui/buttonStyles.ts",
+      "tools/webapp-qa/examples/prompt-24-keyboard-focus.spec.json",
+      "prompts/24-design-tokens-and-accessibility-foundation.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4856-ee06-7801-9be1-bf0eb37eafda",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 8279552,
+      "input_tokens": 8620290,
+      "output_tokens": 56000,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "38130f279bcf45d9388db85a2a2d610ada7e1a00",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "24-design-tokens-and-accessibility-foundation.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-24-design-tokens-and-accessibility-foundation",
+  "task_name_human": "24 \u2014 Design Tokens and Accessibility Foundation",
+  "task_name_system": "24_design_tokens_and_accessibility_foundation",
+  "timing": {
+    "duration_seconds": 1315.0,
+    "finished_at": "2026-04-01T02:41:03-07:00",
+    "started_at": "2026-04-01T02:19:08-07:00"
+  }
+}

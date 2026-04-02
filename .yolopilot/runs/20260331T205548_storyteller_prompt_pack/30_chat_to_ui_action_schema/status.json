@@ -1,0 +1,123 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/30_chat_to_ui_action_schema/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/app/models/sessions.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' frontend/src/features/session/sessionTypes.ts\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npm test -- --run frontend/src/features/session/chat/chatToUiActions.test.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && pytest tests/test_chat_action_contracts.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && ruff check app tests && pytest tests/test_realtime_contracts.py tests/test_chat_action_contracts.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npm run build && npx prettier --check src/features/session/chat/chatToUiActions.ts src/features/session/chat/chatToUiActions.test.ts ../docs/chat-to-ui-actions.md ../docs/chat-to-ui-actions.schema.json'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npm run lint'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npx prettier --write src/features/session/chat/chatToUiActions.ts src/features/session/chat/chatToUiActions.test.ts ../docs/chat-to-ui-actions.md ../docs/chat-to-ui-actions.schema.json && npm run lint && npm run build && npx vitest run src/features/session/chat/chatToUiActions.test.ts'",
+        "exit_code": 2,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-01T11:37:29.290820Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/chat/chatToUiActions.ts:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 173,
+    "file_paths": [
+      "backend/app/models/chat_actions.py",
+      "backend/app/models/__init__.py",
+      "backend/tests/test_chat_action_contracts.py",
+      "frontend/src/features/session/chat/chatToUiActions.ts",
+      "frontend/src/features/session/chat/chatToUiActions.test.ts",
+      "docs/chat-to-ui-actions.md",
+      "docs/README.md",
+      "prompts/30-chat-to-ui-action-schema.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d48c7-341b-7901-adb2-6b008e62e9d7",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 4094336,
+      "input_tokens": 4524651,
+      "output_tokens": 49006,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-01T11:37:29.290820Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/chat/chatToUiActions.ts:"
+  ],
+  "head_commit": "75ac4825bdc6345bfd4d4c49569b0fa9192f932f",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "30-chat-to-ui-action-schema.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-30-chat-to-ui-action-schema",
+  "task_name_human": "30 \u2014 Chat-to-UI Action Schema",
+  "task_name_system": "30_chat_to_ui_action_schema",
+  "timing": {
+    "duration_seconds": 1108.0,
+    "finished_at": "2026-04-01T04:40:14-07:00",
+    "started_at": "2026-04-01T04:21:46-07:00"
+  }
+}

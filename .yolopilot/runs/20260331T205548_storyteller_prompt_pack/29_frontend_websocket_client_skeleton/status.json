@@ -1,0 +1,130 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/29_frontend_websocket_client_skeleton/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run frontend/src/features/session/sessionRuntimeStore.test.ts frontend/src/features/session/live/sessionRealtimeClient.test.ts frontend/src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run src/features/session/sessionRuntimeStore.test.ts src/features/session/live/sessionRealtimeClient.test.ts src/pages/session/SessionWorkspacePage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run format:check'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' docker-compose.yml\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'curl -sS --max-time 5 http://localhost:8565/health'",
+        "exit_code": 7,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'curl -sS --max-time 10 http://localhost:8565/health'",
+        "exit_code": 7,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker compose -f infra/compose/docker-compose.yml run --rm browser node --input-type=module <<'EOF'\nimport fs from 'node:fs/promises'\nimport path from 'node:path'\nimport puppeteer from 'puppeteer'\n\nconst outputDir = '/workspace/.artifacts/webapp-qa'\nawait fs.mkdir(outputDir, { recursive: true })\n\nconst sampleSnapshot = {\n  id: 'moonlit-harbor',\n  display_title: 'Lanterns Over Juniper Lake',\n  working_title: 'Lanterns Over Juniper Lake',\n  current_stage: 'beats',\n  resume_stage: 'beats',\n  furthest_completed_stage: 'characters',\n  overall_status: 'in_progress',\n  created_at: '2026-04-01T03:00:00Z',\n  updated_at: '2026-04-01T05:15:00Z',\n  completed_at: null,\n  selected_genre: {\n    id: 'genre-1',\n    slug: 'quest-fantasy',\n    label: 'Quest Fantasy',\n  },\n  selected_tone_profile: {\n    id: 'tone-1',\n    slug: 'hushed-wonder',\n    label: 'Hushed Wonder',\n  },\n  progress: {\n    total_stages: 10,\n    completed_stages: 5,\n    in_progress_stages: 1,\n    needs_regeneration_stages: 0,\n  },\n  stage_states: [\n    { stage: 'genre', label: 'Genre', description: 'Choose the overall bedtime-story lane before the rest of the plan is shaped.', status: 'completed', detail: 'Accepted quest fantasy.' },\n    { stage: 'tone', label: 'Tone', description: 'Choose the emotional texture and bedtime-safety posture for the session.', status: 'completed', detail: 'Selected a soft adventurous tone.' },\n    { stage: 'brief', label: 'Story brief', description: \\\"Capture the user's free-form idea and any normalized planning summary derived from it.\\\", status: 'completed', detail: 'Accepted normalized brief.' },\n    { stage: 'pitches', label: 'Pitches', description: 'Generate, compare, refine, and accept candidate story directions.', status: 'completed', detail: 'Accepted the harbor lantern pitch.' },\n    { stage: 'characters', label: 'Characters', description: 'Define the accepted character sheet that later planning and writing will reference.', status: 'completed', detail: 'Locked the character sheet.' },\n    { stage: 'beats', label: 'Beat sheet', description: 'Store the accepted Save-the-Cat beat sheet for the session.', status: 'in_progress', detail: 'Midpoint needs one more bedtime-soft pass.' },\n    { stage: 'story_setup', label: 'Story setup', description: 'Store soft planning targets such as word count, runtime, and chapter structure.', status: 'draft', detail: null },\n    { stage: 'composition', label: 'Composition', description: 'Write the story durably in segments, with room for interruption and targeted rewrites.', status: 'draft', detail: null },\n    { stage: 'audio', label: 'Audio', description: 'Configure narration settings and generate resumable audio artifacts.', status: 'draft', detail: null },\n    { stage: 'finalize', label: 'Finalize', description: 'Read, listen, review final assets, and download exports.', status: 'draft', detail: null },\n  ],\n  story_brief: {\n    id: 'brief-1',\n    revision_number: 1,\n    raw_brief: 'A child follows floating lanterns across a harbor and helps a shy otter guardian bring them home.',\n    normalized_summary: 'A harbor bedtime quest where floating lanterns guide a child and an otter toward a calm reunion.',\n  },\n  selected_pitch: {\n    id: 'pitch-1',\n    generation_key: 'batch-1',\n    pitch_index: 0,\n    title: 'Lanterns Over Juniper Lake',\n    logline: 'A child and an otter guardian follow drifting lanterns across the harbor to return each light before bedtime.',\n  },\n  selected_character_sheet: null,\n  selected_story_setup: {\n    id: 'setup-1',\n    revision_number: 1,\n    target_word_count: 1500,\n    target_runtime_minutes: 12,\n    chapter_count: 4,\n    chapter_style: 'short',\n  },\n  active_composition_job: null,\n  active_audio_job: null,\n  latest_story_asset: null,\n  latest_audio_asset: null,\n}\n\nconst browser = await puppeteer.launch({\n  headless: true,\n  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,\n  args: ['--no-sandbox', '--disable-setuid-sandbox'],\n})\n\ntry {\n  const page = await browser.newPage()\n  await page.setRequestInterception(true)\n  page.on('request', async (request) => {\n    const url = request.url()\n\n    if (url.endsWith('/api/hello')) {\n      await request.respond({\n        status: 200,\n        contentType: 'application/json',\n        body: JSON.stringify({ message: 'Hello from mocked backend.' }),\n      })\n      return\n    }\n\n    if (url.includes('/api/v1/sessions/moonlit-harbor')) {\n      await request.respond({\n        status: 200,\n        contentType: 'application/json',\n        body: JSON.stringify(sampleSnapshot),\n      })\n      return\n    }\n\n    await request.continue()\n  })\n\n  page.on('console', (message) => {\n    console.log(\"'`[browser:${message.type()}] ${message.text()}`)\n  })\n\n  const targetUrl = '\"'http://frontend:8566/sessions/moonlit-harbor'\n\n  await page.setViewport({ width: 1440, height: 960 })\n  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 })\n  await page.waitForSelector('[data-testid=\\\"workspace-route\\\"]', { visible: true })\n  await page.waitForFunction(() => document.body.innerText.includes('Live feed idle'))\n  await page.waitForFunction(() => document.body.innerText.includes('Live updates'))\n  const desktopPath = path.join(outputDir, 'prompt-29-session-workspace-desktop.png')\n  await page.screenshot({ path: desktopPath, fullPage: false })\n\n  await page.setViewport({ width: 390, height: 844 })\n  await page.reload({ waitUntil: 'networkidle2', timeout: 30000 })\n  await page.waitForSelector('[data-testid=\\\"workspace-route\\\"]', { visible: true })\n  await page.waitForFunction(() => document.body.innerText.includes('Live feed idle'))\n  const mobilePath = path.join(outputDir, 'prompt-29-session-workspace-mobile.png')\n  await page.screenshot({ path: mobilePath, fullPage: false })\n\n  console.log(\"'`Saved desktop screenshot to ${desktopPath}`)\n  console.log(`Saved mobile screenshot to ${mobilePath}`)\n} finally {\n  await browser.close()\n}\nEOF'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 246,
+    "file_paths": [
+      "frontend/src/features/session/live/sessionFeedConnection.ts",
+      "frontend/src/features/session/live/sessionRealtime.ts",
+      "frontend/src/features/session/live/sessionRealtimeClient.ts",
+      "frontend/src/features/session/sessionRuntimeStore.ts",
+      "frontend/src/features/session/SessionWorkspaceProvider.tsx",
+      "frontend/src/features/session/sessionWorkspaceContext.ts",
+      "frontend/src/features/session/live/SessionFeedStatusIndicator.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/sessionRuntimeStore.test.ts",
+      "frontend/src/features/session/live/sessionRealtimeClient.test.ts",
+      "frontend/src/pages/session/SessionWorkspacePage.test.tsx",
+      "frontend/src/vite-env.d.ts",
+      "prompts/29-frontend-websocket-client-skeleton.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d48b0-83a3-73d1-b4b9-69ea98472218",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 9073152,
+      "input_tokens": 9685400,
+      "output_tokens": 68431,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "bd0a951073b2254535f2bfe62baa7392f643cf8b",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "29-frontend-websocket-client-skeleton.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-29-frontend-websocket-client-skeleton",
+  "task_name_human": "29 \u2014 Frontend WebSocket Client Skeleton",
+  "task_name_system": "29_frontend_websocket_client_skeleton",
+  "timing": {
+    "duration_seconds": 1487.0,
+    "finished_at": "2026-04-01T04:21:46-07:00",
+    "started_at": "2026-04-01T03:56:59-07:00"
+  }
+}
