@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter, sleep
@@ -26,6 +28,7 @@ from app.db import (
 from app.db.base import utc_now
 from app.models import (
     COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
+    ChatMessageRole,
     CompositionPromptAssemblyInput,
     CompositionSegmentCarryoverContext,
     CompositionSegmentCarryoverItem,
@@ -42,7 +45,11 @@ from app.services.composition_streaming import (
     build_accepted_story_so_far,
     split_text_for_streaming,
 )
-from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
+from app.services.event_log import (
+    DEFAULT_ASSISTANT_ACTOR,
+    DEFAULT_SYSTEM_ACTOR,
+    SessionEventLogService,
+)
 from app.services.jobs import BackgroundJobService
 from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.plan_revisions import PlanRevisionService
@@ -53,6 +60,10 @@ from app.storage import ObjectStorageService, build_object_storage_service
 COMPOSITION_RUNTIME_JOB_TYPE = "story.run_composition_job"
 _SEGMENT_CHUNK_PARAGRAPHS = 3
 _COMPLETION_DETAIL = "Writing finished and the latest draft is ready for review."
+_COMPOSITION_SUMMARY_PROGRESS_CHECKPOINTS = (0.34, 0.67)
+_COMPOSITION_SUMMARY_FINAL_CHECKPOINT = "segment-complete"
+_COMPOSITION_SUMMARY_METADATA_KEY = "emitted_summary_checkpoints"
+_SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]")
 
 
 class CompositionJobServiceError(Exception):
@@ -99,6 +110,13 @@ class GeneratedCompositionSegmentDraft:
     model_id: str | None = None
     prompt_version: str | None = None
     raw_response: dict[str, Any] | list[Any] | str | None = None
+
+
+@dataclass(frozen=True)
+class CompositionSummaryCheckpoint:
+    key: str
+    chunk_index: int
+    progress_ratio: float
 
 
 class CompositionSegmentWriter(Protocol):
@@ -879,6 +897,10 @@ class CompositionJobService:
         )
 
         chunk_count = max(len(draft.remaining_chunks), 1)
+        summary_checkpoints = {
+            checkpoint.chunk_index: checkpoint
+            for checkpoint in _plan_composition_summary_checkpoints(chunk_count)
+        }
         current_text = current_segment.accepted_text or current_segment.text_content or ""
         chunk_index = 0
         for chunk in draft.remaining_chunks:
@@ -906,6 +928,17 @@ class CompositionJobService:
                 current_text,
                 content_type="text/markdown; charset=utf-8",
             )
+            checkpoint = summary_checkpoints.get(chunk_index + 1)
+            if checkpoint is not None:
+                self._record_composition_summary_checkpoint(
+                    job=job,
+                    segment=current_segment,
+                    total_segments=total_segments,
+                    current_text=current_text,
+                    segment_payload=refreshed_payload,
+                    progress_percent=job.progress_percent,
+                    checkpoint_key=checkpoint.key,
+                )
             self._events.record_composition_progress(
                 job.session_id,
                 job_id=job.id,
@@ -978,6 +1011,15 @@ class CompositionJobService:
         current_segment.word_count = _count_words(draft.accepted_text)
         current_segment.status = JobStatus.COMPLETED
         current_segment.completed_at = utc_now()
+        self._record_composition_summary_checkpoint(
+            job=job,
+            segment=current_segment,
+            total_segments=total_segments,
+            current_text=draft.accepted_text,
+            segment_payload=refreshed_payload,
+            progress_percent=job.progress_percent,
+            checkpoint_key=_COMPOSITION_SUMMARY_FINAL_CHECKPOINT,
+        )
         self._storage().upload_text(
             segment_storage_location,
             draft.accepted_text,
@@ -1137,6 +1179,47 @@ class CompositionJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         return job
+
+    def _record_composition_summary_checkpoint(
+        self,
+        *,
+        job: CompositionJob,
+        segment: CompositionSegment,
+        total_segments: int,
+        current_text: str,
+        segment_payload: Mapping[str, Any],
+        progress_percent: float | None,
+        checkpoint_key: str,
+    ) -> None:
+        if _has_emitted_summary_checkpoint(job, segment.id, checkpoint_key):
+            return
+
+        summary_message = _build_composition_summary_message(
+            segment_index=segment.segment_index,
+            total_segments=total_segments,
+            current_text=current_text,
+            segment_payload=segment_payload,
+            planned_summary=segment.planned_summary,
+            progress_percent=progress_percent,
+            checkpoint_key=checkpoint_key,
+        )
+        if summary_message is None:
+            return
+
+        self._events.record_chat_message(
+            job.session_id,
+            message_role=ChatMessageRole.ASSISTANT,
+            content=summary_message,
+            stage=WorkflowStage.COMPOSITION,
+            message_id=_build_composition_summary_message_id(
+                job_id=job.id,
+                segment_id=segment.id,
+                checkpoint_key=checkpoint_key,
+            ),
+            source="composition_summary",
+            actor=DEFAULT_ASSISTANT_ACTOR,
+        )
+        _mark_summary_checkpoint_emitted(job, segment.id, checkpoint_key)
 
     def _require_job(self, session_id: str, composition_job_id: str) -> CompositionJob:
         job = self._session.get(CompositionJob, composition_job_id)
@@ -1508,6 +1591,149 @@ def _completed_segment_progress_percent(
     return round((completed_segments / max(total_segments, 1)) * 100, 2)
 
 
+def _plan_composition_summary_checkpoints(
+    total_chunks: int,
+) -> tuple[CompositionSummaryCheckpoint, ...]:
+    if total_chunks <= 1:
+        return ()
+
+    checkpoints: list[CompositionSummaryCheckpoint] = []
+    seen_chunk_indexes: set[int] = set()
+    for progress_ratio in _COMPOSITION_SUMMARY_PROGRESS_CHECKPOINTS:
+        chunk_index = max(1, math.ceil(total_chunks * progress_ratio))
+        if chunk_index >= total_chunks or chunk_index in seen_chunk_indexes:
+            continue
+        seen_chunk_indexes.add(chunk_index)
+        checkpoints.append(
+            CompositionSummaryCheckpoint(
+                key=f"progress-{int(progress_ratio * 100)}",
+                chunk_index=chunk_index,
+                progress_ratio=progress_ratio,
+            )
+        )
+    return tuple(checkpoints)
+
+
+def _build_composition_summary_message(
+    *,
+    segment_index: int,
+    total_segments: int,
+    current_text: str,
+    segment_payload: Mapping[str, Any],
+    planned_summary: str | None,
+    progress_percent: float | None,
+    checkpoint_key: str,
+) -> str | None:
+    excerpt = _build_generated_summary_excerpt(current_text, limit=54)
+    if excerpt is None:
+        return None
+
+    direction = _resolve_summary_direction(segment_payload, planned_summary)
+    focus = _resolve_summary_focus(segment_payload, planned_summary)
+
+    prefix = (
+        f"Segment {segment_index}/{total_segments} handoff"
+        if checkpoint_key == _COMPOSITION_SUMMARY_FINAL_CHECKPOINT
+        else (
+            f"Writing update {round(progress_percent)}% ({segment_index}/{total_segments})"
+            if progress_percent is not None
+            else f"Writing update ({segment_index}/{total_segments})"
+        )
+    )
+    parts = [f"{prefix}: {excerpt}"]
+    if direction is not None:
+        parts.append(f"Direction: {direction}.")
+    if focus is not None:
+        parts.append(f"Focus: {focus}.")
+
+    return _truncate_text(" ".join(parts), limit=160)
+
+
+def _build_generated_summary_excerpt(text: str, *, limit: int) -> str | None:
+    normalized = " ".join(text.split()).strip()
+    if not normalized:
+        return None
+
+    completed_sentences = [
+        match.group(0).strip() for match in _SENTENCE_PATTERN.finditer(normalized)
+    ]
+    if completed_sentences:
+        excerpt = completed_sentences[-1]
+        if len(excerpt) < 56 and len(completed_sentences) >= 2:
+            excerpt = f"{completed_sentences[-2]} {excerpt}"
+        return _truncate_summary_text(excerpt, limit=limit)
+
+    return _truncate_summary_text(normalized, limit=limit)
+
+
+def _resolve_summary_direction(
+    segment_payload: Mapping[str, Any],
+    planned_summary: str | None,
+) -> str | None:
+    for candidate in (
+        _read_optional_prompt_text(segment_payload, "outline_card_summary"),
+        _read_text(
+            _read_mapping(_read_mapping(segment_payload, "composition_prompt"), "dynamic_context"),
+            "segment_goal_summary",
+        ),
+        planned_summary,
+    ):
+        normalized = _normalize_summary_fragment(candidate, limit=24)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _resolve_summary_focus(
+    segment_payload: Mapping[str, Any],
+    planned_summary: str | None,
+) -> str | None:
+    dynamic_context = _read_mapping(
+        _read_mapping(segment_payload, "composition_prompt"),
+        "dynamic_context",
+    )
+    outline_card = _read_mapping(dynamic_context, "outline_card")
+
+    for candidate in (
+        _read_optional_prompt_text(segment_payload, "outline_card_emotional_shift"),
+        _read_optional_prompt_text(segment_payload, "outline_card_drafting_brief"),
+        _read_text(outline_card, "emotional_shift"),
+        _read_text(outline_card, "bedtime_guardrail"),
+        planned_summary,
+    ):
+        normalized = _normalize_summary_fragment(candidate, limit=22)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _normalize_summary_fragment(value: str | None, *, limit: int) -> str | None:
+    if value is None:
+        return None
+    normalized = " ".join(value.split()).strip().rstrip(".")
+    if not normalized:
+        return None
+    return _truncate_summary_text(normalized, limit=limit)
+
+
+def _truncate_summary_text(value: str, *, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    truncated = value[: limit - 3].rstrip()
+    if " " in truncated:
+        truncated = truncated.rsplit(" ", 1)[0]
+    return f"{truncated.rstrip(' ,;:')}..."
+
+
+def _build_composition_summary_message_id(
+    *,
+    job_id: str,
+    segment_id: str,
+    checkpoint_key: str,
+) -> str:
+    return f"composition-summary-{job_id}-{segment_id}-{checkpoint_key}"
+
+
 def _split_remaining_text(prefix: str, remaining_text: str) -> list[str]:
     return split_text_for_streaming(prefix, remaining_text)
 
@@ -1531,6 +1757,50 @@ def _read_metadata(job: CompositionJob) -> dict[str, Any]:
     if isinstance(job.metadata_json, Mapping):
         return dict(job.metadata_json)
     return {}
+
+
+def _read_summary_checkpoint_state(job: CompositionJob) -> dict[str, list[str]]:
+    raw_state = _read_metadata(job).get(_COMPOSITION_SUMMARY_METADATA_KEY)
+    if not isinstance(raw_state, Mapping):
+        return {}
+
+    checkpoint_state: dict[str, list[str]] = {}
+    for segment_id, raw_values in raw_state.items():
+        if not isinstance(segment_id, str) or not isinstance(raw_values, list):
+            continue
+        values = [
+            str(value).strip()
+            for value in raw_values
+            if isinstance(value, str) and str(value).strip()
+        ]
+        if values:
+            checkpoint_state[segment_id] = values
+    return checkpoint_state
+
+
+def _has_emitted_summary_checkpoint(
+    job: CompositionJob,
+    segment_id: str,
+    checkpoint_key: str,
+) -> bool:
+    return checkpoint_key in _read_summary_checkpoint_state(job).get(segment_id, [])
+
+
+def _mark_summary_checkpoint_emitted(
+    job: CompositionJob,
+    segment_id: str,
+    checkpoint_key: str,
+) -> None:
+    metadata = _read_metadata(job)
+    checkpoint_state = _read_summary_checkpoint_state(job)
+    segment_state = checkpoint_state.get(segment_id, [])
+    if checkpoint_key not in segment_state:
+        segment_state = [*segment_state, checkpoint_key]
+    checkpoint_state[segment_id] = segment_state
+    job.metadata_json = {
+        **metadata,
+        _COMPOSITION_SUMMARY_METADATA_KEY: checkpoint_state,
+    }
 
 
 def _read_total_segments(job: CompositionJob) -> int:

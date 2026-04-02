@@ -31,6 +31,7 @@ from app.db import (
     make_engine,
 )
 from app.models import (
+    ChatMessageRole,
     ChatToUIActionBatch,
     IntentParserPromptContext,
     IntentParserStageContext,
@@ -50,12 +51,18 @@ from app.services import (
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
 )
-from app.services.composition_jobs import GeneratedCompositionSegmentDraft
+from app.services.composition_jobs import (
+    GeneratedCompositionSegmentDraft,
+    _build_composition_summary_message,
+    _has_emitted_summary_checkpoint,
+    _plan_composition_summary_checkpoints,
+)
 from app.services.composition_streaming import (
     STREAMING_MAX_CHUNK_WORDS,
     STREAMING_MIN_CHUNK_WORDS,
     split_text_for_streaming,
 )
+from app.services.event_log import SessionEventLogService
 from app.settings import load_settings
 from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
@@ -198,6 +205,69 @@ class RecordingCompositionWriter:
             accepted_text=accepted_text,
             carryover_summary=carryover_summary,
             remaining_chunks=tuple(paragraphs),
+            evaluation=evaluation,
+            source="heuristic",
+        )
+
+
+class SummaryCheckpointCompositionWriter:
+    def compose_segment(
+        self,
+        *,
+        segment_payload,
+        prior_segments,
+        current_partial_text,
+        total_segments,
+    ) -> GeneratedCompositionSegmentDraft:
+        del prior_segments, current_partial_text, total_segments
+        dynamic_context = segment_payload["composition_prompt"]["dynamic_context"]
+        segment_index = int(dynamic_context["segment_index"])
+        protagonist_name = (
+            dynamic_context["selected_character_sheet"].get("protagonist_name") or "Mira"
+        )
+        companion_name = "Pip"
+        chunks = (
+            (
+                f"{protagonist_name} followed the bell along the quieter dock while the "
+                "lantern glow stayed gentle and easy to trust. "
+            ),
+            (
+                f"{companion_name} answered each new question before the harbor could "
+                "feel uncertain or sharp. "
+            ),
+            (
+                "The cove widened into silver water that felt hushed, companioned, and "
+                "ready for a softer midpoint reveal. "
+            ),
+            (
+                "Together they noticed the bell guiding them toward a sheltered rope "
+                "where the tide sounded restful instead of strange. "
+            ),
+            (
+                f"Every next step stayed calm enough for {protagonist_name} to keep "
+                "wondering without losing a sense of safety. "
+            ),
+            (
+                f"The moment landed in visible repair, leaving {protagonist_name} and "
+                f"{companion_name} ready for the next handoff. "
+            ),
+        )
+        accepted_text = "".join(chunks).strip()
+        carryover_summary = (
+            f"Segment {segment_index} moves {protagonist_name} deeper into the sheltered cove, "
+            f"keeps {companion_name} close, and ends in calm repair."
+        )
+        evaluation = evaluate_composition_segment_draft(
+            accepted_text,
+            protagonist_name=protagonist_name,
+            supporting_character_name=companion_name,
+            carryover_summary=carryover_summary,
+        )
+        return GeneratedCompositionSegmentDraft(
+            raw_text=accepted_text,
+            accepted_text=accepted_text,
+            carryover_summary=carryover_summary,
+            remaining_chunks=chunks,
             evaluation=evaluation,
             source="heuristic",
         )
@@ -921,6 +991,147 @@ def test_split_text_for_streaming_targets_readable_live_chunks() -> None:
         STREAMING_MIN_CHUNK_WORDS <= word_count <= STREAMING_MAX_CHUNK_WORDS
         for word_count in non_terminal_counts
     )
+
+
+def test_composition_summary_checkpoints_follow_meaningful_progress_steps() -> None:
+    one_chunk = _plan_composition_summary_checkpoints(1)
+    two_chunks = _plan_composition_summary_checkpoints(2)
+    six_chunks = _plan_composition_summary_checkpoints(6)
+
+    assert one_chunk == ()
+    assert [(checkpoint.key, checkpoint.chunk_index) for checkpoint in two_chunks] == [
+        ("progress-34", 1),
+    ]
+    assert [(checkpoint.key, checkpoint.chunk_index) for checkpoint in six_chunks] == [
+        ("progress-34", 3),
+        ("progress-67", 5),
+    ]
+
+
+def test_eval_composition_summary_messages_stay_grounded_and_compact() -> None:
+    message = _build_composition_summary_message(
+        segment_index=2,
+        total_segments=4,
+        current_text=(
+            "Mira followed the bell toward the quieter cove while Pip kept the water calm and "
+            "readable. The cove widened into silver water that felt hushed and companioned."
+        ),
+        segment_payload={
+            "outline_card_title": "Chapter 2",
+            "outline_card_summary": "Let the cove reveal feel soft and inviting",
+            "outline_card_emotional_shift": "keep the wonder gentle and companioned",
+            "composition_prompt": {
+                "dynamic_context": {
+                    "segment_goal_summary": "Reveal the cove without losing the bedtime calm.",
+                    "outline_card": {
+                        "bedtime_guardrail": "keep the harbor settled",
+                    },
+                }
+            },
+        },
+        planned_summary="Center the midpoint reveal softly.",
+        progress_percent=44,
+        checkpoint_key="progress-34",
+    )
+
+    assert message is not None
+    criteria = {
+        "mentions_progress": message.startswith("Writing update 44%"),
+        "grounds_excerpt_in_generated_text": "The cove widened" in message,
+        "includes_direction": "Direction:" in message,
+        "includes_focus": "Focus:" in message,
+        "stays_compact_for_history_replay": len(message) <= 160,
+    }
+
+    assert all(criteria.values()), criteria
+
+
+def test_composition_job_service_records_checkpointed_summary_chat_messages(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=SummaryCheckpointCompositionWriter(),
+            )
+            run_result = service.run_job(result.composition_job_id)
+            first_segment = session.execute(
+                select(CompositionSegment)
+                .where(
+                    CompositionSegment.composition_job_id == result.composition_job_id,
+                    CompositionSegment.segment_index == 1,
+                )
+                .order_by(CompositionSegment.revision_number.desc())
+            ).scalar_one()
+            history = SessionEventLogService(session).list_session_history(
+                seeded["session_id"]
+            )
+            composition_job = session.get(CompositionJob, result.composition_job_id)
+
+        summary_events = [
+            event
+            for event in history.events
+            if event.event_type == "chat.message.recorded"
+            and getattr(event.payload, "source", None) == "composition_summary"
+        ]
+        summary_message_ids = [
+            getattr(event.payload, "message_id", None) for event in summary_events
+        ]
+        criteria = {
+            "segment_completed_and_requeued": run_result["action"] == "queued_next_segment",
+            "three_checkpoint_messages": len(summary_events) == 3,
+            "assistant_role_only": all(
+                getattr(event.payload, "message_role", None) == ChatMessageRole.ASSISTANT
+                for event in summary_events
+            ),
+            "composition_stage_only": all(
+                event.stage == WorkflowStage.COMPOSITION for event in summary_events
+            ),
+            "stable_checkpoint_ids": summary_message_ids == [
+                f"composition-summary-{result.composition_job_id}-{first_segment.id}-progress-34",
+                f"composition-summary-{result.composition_job_id}-{first_segment.id}-progress-67",
+                f"composition-summary-{result.composition_job_id}-{first_segment.id}-segment-complete",
+            ],
+            "checkpoint_state_persisted": composition_job is not None
+            and _has_emitted_summary_checkpoint(
+                composition_job,
+                first_segment.id,
+                "progress-34",
+            )
+            and _has_emitted_summary_checkpoint(
+                composition_job,
+                first_segment.id,
+                "progress-67",
+            )
+            and _has_emitted_summary_checkpoint(
+                composition_job,
+                first_segment.id,
+                "segment-complete",
+            ),
+            "messages_include_direction_and_focus": all(
+                getattr(event.payload, "content", "").count("Direction:") == 1
+                and getattr(event.payload, "content", "").count("Focus:") == 1
+                for event in summary_events
+            ),
+        }
+
+        assert all(criteria.values()), criteria
+    finally:
+        object_storage.close()
+        client.close()
 
 
 def test_composition_job_service_carries_forward_structured_segment_summaries(
