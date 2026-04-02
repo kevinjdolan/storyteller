@@ -51,6 +51,7 @@ describe('workflowStages', () => {
       'finalize',
     ])
     expect(getInvalidatedStagesAfterEdit('beats')).toEqual([
+      'story_setup',
       'composition',
       'audio',
       'finalize',

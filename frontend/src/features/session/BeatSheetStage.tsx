@@ -15,8 +15,27 @@ import {
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
+import { getWorkflowStageLabel } from './workflowStages.ts'
 
 type BeatSheetStageProps = {
+  onEditBeatSheet: (input: {
+    beatSheetId?: string | null
+    revisionNumber?: number | null
+    summary?: string | null
+    bedtimeNotes?: string | null
+    bedtimeGoal?: string | null
+    beatUpdates?: Array<{
+      key: string
+      summary?: string | null
+      emotionalIntent?: string | null
+      bedtimeSofteningNote?: string | null
+    }>
+    summaryText?: string | null
+    origin: string
+  }) => Promise<{
+    event: SessionHistoryEvent
+    snapshot: SessionSnapshot
+  }>
   onGenerateBeatSheet: (input: {
     guidance?: string | null
     focusBeats?: string[]
@@ -47,6 +66,19 @@ type BeatSheetStageProps = {
   snapshot: SessionSnapshot
 }
 
+type BeatEditorBeatDraft = {
+  summary: string
+  emotionalIntent: string
+  bedtimeSofteningNote: string
+}
+
+type BeatEditorDraft = {
+  summary: string
+  bedtimeGoal: string
+  bedtimeNotes: string
+  beats: Record<string, BeatEditorBeatDraft>
+}
+
 const revisionTimestampFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
@@ -62,6 +94,22 @@ function humanizeBeatName(value: string) {
   return value
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatHumanizedList(values: string[]) {
+  if (values.length === 0) {
+    return ''
+  }
+
+  if (values.length === 1) {
+    return values[0]
+  }
+
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`
+  }
+
+  return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`
 }
 
 function parseBeatNames(value: string) {
@@ -152,7 +200,240 @@ function buildRevisionHelp(
   }
 }
 
+function buildBeatEditorDraft(beatSheet: BeatSheetView): BeatEditorDraft {
+  return {
+    summary: beatSheet.summary ?? '',
+    bedtimeGoal: beatSheet.bedtime_goal ?? '',
+    bedtimeNotes: beatSheet.bedtime_notes ?? '',
+    beats: Object.fromEntries(
+      beatSheet.beats.map((beat) => [
+        beat.key,
+        {
+          summary: beat.summary,
+          emotionalIntent: beat.emotional_intent ?? '',
+          bedtimeSofteningNote: beat.bedtime_softening_note ?? '',
+        },
+      ]),
+    ),
+  }
+}
+
+function readPreferredEditorBeatKey(beatSheet: BeatSheetView | null) {
+  if (beatSheet == null || beatSheet.beats.length === 0) {
+    return ''
+  }
+
+  const preferredFocusBeat = beatSheet.focus_beats.find((focusBeat) =>
+    beatSheet.beats.some(
+      (beat) =>
+        beat.key.toLowerCase() === focusBeat.toLowerCase() ||
+        beat.label.toLowerCase() === focusBeat.toLowerCase(),
+    ),
+  )
+  if (preferredFocusBeat != null) {
+    const matchingBeat = beatSheet.beats.find(
+      (beat) =>
+        beat.key.toLowerCase() === preferredFocusBeat.toLowerCase() ||
+        beat.label.toLowerCase() === preferredFocusBeat.toLowerCase(),
+    )
+    if (matchingBeat != null) {
+      return matchingBeat.key
+    }
+  }
+
+  return beatSheet.beats[0]?.key ?? ''
+}
+
+function countBeatEditorChanges(
+  beatSheet: BeatSheetView | null,
+  draft: BeatEditorDraft | null,
+) {
+  if (beatSheet == null || draft == null) {
+    return 0
+  }
+
+  let changeCount = 0
+  if ((beatSheet.summary ?? '') !== draft.summary) {
+    changeCount += 1
+  }
+  if ((beatSheet.bedtime_notes ?? '') !== draft.bedtimeNotes) {
+    changeCount += 1
+  }
+  if ((beatSheet.bedtime_goal ?? '') !== draft.bedtimeGoal) {
+    changeCount += 1
+  }
+
+  for (const beat of beatSheet.beats) {
+    const beatDraft = draft.beats[beat.key]
+    if (beatDraft == null) {
+      continue
+    }
+    if (beatDraft.summary !== beat.summary) {
+      changeCount += 1
+    }
+    if (beatDraft.emotionalIntent !== (beat.emotional_intent ?? '')) {
+      changeCount += 1
+    }
+    if (
+      beatDraft.bedtimeSofteningNote !== (beat.bedtime_softening_note ?? '')
+    ) {
+      changeCount += 1
+    }
+  }
+
+  return changeCount
+}
+
+function buildBeatEditorUpdateRequest(
+  beatSheet: BeatSheetView,
+  draft: BeatEditorDraft,
+) {
+  const beatUpdates: Array<{
+    key: string
+    summary?: string | null
+    emotionalIntent?: string | null
+    bedtimeSofteningNote?: string | null
+  }> = []
+
+  const summary = draft.summary.trim()
+  const bedtimeNotes = draft.bedtimeNotes.trim()
+  const bedtimeGoal = draft.bedtimeGoal.trim()
+
+  if (draft.summary !== (beatSheet.summary ?? '') && summary.length === 0) {
+    return {
+      error: 'Arc summary cannot be cleared from the beat editor.',
+    }
+  }
+  if (
+    draft.bedtimeNotes !== (beatSheet.bedtime_notes ?? '') &&
+    bedtimeNotes.length === 0
+  ) {
+    return {
+      error: 'Overall bedtime notes cannot be cleared from the beat editor.',
+    }
+  }
+  if (
+    draft.bedtimeGoal !== (beatSheet.bedtime_goal ?? '') &&
+    bedtimeGoal.length === 0
+  ) {
+    return {
+      error: 'Saved bedtime goal cannot be cleared from the beat editor.',
+    }
+  }
+
+  for (const beat of beatSheet.beats) {
+    const beatDraft = draft.beats[beat.key]
+    if (beatDraft == null) {
+      continue
+    }
+
+    const nextSummary = beatDraft.summary.trim()
+    const nextEmotionalIntent = beatDraft.emotionalIntent.trim()
+    const nextBedtimeSofteningNote = beatDraft.bedtimeSofteningNote.trim()
+
+    if (beatDraft.summary !== beat.summary && nextSummary.length === 0) {
+      return {
+        error: `${beat.label} summary cannot be cleared from the beat editor.`,
+      }
+    }
+    if (
+      beatDraft.emotionalIntent !== (beat.emotional_intent ?? '') &&
+      nextEmotionalIntent.length === 0
+    ) {
+      return {
+        error: `${beat.label} emotional intent cannot be cleared from the beat editor.`,
+      }
+    }
+    if (
+      beatDraft.bedtimeSofteningNote !== (beat.bedtime_softening_note ?? '') &&
+      nextBedtimeSofteningNote.length === 0
+    ) {
+      return {
+        error: `${beat.label} bedtime softening note cannot be cleared from the beat editor.`,
+      }
+    }
+
+    const beatUpdate: {
+      key: string
+      summary?: string | null
+      emotionalIntent?: string | null
+      bedtimeSofteningNote?: string | null
+    } = {
+      key: beat.key,
+    }
+
+    if (beatDraft.summary !== beat.summary) {
+      beatUpdate.summary = nextSummary
+    }
+    if (beatDraft.emotionalIntent !== (beat.emotional_intent ?? '')) {
+      beatUpdate.emotionalIntent = nextEmotionalIntent
+    }
+    if (
+      beatDraft.bedtimeSofteningNote !== (beat.bedtime_softening_note ?? '')
+    ) {
+      beatUpdate.bedtimeSofteningNote = nextBedtimeSofteningNote
+    }
+
+    if (
+      beatUpdate.summary != null ||
+      beatUpdate.emotionalIntent != null ||
+      beatUpdate.bedtimeSofteningNote != null
+    ) {
+      beatUpdates.push(beatUpdate)
+    }
+  }
+
+  const request = {
+    summary:
+      draft.summary !== (beatSheet.summary ?? '') ? summary : (null as string | null),
+    bedtimeNotes:
+      draft.bedtimeNotes !== (beatSheet.bedtime_notes ?? '')
+        ? bedtimeNotes
+        : (null as string | null),
+    bedtimeGoal:
+      draft.bedtimeGoal !== (beatSheet.bedtime_goal ?? '')
+        ? bedtimeGoal
+        : (null as string | null),
+    beatUpdates,
+  }
+
+  if (
+    request.summary == null &&
+    request.bedtimeNotes == null &&
+    request.bedtimeGoal == null &&
+    beatUpdates.length === 0
+  ) {
+    return {
+      error: 'No beat-sheet changes are waiting to be saved.',
+    }
+  }
+
+  return {
+    request,
+  }
+}
+
+function buildEditHistoryFocusCopy(entry: {
+  beat_keys?: string[] | null
+  changed_fields?: string[] | null
+}) {
+  const beatKeys = entry.beat_keys ?? []
+  if (beatKeys.length > 0) {
+    return `Focus beats: ${formatHumanizedList(
+      beatKeys.map(humanizeBeatName),
+    )}.`
+  }
+
+  const changedFields = entry.changed_fields ?? []
+  if (changedFields.includes('summary') || changedFields.includes('bedtime_notes')) {
+    return 'This edit changed the overall arc framing for the revision.'
+  }
+
+  return 'This edit stayed at the revision level without targeting a named beat.'
+}
+
 export function BeatSheetStage({
+  onEditBeatSheet,
   onGenerateBeatSheet,
   onPreviewStage,
   onRefineBeatSheet,
@@ -180,8 +461,10 @@ export function BeatSheetStage({
   const [refinementBedtimeGoal, setRefinementBedtimeGoal] = useState('')
   const [refinementError, setRefinementError] = useState<string | null>(null)
   const [selectionError, setSelectionError] = useState<string | null>(null)
+  const [editorError, setEditorError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isRefining, setIsRefining] = useState(false)
+  const [isSavingEditor, setIsSavingEditor] = useState(false)
   const [pendingBeatSheetId, setPendingBeatSheetId] = useState<string | null>(
     null,
   )
@@ -191,6 +474,8 @@ export function BeatSheetStage({
   const [inspectedBeatSheetId, setInspectedBeatSheetId] = useState<
     string | null
   >(selectedBeatSheetId ?? latestBeatSheet?.id ?? null)
+  const [editorBeatKey, setEditorBeatKey] = useState('')
+  const [editorDraft, setEditorDraft] = useState<BeatEditorDraft | null>(null)
 
   const refinementBaseBeatSheet =
     beatSheetRevisions.find(
@@ -202,6 +487,20 @@ export function BeatSheetStage({
     ) ??
     snapshot.selected_beat_sheet ??
     latestBeatSheet
+  const editorBeat =
+    inspectedBeatSheet?.beats.find((beat) => beat.key === editorBeatKey) ??
+    inspectedBeatSheet?.beats[0] ??
+    null
+  const editorBeatDraft =
+    editorBeat != null && editorDraft != null
+      ? editorDraft.beats[editorBeat.key] ?? null
+      : null
+  const editHistory = inspectedBeatSheet?.edit_history ?? []
+  const editorChangeCount = countBeatEditorChanges(inspectedBeatSheet, editorDraft)
+  const editorDirty = editorChangeCount > 0
+  const downstreamEditImpactLabels = selectedStage.invalidatesOnEdit.map(
+    getWorkflowStageLabel,
+  )
 
   useEffect(() => {
     if (
@@ -240,6 +539,19 @@ export function BeatSheetStage({
     latestBeatSheet?.id,
     selectedBeatSheetId,
   ])
+
+  useEffect(() => {
+    if (inspectedBeatSheet == null) {
+      setEditorDraft(null)
+      setEditorBeatKey('')
+      setEditorError(null)
+      return
+    }
+
+    setEditorDraft(buildBeatEditorDraft(inspectedBeatSheet))
+    setEditorBeatKey(readPreferredEditorBeatKey(inspectedBeatSheet))
+    setEditorError(null)
+  }, [inspectedBeatSheet])
 
   async function handleGenerateBeatSheet() {
     if (selectedStage.availability === 'locked' || isGenerating) {
@@ -327,6 +639,57 @@ export function BeatSheetStage({
     }
   }
 
+  async function handleBeatSheetEditSave() {
+    if (inspectedBeatSheet == null || editorDraft == null || isSavingEditor) {
+      return
+    }
+
+    const nextUpdate = buildBeatEditorUpdateRequest(inspectedBeatSheet, editorDraft)
+    if ('error' in nextUpdate && nextUpdate.error != null) {
+      setEditorError(nextUpdate.error)
+      return
+    }
+
+    setEditorError(null)
+    setIsSavingEditor(true)
+
+    try {
+      await onEditBeatSheet({
+        beatSheetId: inspectedBeatSheet.id,
+        revisionNumber: inspectedBeatSheet.revision_number,
+        summary: nextUpdate.request.summary,
+        bedtimeNotes: nextUpdate.request.bedtimeNotes,
+        bedtimeGoal: nextUpdate.request.bedtimeGoal,
+        beatUpdates: nextUpdate.request.beatUpdates,
+        origin: 'workspace',
+      })
+    } catch (error) {
+      setEditorError(
+        error instanceof Error
+          ? error.message
+          : 'The beat-sheet edit could not be saved right now.',
+      )
+    } finally {
+      setIsSavingEditor(false)
+    }
+  }
+
+  function resetBeatEditor() {
+    if (inspectedBeatSheet == null) {
+      return
+    }
+
+    setEditorDraft(buildBeatEditorDraft(inspectedBeatSheet))
+    setEditorBeatKey(readPreferredEditorBeatKey(inspectedBeatSheet))
+    setEditorError(null)
+  }
+
+  const editorDisabled =
+    selectedStage.availability === 'locked' ||
+    inspectedBeatSheet == null ||
+    editorDraft == null ||
+    isSavingEditor
+
   return (
     <section aria-label="Beat sheet stage" className="workspace-stage-panel">
       <CardGrid className="workspace-stage-detail__cards" columns={3}>
@@ -370,6 +733,12 @@ export function BeatSheetStage({
                 <Badge tone="neutral">
                   {latestBeatSheet.focus_beats.length} focus beat
                   {latestBeatSheet.focus_beats.length === 1 ? '' : 's'}
+                </Badge>
+              ) : null}
+              {(latestBeatSheet.edit_history?.length ?? 0) > 0 ? (
+                <Badge tone="warning">
+                  {latestBeatSheet.edit_history?.length} edit
+                  {latestBeatSheet.edit_history?.length === 1 ? '' : 's'}
                 </Badge>
               ) : null}
             </div>
@@ -681,6 +1050,12 @@ export function BeatSheetStage({
                       {beatSheet.generation_kind === 'refinement' ? (
                         <Badge tone="accent">Refined</Badge>
                       ) : null}
+                      {(beatSheet.edit_history?.length ?? 0) > 0 ? (
+                        <Badge tone="warning">
+                          {beatSheet.edit_history?.length} edit
+                          {beatSheet.edit_history?.length === 1 ? '' : 's'}
+                        </Badge>
+                      ) : null}
                       {isPreviewed ? (
                         <Badge tone="brand">Previewed</Badge>
                       ) : null}
@@ -789,6 +1164,274 @@ export function BeatSheetStage({
               </li>
             ))}
           </ol>
+        </section>
+      ) : null}
+
+      {inspectedBeatSheet != null &&
+      editorDraft != null &&
+      editorBeat != null &&
+      editorBeatDraft != null ? (
+        <section className="workspace-stage-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>Beat editor</h3>
+              <p>
+                Shape this saved revision directly. Saved edits stay in durable
+                history and keep the outline feeling like a living plan instead
+                of a frozen artifact.
+              </p>
+            </div>
+            <Badge tone={editorDirty ? 'warning' : 'success'}>
+              {editorDirty
+                ? `${editorChangeCount} unsaved change${editorChangeCount === 1 ? '' : 's'}`
+                : 'Saved'}
+            </Badge>
+          </div>
+
+          <InlineHelp
+            title={
+              inspectedBeatSheet.id === selectedBeatSheetId
+                ? 'Editing the accepted plan refreshes later work'
+                : 'Editing an unaccepted revision stays local to this option'
+            }
+            tone={
+              inspectedBeatSheet.id === selectedBeatSheetId ? 'warning' : 'info'
+            }
+          >
+            {inspectedBeatSheet.id === selectedBeatSheetId
+              ? `Saving this revision refreshes ${formatHumanizedList(downstreamEditImpactLabels)} when those stages already exist.`
+              : 'This revision can be tuned safely before you accept it. Downstream planning will stay pointed at the currently accepted beat sheet.'}
+          </InlineHelp>
+
+          {editorError != null ? (
+            <InlineHelp title="Beat edit failed" tone="warning">
+              {editorError}
+            </InlineHelp>
+          ) : null}
+
+          <CardGrid className="beat-stage__editor-grid" columns={2}>
+            <SelectField
+              disabled={editorDisabled}
+              label="Beat to edit"
+              onChange={(event) => {
+                setEditorBeatKey(event.currentTarget.value)
+              }}
+              options={inspectedBeatSheet.beats.map((beat) => ({
+                label: `Beat ${String(beat.order).padStart(2, '0')} · ${beat.label}`,
+                value: beat.key,
+              }))}
+              value={editorBeat.key}
+            />
+
+            <TextArea
+              description="Keep the one-line arc readable for the story setup and composition stages that inherit this plan."
+              disabled={editorDisabled}
+              label="Arc summary"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        summary: nextValue,
+                      },
+                )
+              }}
+              rows={3}
+              value={editorDraft.summary}
+            />
+
+            <TextArea
+              description="These overall bedtime notes stay above any single beat and help later prompts protect the right landing."
+              disabled={editorDisabled}
+              label="Overall bedtime notes"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        bedtimeNotes: nextValue,
+                      },
+                )
+              }}
+              rows={4}
+              value={editorDraft.bedtimeNotes}
+            />
+
+            <TextArea
+              description="This saved target should still describe the bedtime feeling you want the whole outline to protect."
+              disabled={editorDisabled}
+              label="Saved bedtime goal"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        bedtimeGoal: nextValue,
+                      },
+                )
+              }}
+              rows={3}
+              value={editorDraft.bedtimeGoal}
+            />
+
+            <TextArea
+              description={`Beat ${String(editorBeat.order).padStart(2, '0')} should stay concise, visual, and easy for later writing prompts to inherit.`}
+              disabled={editorDisabled}
+              label="Beat summary"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        beats: {
+                          ...currentDraft.beats,
+                          [editorBeat.key]: {
+                            ...currentDraft.beats[editorBeat.key],
+                            summary: nextValue,
+                          },
+                        },
+                      },
+                )
+              }}
+              rows={4}
+              value={editorBeatDraft.summary}
+            />
+
+            <TextArea
+              description="This describes the emotional turn that the composition stage should feel in the scene, not draft prose."
+              disabled={editorDisabled}
+              label="Emotional intent"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        beats: {
+                          ...currentDraft.beats,
+                          [editorBeat.key]: {
+                            ...currentDraft.beats[editorBeat.key],
+                            emotionalIntent: nextValue,
+                          },
+                        },
+                      },
+                )
+              }}
+              rows={3}
+              value={editorBeatDraft.emotionalIntent}
+            />
+
+            <TextArea
+              description="Use this note to keep pressure beats bedtime-safe and to give later prompts a concrete softening move."
+              disabled={editorDisabled}
+              label="Bedtime softening note"
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setEditorDraft((currentDraft) =>
+                  currentDraft == null
+                    ? currentDraft
+                    : {
+                        ...currentDraft,
+                        beats: {
+                          ...currentDraft.beats,
+                          [editorBeat.key]: {
+                            ...currentDraft.beats[editorBeat.key],
+                            bedtimeSofteningNote: nextValue,
+                          },
+                        },
+                      },
+                )
+              }}
+              rows={3}
+              value={editorBeatDraft.bedtimeSofteningNote}
+            />
+          </CardGrid>
+
+          <div className="cta-row">
+            <Button
+              disabled={editorDisabled || !editorDirty}
+              onClick={() => {
+                void handleBeatSheetEditSave()
+              }}
+              tone="primary"
+            >
+              {isSavingEditor ? 'Saving beat changes...' : 'Save beat changes'}
+            </Button>
+            <Button
+              disabled={editorDisabled || !editorDirty}
+              onClick={() => {
+                resetBeatEditor()
+              }}
+              tone="ghost"
+            >
+              Reset editor
+            </Button>
+            <Badge tone="neutral">{editorBeat.label}</Badge>
+            {inspectedBeatSheet.id === selectedBeatSheetId ? (
+              <Badge tone="accent">Accepted revision</Badge>
+            ) : (
+              <Badge tone="neutral">Unaccepted revision</Badge>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {inspectedBeatSheet != null ? (
+        <section className="workspace-stage-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>Change tracking</h3>
+              <p>
+                Generated revisions keep the broader refinement history, while
+                this log shows direct edits made to the currently previewed
+                revision.
+              </p>
+            </div>
+            <Badge tone={editHistory.length > 0 ? 'brand' : 'neutral'}>
+              {editHistory.length} edit{editHistory.length === 1 ? '' : 's'}
+            </Badge>
+          </div>
+
+          {editHistory.length > 0 ? (
+            <ol className="beat-stage__history">
+              {editHistory.map((entry) => (
+                <li key={entry.id} className="beat-stage__history-item">
+                  <div className="beat-stage__history-header">
+                    <div>
+                      <p className="eyebrow">{formatRevisionTimestamp(entry.created_at)}</p>
+                      <h4>{entry.summary_text}</h4>
+                    </div>
+                    <div className="workspace-stage-detail__badges">
+                      <Badge tone="neutral">
+                        {entry.origin === 'chat' ? 'Chat edit' : 'Workspace edit'}
+                      </Badge>
+                      {entry.material_change ? (
+                        <Badge tone="warning">Material change</Badge>
+                      ) : null}
+                      {entry.refreshes_downstream ? (
+                        <Badge tone="accent">Refreshes downstream</Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p>{buildEditHistoryFocusCopy(entry)}</p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <InlineHelp title="No direct edits yet" tone="info">
+              Save beat changes here or refine through chat to build an audit
+              trail on this revision.
+            </InlineHelp>
+          )}
         </section>
       ) : null}
     </section>

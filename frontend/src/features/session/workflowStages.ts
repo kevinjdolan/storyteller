@@ -125,7 +125,7 @@ export const workflowStageDefinitions = [
       'Support softening or tightening beats without losing sequence integrity.',
       'Track accepted revisions and downstream refresh pressure on composition.',
     ],
-    invalidatesOnEdit: ['composition', 'audio', 'finalize'],
+    invalidatesOnEdit: ['story_setup', 'composition', 'audio', 'finalize'],
   },
   {
     id: 'story_setup',

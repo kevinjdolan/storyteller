@@ -1617,9 +1617,10 @@ def test_hydrate_session_endpoint_replays_context_updates_into_resumed_snapshot(
     assert payload["snapshot"]["stage_states"][5]["detail"] == (
         "Soften the midpoint and let the return home land faster."
     )
+    assert payload["snapshot"]["stage_states"][6]["status"] == "needs_regeneration"
     assert payload["snapshot"]["stage_states"][7]["status"] == "needs_regeneration"
     assert payload["snapshot"]["stage_states"][8]["status"] == "needs_regeneration"
-    assert payload["snapshot"]["resume_stage"] == "composition"
+    assert payload["snapshot"]["resume_stage"] == "story_setup"
     assert payload["snapshot"]["overall_status"] == "needs_regeneration"
     assert payload["hydration"]["history_event_count"] == 13
     assert payload["hydration"]["latest_sequence_number"] == 13

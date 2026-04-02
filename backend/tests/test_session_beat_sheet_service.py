@@ -8,6 +8,7 @@ from app.models import (
     BeatSheetEvaluation,
     BeatSheetEvaluationCriterion,
     BeatSheetGenerationResult,
+    EditSessionBeatSheetRequest,
     ExistingSelectedPitchContext,
     GeneratedBeatSheetBeat,
     GeneratedBeatSheetCandidate,
@@ -225,3 +226,78 @@ def test_refine_beat_sheet_creates_selected_revision_and_invalidates_composition
     assert result.snapshot.stage_states[5].status == WorkflowStageState.COMPLETED
     assert result.snapshot.stage_states[7].status == WorkflowStageState.NEEDS_REGENERATION
     assert result.snapshot.stage_states[8].status == WorkflowStageState.DRAFT
+
+
+def test_edit_selected_beat_sheet_updates_in_place_and_tracks_history(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service, session_id = _create_character_ready_session(db_session)
+    generated = service.generate_beat_sheet(
+        session_id,
+        beat_sheet_generation_service=StubBeatSheetGenerationService(),
+    )
+    selected = service.select_beat_sheet(
+        session_id,
+        beat_sheet_id=generated.snapshot.beat_sheet_revisions[0].id,
+    )
+    service.update_stage_state(
+        session_id,
+        stage=WorkflowStage.STORY_SETUP,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted setup.",
+    )
+    service.update_stage_state(
+        session_id,
+        stage=WorkflowStage.COMPOSITION,
+        status=WorkflowStageState.COMPLETED,
+        detail="Drafted story text.",
+    )
+
+    result = service.edit_beat_sheet(
+        session_id,
+        payload=EditSessionBeatSheetRequest.model_validate(
+            {
+                "beat_sheet_id": selected.snapshot.selected_beat_sheet.id,
+                "summary": "A harbor arc with a more wondrous midpoint and softer late turn.",
+                "bedtime_goal": "Let the harbor settle into an even sleepier ending.",
+                "beat_updates": [
+                    {
+                        "key": "midpoint",
+                        "summary": (
+                            "The midpoint becomes a lantern-halo moment that swaps urgency for awe."
+                        ),
+                        "emotional_intent": (
+                            "Let the midpoint feel gently revelatory instead of tense."
+                        ),
+                    }
+                ],
+                "origin": "workspace",
+            }
+        ),
+    )
+
+    refreshed_beat_sheets = (
+        db_session.query(BeatSheet).filter(BeatSheet.session_id == session_id).all()
+    )
+    assert len(refreshed_beat_sheets) == 1
+    assert result.event.event_type == "content.user_edit.recorded"
+    assert result.snapshot.selected_beat_sheet is not None
+    assert result.snapshot.selected_beat_sheet.revision_number == 1
+    assert (
+        result.snapshot.selected_beat_sheet.summary
+        == "A harbor arc with a more wondrous midpoint and softer late turn."
+    )
+    midpoint = next(
+        beat for beat in result.snapshot.selected_beat_sheet.beats if beat.key == "midpoint"
+    )
+    assert midpoint.summary == "The midpoint becomes a lantern-halo moment that swaps urgency for awe."
+    assert (
+        midpoint.emotional_intent
+        == "Let the midpoint feel gently revelatory instead of tense."
+    )
+    assert result.snapshot.selected_beat_sheet.edit_history[0].material_change is True
+    assert result.snapshot.selected_beat_sheet.edit_history[0].refreshes_downstream is True
+    assert result.snapshot.stage_states[6].status == WorkflowStageState.NEEDS_REGENERATION
+    assert result.snapshot.stage_states[7].status == WorkflowStageState.NEEDS_REGENERATION
+    assert "Story setup and composition need refresh." in (
+        result.snapshot.selected_beat_sheet.edit_history[0].summary_text
+    )

@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   SessionBeatSheetGenerationResponse,
+  SessionBeatSheetUpdateResponse,
   SessionCharacterSheetGenerationResponse,
   SessionHydration,
   SessionHistory,
@@ -2289,6 +2290,298 @@ function buildBeatRefinementResponse(
   }
 }
 
+function humanizeBeatKey(value: string) {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatHumanizedList(values: string[]) {
+  if (values.length === 0) {
+    return ''
+  }
+
+  if (values.length === 1) {
+    return values[0]
+  }
+
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`
+  }
+
+  return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`
+}
+
+function readObjectArrayField(body: Record<string, unknown>, key: string) {
+  const value = body[key]
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === 'object' && item !== null,
+      )
+    : []
+}
+
+function buildBeatEditSummaryText(options: {
+  revisionNumber: number
+  beatKeys: string[]
+  changedFields: string[]
+  requestedSummary?: string | null
+  refreshesDownstream: boolean
+}) {
+  if (
+    typeof options.requestedSummary === 'string' &&
+    options.requestedSummary.trim().length > 0
+  ) {
+    return options.requestedSummary.trim()
+  }
+
+  const targets: string[] = []
+  if (options.beatKeys.length > 0) {
+    targets.push(...options.beatKeys.map(humanizeBeatKey))
+  }
+
+  if (options.changedFields.includes('summary')) {
+    targets.push('arc summary')
+  }
+  if (options.changedFields.includes('bedtime_notes')) {
+    targets.push('overall bedtime notes')
+  }
+  if (options.changedFields.includes('bedtime_goal')) {
+    targets.push('bedtime goal')
+  }
+
+  const targetSummary = formatHumanizedList(targets) || 'the beat sheet'
+  const message = `Updated beat sheet revision ${options.revisionNumber}: ${targetSummary}.`
+  return options.refreshesDownstream
+    ? `${message} Story setup and composition need refresh.`
+    : message
+}
+
+function buildBeatEditResponse(
+  body: Record<string, unknown>,
+): SessionBeatSheetUpdateResponse {
+  const baseSelection = buildBeatSelectionResponse({
+    beat_sheet_id: body.beat_sheet_id,
+    revision_number: body.revision_number,
+    origin: body.origin,
+  })
+  const sourceBeatSheet = baseSelection.snapshot.selected_beat_sheet
+  const editedAt = '2026-04-01T05:28:00Z'
+  const beatUpdates = readObjectArrayField(body, 'beat_updates')
+  const beatKeys = beatUpdates
+    .map((update) => (typeof update.key === 'string' ? update.key : null))
+    .filter((key): key is string => key != null)
+  const changedFields: string[] = []
+  const nextSummary =
+    typeof body.summary === 'string' && body.summary.trim().length > 0
+      ? body.summary.trim()
+      : sourceBeatSheet?.summary ?? null
+  const nextBedtimeNotes =
+    typeof body.bedtime_notes === 'string' && body.bedtime_notes.trim().length > 0
+      ? body.bedtime_notes.trim()
+      : sourceBeatSheet?.bedtime_notes ?? null
+  const nextBedtimeGoal =
+    typeof body.bedtime_goal === 'string' && body.bedtime_goal.trim().length > 0
+      ? body.bedtime_goal.trim()
+      : sourceBeatSheet?.bedtime_goal ?? null
+
+  if (typeof body.summary === 'string' && body.summary.trim().length > 0) {
+    changedFields.push('summary')
+  }
+  if (
+    typeof body.bedtime_notes === 'string' &&
+    body.bedtime_notes.trim().length > 0
+  ) {
+    changedFields.push('bedtime_notes')
+  }
+  if (
+    typeof body.bedtime_goal === 'string' &&
+    body.bedtime_goal.trim().length > 0
+  ) {
+    changedFields.push('bedtime_goal')
+  }
+
+  for (const update of beatUpdates) {
+    const beatKey = typeof update.key === 'string' ? update.key : null
+    if (beatKey == null) {
+      continue
+    }
+    if (typeof update.summary === 'string' && update.summary.trim().length > 0) {
+      changedFields.push(`beats.${beatKey}.summary`)
+    }
+    if (
+      typeof update.emotional_intent === 'string' &&
+      update.emotional_intent.trim().length > 0
+    ) {
+      changedFields.push(`beats.${beatKey}.emotional_intent`)
+    }
+    if (
+      typeof update.bedtime_softening_note === 'string' &&
+      update.bedtime_softening_note.trim().length > 0
+    ) {
+      changedFields.push(`beats.${beatKey}.bedtime_softening_note`)
+    }
+  }
+
+  const summaryText = buildBeatEditSummaryText({
+    revisionNumber: sourceBeatSheet?.revision_number ?? 1,
+    beatKeys,
+    changedFields,
+    requestedSummary:
+      typeof body.summary_text === 'string' ? body.summary_text : null,
+    refreshesDownstream: true,
+  })
+  const invalidationDetail = `Beat sheet revision ${sourceBeatSheet?.revision_number ?? 1} changed. Refresh story setup and composition prompts before continuing. ${summaryText}`
+  const editHistoryEntry = {
+    id: 'beat-edit-1',
+    summary_text: summaryText,
+    origin: typeof body.origin === 'string' ? body.origin : 'workspace',
+    changed_fields: changedFields,
+    beat_keys: beatKeys,
+    material_change: true,
+    refreshes_downstream: true,
+    created_at: editedAt,
+  }
+  const updatedBeatSheet =
+    sourceBeatSheet == null
+      ? null
+      : {
+          ...sourceBeatSheet,
+          summary: nextSummary,
+          bedtime_notes: nextBedtimeNotes,
+          bedtime_goal: nextBedtimeGoal,
+          beats: sourceBeatSheet.beats.map((beat) => {
+            const matchingUpdate = beatUpdates.find(
+              (update) => update.key === beat.key,
+            )
+
+            if (matchingUpdate == null) {
+              return beat
+            }
+
+            return {
+              ...beat,
+              summary:
+                typeof matchingUpdate.summary === 'string' &&
+                matchingUpdate.summary.trim().length > 0
+                  ? matchingUpdate.summary.trim()
+                  : beat.summary,
+              emotional_intent:
+                typeof matchingUpdate.emotional_intent === 'string' &&
+                matchingUpdate.emotional_intent.trim().length > 0
+                  ? matchingUpdate.emotional_intent.trim()
+                  : beat.emotional_intent,
+              bedtime_softening_note:
+                typeof matchingUpdate.bedtime_softening_note === 'string' &&
+                matchingUpdate.bedtime_softening_note.trim().length > 0
+                  ? matchingUpdate.bedtime_softening_note.trim()
+                  : beat.bedtime_softening_note,
+            }
+          }),
+          edit_history: [
+            editHistoryEntry,
+            ...(sourceBeatSheet.edit_history ?? []),
+          ],
+          updated_at: editedAt,
+        }
+
+  return {
+    snapshot: {
+      ...baseSelection.snapshot,
+      current_stage: 'story_setup',
+      resume_stage: 'story_setup',
+      furthest_completed_stage: 'beats',
+      updated_at: editedAt,
+      selected_beat_sheet: updatedBeatSheet,
+      beat_sheet_revisions:
+        baseSelection.snapshot.beat_sheet_revisions?.map((beatSheet) =>
+          beatSheet.id === updatedBeatSheet?.id ? updatedBeatSheet : beatSheet,
+        ) ?? [],
+      progress: {
+        total_stages: 10,
+        completed_stages: 6,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 2,
+      },
+      stage_states: baseSelection.snapshot.stage_states.map((stageState, index) => {
+        if (index === 5) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: `Accepted beat sheet revision ${updatedBeatSheet?.revision_number}. ${updatedBeatSheet?.summary}`,
+            last_event_summary: summaryText,
+            last_event_type: 'content.user_edit.recorded',
+            last_event_at: editedAt,
+          }
+        }
+
+        if (index === 6 || index === 7) {
+          return {
+            ...stageState,
+            status: 'needs_regeneration',
+            detail: invalidationDetail,
+            last_event_summary: summaryText,
+            last_event_type: 'content.user_edit.recorded',
+            last_event_at: editedAt,
+          }
+        }
+
+        if (index === 8) {
+          return {
+            ...stageState,
+            status: 'draft',
+            detail: null,
+            last_event_summary: null,
+            last_event_type: null,
+            last_event_at: null,
+          }
+        }
+
+        return stageState
+      }),
+    },
+    event: {
+      id: 'beat-edit-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 22,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'content.user_edit.recorded',
+      stage: 'beats',
+      summary: 'Saved user edit for beat sheet.',
+      payload: {
+        schema_version: 1,
+        target_kind: 'beat_sheet',
+        target_id: updatedBeatSheet?.id,
+        revision_number: updatedBeatSheet?.revision_number,
+        changed_fields: changedFields,
+        source: typeof body.origin === 'string' ? body.origin : 'workspace',
+        field_values: {
+          ...(typeof body.summary === 'string' && body.summary.trim().length > 0
+            ? { summary: body.summary.trim() }
+            : {}),
+          ...(typeof body.bedtime_notes === 'string' &&
+          body.bedtime_notes.trim().length > 0
+            ? { bedtime_notes: body.bedtime_notes.trim() }
+            : {}),
+          ...(typeof body.bedtime_goal === 'string' &&
+          body.bedtime_goal.trim().length > 0
+            ? { bedtime_goal: body.bedtime_goal.trim() }
+            : {}),
+          beat_updates: beatUpdates,
+          material_change: true,
+          refreshes_downstream: true,
+        },
+        summary_text: summaryText,
+      },
+      created_at: editedAt,
+    },
+  }
+}
+
 function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
   const explicitCommand =
     typeof requestBody.explicit_command === 'object' &&
@@ -2364,6 +2657,9 @@ function buildCommandChatIntentResponse(requestBody: Record<string, unknown>) {
 }
 
 function mockWorkspaceApi(options?: {
+  beatEditResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   beatGenerationResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
@@ -2422,6 +2718,7 @@ function mockWorkspaceApi(options?: {
     } as const)
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
+  const beatEditRequests: Record<string, unknown>[] = []
   const beatGenerationRequests: Record<string, unknown>[] = []
   const beatRefinementRequests: Record<string, unknown>[] = []
   const beatSelectionRequests: Record<string, unknown>[] = []
@@ -2486,6 +2783,7 @@ function mockWorkspaceApi(options?: {
   }
   const beatGenerationResponse =
     options?.beatGenerationResponse ?? buildBeatGenerationResponse
+  const beatEditResponse = options?.beatEditResponse ?? buildBeatEditResponse
   const beatSelectionResponse =
     options?.beatSelectionResponse ?? buildBeatSelectionResponse
   const beatRefinementResponse =
@@ -2658,6 +2956,23 @@ function mockWorkspaceApi(options?: {
       }
 
       if (
+        pathname === '/api/v1/sessions/moonlit-harbor/beats/edit' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        beatEditRequests.push(requestBody)
+        const resolvedBeatEditResponse =
+          typeof beatEditResponse === 'function'
+            ? beatEditResponse(requestBody)
+            : beatEditResponse
+
+        return Promise.resolve(buildJsonResponse(200, resolvedBeatEditResponse))
+      }
+
+      if (
         pathname === '/api/v1/sessions/moonlit-harbor/beats/generate' &&
         init?.method === 'POST'
       ) {
@@ -2815,6 +3130,7 @@ function mockWorkspaceApi(options?: {
   )
 
   return {
+    beatEditRequests,
     beatGenerationRequests,
     beatRefinementRequests,
     beatSelectionRequests,
@@ -3901,6 +4217,132 @@ describe('SessionWorkspacePage', () => {
     expect(
       await screen.findByText('Accepted beat sheet: Beat sheet revision 2'),
     ).toBeInTheDocument()
+  })
+
+  it('edits a saved beat sheet in place and records durable change tracking', async () => {
+    const selectedBeatResponse = buildBeatSelectionResponse({
+      beat_sheet_id: 'beat-generated-1',
+    })
+    const selectedBeatSnapshot = {
+      ...selectedBeatResponse.snapshot,
+      current_stage: 'audio',
+      resume_stage: 'audio',
+      furthest_completed_stage: 'composition',
+      updated_at: '2026-04-01T05:27:30Z',
+      progress: {
+        total_stages: 10,
+        completed_stages: 8,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: selectedBeatResponse.snapshot.stage_states.map(
+        (stageState, index) => {
+          if (index === 6) {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: 'Accepted setup.',
+              last_event_summary: 'Saved story setup targets.',
+              last_event_type: 'content.user_edit.recorded',
+              last_event_at: '2026-04-01T05:27:00Z',
+            }
+          }
+
+          if (index === 7) {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: 'Drafted story text.',
+              last_event_summary: 'Generated story draft.',
+              last_event_type: 'ai.output.recorded',
+              last_event_at: '2026-04-01T05:27:15Z',
+            }
+          }
+
+          return stageState
+        },
+      ),
+    } as const
+    const selectedBeatHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 20,
+      events: sampleHistory.events,
+    } as const
+    const midpointSummary =
+      'The midpoint becomes a lantern-halo moment that swaps urgency for wonder.'
+    const changeSummary =
+      'Updated beat sheet revision 1: Midpoint and overall bedtime notes. Story setup and composition need refresh.'
+    const { beatEditRequests } = mockWorkspaceApi({
+      history: selectedBeatHistory,
+      hydration: {
+        snapshot: selectedBeatSnapshot,
+        recent_history: selectedBeatHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 20,
+          history_event_count: 20,
+          materialized_through_sequence_number: 20,
+        },
+      },
+    })
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=beats')
+
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Refine the Save-the-Cat beats',
+    })
+
+    fireEvent.change(screen.getByLabelText('Beat summary'), {
+      target: {
+        value: midpointSummary,
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Overall bedtime notes'), {
+      target: {
+        value:
+          'Keep the midpoint luminous and make the final stretch visibly sleepier.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save beat changes' }))
+
+    expect(beatEditRequests).toEqual([
+      {
+        beat_sheet_id: 'beat-generated-1',
+        revision_number: 1,
+        summary: null,
+        bedtime_notes:
+          'Keep the midpoint luminous and make the final stretch visibly sleepier.',
+        bedtime_goal: null,
+        beat_updates: [
+          {
+            key: 'midpoint',
+            summary: midpointSummary,
+            emotional_intent: null,
+            bedtime_softening_note: null,
+          },
+        ],
+        summary_text: null,
+        origin: 'workspace',
+      },
+    ])
+    expect(await screen.findByDisplayValue(midpointSummary)).toBeInTheDocument()
+    const outlinePreviewSection = screen
+      .getByRole('heading', { level: 3, name: 'Beat outline preview' })
+      .closest('section')
+    expect(outlinePreviewSection).not.toBeNull()
+    expect(
+      within(outlinePreviewSection as HTMLElement).getByText(midpointSummary),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('log')).getByText(changeSummary),
+    ).toBeInTheDocument()
+    const changeTrackingSection = screen
+      .getByRole('heading', { level: 3, name: 'Change tracking' })
+      .closest('section')
+    expect(changeTrackingSection).not.toBeNull()
+    expect(within(changeTrackingSection as HTMLElement).getByText(changeSummary)).toBeInTheDocument()
+    expect(screen.getAllByText('Needs refresh').length).toBeGreaterThanOrEqual(2)
   })
 
   it('applies accepted character-sheet chat actions through the same durable endpoints', async () => {

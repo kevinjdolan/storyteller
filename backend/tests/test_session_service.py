@@ -1344,7 +1344,9 @@ def test_apply_context_update_persists_stage_note_and_invalidates_dependents(db_
     assert "Latest saved UI detail: Beat sheet: Soften the midpoint" in (
         updated_snapshot.agent_context_summary
     )
-    assert "Needs regeneration: Composition, Audio" in updated_snapshot.agent_context_summary
+    assert "Needs regeneration: Story setup, Composition, Audio" in (
+        updated_snapshot.agent_context_summary
+    )
 
     history = service.load_session_history(snapshot.id)
     assert history.latest_sequence_number == 12

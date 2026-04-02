@@ -108,6 +108,7 @@ WORKFLOW_STAGE_DEFINITIONS: tuple[WorkflowStageDefinition, ...] = (
         label="Beat sheet",
         description="Store the accepted Save-the-Cat beat sheet for the session.",
         invalidates_on_edit=(
+            WorkflowStage.STORY_SETUP,
             WorkflowStage.COMPOSITION,
             WorkflowStage.AUDIO,
             WorkflowStage.FINALIZE,

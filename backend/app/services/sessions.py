@@ -16,10 +16,12 @@ from app.models import (
     ExistingCharacterSheetContext,
     ExistingBeatSheetContext,
     ExistingSelectedPitchContext,
+    EditSessionBeatSheetRequest,
     NormalizedBriefPreferences,
     RecentSessionSummary,
     SelectionKind,
     SessionBeatSheetGenerationResponse,
+    SessionBeatSheetUpdateResponse,
     SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
@@ -116,6 +118,10 @@ class SessionBeatSheetGenerationError(SessionServiceError):
 
 class SessionBeatSheetSelectionError(SessionServiceError):
     """Raised when a beat-sheet selection request cannot be fulfilled."""
+
+
+class SessionBeatSheetEditError(SessionServiceError):
+    """Raised when a beat-sheet edit request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -2072,6 +2078,191 @@ class SessionService:
             event=self._event_log.build_event_view(selection_event),
         )
 
+    def edit_beat_sheet(
+        self,
+        session_id: str,
+        *,
+        payload: EditSessionBeatSheetRequest,
+        actor: SessionEventActor | None = None,
+    ) -> SessionBeatSheetUpdateResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_character_sheet = self._sessions.get_selected_character_sheet(session_id)
+        if selected_character_sheet is None:
+            raise SessionBeatSheetEditError("select a character sheet before editing the beat sheet")
+
+        selected_beat_sheet = self._sessions.get_selected_beat_sheet(session_id)
+        target_beat_sheet = _resolve_source_beat_sheet(
+            self._sessions.list_beat_sheets(session_id),
+            selected_beat_sheet=selected_beat_sheet,
+            beat_sheet_id=payload.beat_sheet_id,
+            revision_number=payload.revision_number,
+        )
+        if target_beat_sheet is None:
+            raise SessionBeatSheetSelectionError("no beat sheet matched the requested edit")
+        if (
+            target_beat_sheet.character_sheet_id is not None
+            and target_beat_sheet.character_sheet_id != selected_character_sheet.id
+        ):
+            raise SessionBeatSheetSelectionError(
+                "the requested beat sheet belongs to a different character sheet"
+            )
+
+        existing_payload = _read_beat_sheet_payload_mapping(target_beat_sheet)
+        normalized_updates = _normalize_beat_sheet_edit_updates(payload.beat_updates)
+        updated_beats, beat_changed_fields, beat_keys = _apply_beat_sheet_edit_updates(
+            _read_serialized_beat_sheet_beats(target_beat_sheet),
+            normalized_updates,
+        )
+        normalized_summary = _normalize_optional_text(payload.summary)
+        normalized_bedtime_notes = _normalize_optional_text(payload.bedtime_notes)
+        normalized_bedtime_goal = _normalize_optional_text(payload.bedtime_goal)
+
+        changed_fields: list[str] = []
+        event_field_values: dict[str, Any] = {}
+
+        if normalized_summary is not None and normalized_summary != target_beat_sheet.summary:
+            target_beat_sheet.summary = normalized_summary
+            changed_fields.append("summary")
+            event_field_values["summary"] = normalized_summary
+
+        if (
+            normalized_bedtime_notes is not None
+            and normalized_bedtime_notes != target_beat_sheet.bedtime_notes
+        ):
+            target_beat_sheet.bedtime_notes = normalized_bedtime_notes
+            changed_fields.append("bedtime_notes")
+            event_field_values["bedtime_notes"] = normalized_bedtime_notes
+
+        next_payload = dict(existing_payload)
+        if normalized_bedtime_goal is not None and normalized_bedtime_goal != _read_optional_mapping_text(
+            existing_payload,
+            "bedtime_goal",
+        ):
+            next_payload["bedtime_goal"] = normalized_bedtime_goal
+            changed_fields.append("bedtime_goal")
+            event_field_values["bedtime_goal"] = normalized_bedtime_goal
+
+        if beat_changed_fields:
+            next_payload["beats"] = updated_beats
+            changed_fields.extend(beat_changed_fields)
+            event_field_values["beat_updates"] = [
+                dict(update) for update in normalized_updates
+            ]
+
+        if not changed_fields:
+            raise SessionBeatSheetEditError("beat-sheet edit did not change any saved fields")
+
+        now = utc_now()
+        refreshes_downstream = bool(target_beat_sheet.is_selected)
+        summary_text = _build_beat_sheet_edit_summary_text(
+            target_beat_sheet,
+            beat_keys=beat_keys,
+            changed_fields=changed_fields,
+            refreshes_downstream=refreshes_downstream,
+            requested_summary=_normalize_optional_text(payload.summary_text),
+        )
+        next_payload["edit_history"] = [
+            _build_beat_sheet_edit_history_entry(
+                summary_text=summary_text,
+                origin=payload.origin,
+                changed_fields=changed_fields,
+                beat_keys=beat_keys,
+                refreshes_downstream=refreshes_downstream,
+                created_at=now,
+            ),
+            *_read_beat_sheet_edit_history_payload(existing_payload),
+        ]
+        target_beat_sheet.beats = next_payload
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        stage_snapshot = stage_map[WorkflowStage.BEATS]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        invalidated_stages: list[WorkflowStage] = []
+        touches_stage_state = False
+
+        if target_beat_sheet.is_selected:
+            if stage_snapshot.status != WorkflowStageState.COMPLETED:
+                self._validate_stage_transition(
+                    stage_map,
+                    stage=WorkflowStage.BEATS,
+                    status=WorkflowStageState.COMPLETED,
+                )
+                stage_snapshot.status = WorkflowStageState.COMPLETED
+            stage_snapshot.detail = _build_beat_sheet_selection_detail(target_beat_sheet)
+            stage_snapshot.started_at = stage_snapshot.started_at or now
+            stage_snapshot.completed_at = stage_snapshot.completed_at or now
+            invalidated_stages = self._invalidate_dependent_stages(
+                stage_map,
+                stage=WorkflowStage.BEATS,
+                detail=_build_beat_sheet_edit_invalidation_detail(
+                    target_beat_sheet,
+                    summary_text=summary_text,
+                ),
+            )
+            touches_stage_state = True
+        elif selected_beat_sheet is None:
+            if stage_snapshot.status == WorkflowStageState.DRAFT:
+                self._validate_stage_transition(
+                    stage_map,
+                    stage=WorkflowStage.BEATS,
+                    status=WorkflowStageState.IN_PROGRESS,
+                )
+            stage_snapshot.status = WorkflowStageState.IN_PROGRESS
+            stage_snapshot.detail = _build_beat_sheet_edit_stage_detail(target_beat_sheet)
+            stage_snapshot.started_at = stage_snapshot.started_at or now
+            stage_snapshot.completed_at = None
+            touches_stage_state = True
+
+        if touches_stage_state:
+            self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if touches_stage_state and (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.BEATS,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        event_field_values["material_change"] = True
+        event_field_values["refreshes_downstream"] = refreshes_downstream
+        edit_event = self._event_log.record_user_edit(
+            story_session.id,
+            target_kind=UserEditTargetKind.BEAT_SHEET,
+            stage=WorkflowStage.BEATS,
+            changed_fields=changed_fields,
+            target_id=target_beat_sheet.id,
+            revision_number=target_beat_sheet.revision_number,
+            source=payload.origin,
+            field_values=event_field_values,
+            summary_text=summary_text,
+            actor=actor,
+        )
+        stage_snapshot.last_event = edit_event
+        self._session.commit()
+        return SessionBeatSheetUpdateResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(edit_event),
+        )
+
     def select_beat_sheet(
         self,
         session_id: str,
@@ -2442,6 +2633,11 @@ def _normalize_optional_text(value: str | None) -> str | None:
 
     normalized = value.strip()
     return normalized or None
+
+
+def _read_optional_mapping_text(data: Mapping[str, Any], key: str) -> str | None:
+    value = data.get(key)
+    return value if isinstance(value, str) else None
 
 
 def _stages_before(stage: WorkflowStage) -> tuple[WorkflowStage, ...]:
@@ -2832,6 +3028,7 @@ def _build_beat_sheet_persistence_payload(
     payload["guidance"] = guidance
     payload["focus_beats"] = list(focus_beats or [])
     payload["bedtime_goal"] = bedtime_goal
+    payload["edit_history"] = []
     payload["beats"] = [
         {
             "key": beat.key,
@@ -2891,6 +3088,152 @@ def _read_generated_beat_sheet_beats(beat_sheet: BeatSheet) -> list:
     return generated_beats
 
 
+def _read_beat_sheet_payload_mapping(beat_sheet: BeatSheet) -> dict[str, Any]:
+    raw_payload = getattr(beat_sheet, "beats", None)
+    return dict(raw_payload) if isinstance(raw_payload, Mapping) else {}
+
+
+def _read_serialized_beat_sheet_beats(beat_sheet: BeatSheet) -> list[dict[str, Any]]:
+    payload = _read_beat_sheet_payload_mapping(beat_sheet)
+    raw_beats = payload.get("beats")
+    if not isinstance(raw_beats, list):
+        return [
+            {
+                "key": raw_beat.get("key"),
+                "label": raw_beat.get("label"),
+                "order": index,
+                "summary": raw_beat.get("summary"),
+                "emotional_intent": raw_beat.get("emotional_intent"),
+                "bedtime_softening_note": raw_beat.get("bedtime_softening_note"),
+            }
+            for index, raw_beat in enumerate(_read_generated_beat_sheet_beats(beat_sheet), start=1)
+            if isinstance(raw_beat, Mapping)
+        ]
+
+    serialized_beats: list[dict[str, Any]] = []
+    for fallback_order, raw_beat in enumerate(raw_beats, start=1):
+        if not isinstance(raw_beat, Mapping):
+            continue
+        key = raw_beat.get("key") if isinstance(raw_beat.get("key"), str) else None
+        summary = raw_beat.get("summary") if isinstance(raw_beat.get("summary"), str) else None
+        if key is None or summary is None:
+            continue
+        serialized_beats.append(
+            {
+                "key": key,
+                "label": (
+                    raw_beat.get("label")
+                    if isinstance(raw_beat.get("label"), str)
+                    else _humanize_beat_key(key)
+                ),
+                "order": raw_beat.get("order")
+                if isinstance(raw_beat.get("order"), int)
+                else fallback_order,
+                "summary": summary,
+                "emotional_intent": (
+                    raw_beat.get("emotional_intent")
+                    if isinstance(raw_beat.get("emotional_intent"), str)
+                    else None
+                ),
+                "bedtime_softening_note": (
+                    raw_beat.get("bedtime_softening_note")
+                    if isinstance(raw_beat.get("bedtime_softening_note"), str)
+                    else None
+                ),
+            }
+        )
+
+    return serialized_beats
+
+
+def _normalize_beat_sheet_edit_updates(beat_updates: list[object] | None) -> list[dict[str, str]]:
+    normalized_updates: list[dict[str, str]] = []
+
+    for beat_update in beat_updates or []:
+        key = _normalize_optional_text(getattr(beat_update, "key", None))
+        if key is None:
+            continue
+
+        normalized_update: dict[str, str] = {"key": key}
+        for field_name in ("summary", "emotional_intent", "bedtime_softening_note"):
+            normalized_value = _normalize_optional_text(getattr(beat_update, field_name, None))
+            if normalized_value is not None:
+                normalized_update[field_name] = normalized_value
+
+        if len(normalized_update) > 1:
+            normalized_updates.append(normalized_update)
+
+    return normalized_updates
+
+
+def _apply_beat_sheet_edit_updates(
+    serialized_beats: list[dict[str, Any]],
+    normalized_updates: list[dict[str, str]],
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    if not normalized_updates:
+        return serialized_beats, [], []
+
+    updated_beats = [dict(beat) for beat in serialized_beats]
+    beat_positions = {
+        beat.get("key"): index for index, beat in enumerate(updated_beats) if isinstance(beat.get("key"), str)
+    }
+    changed_fields: list[str] = []
+    changed_beat_keys: list[str] = []
+
+    for normalized_update in normalized_updates:
+        beat_key = normalized_update["key"]
+        beat_position = beat_positions.get(beat_key)
+        if beat_position is None:
+            raise SessionBeatSheetEditError(f"beat {beat_key!r} does not exist on this revision")
+
+        beat_entry = dict(updated_beats[beat_position])
+        beat_changed = False
+        for field_name in ("summary", "emotional_intent", "bedtime_softening_note"):
+            if field_name not in normalized_update:
+                continue
+            next_value = normalized_update[field_name]
+            if beat_entry.get(field_name) == next_value:
+                continue
+            beat_entry[field_name] = next_value
+            changed_fields.append(f"beats.{beat_key}.{field_name}")
+            beat_changed = True
+
+        if beat_changed:
+            updated_beats[beat_position] = beat_entry
+            changed_beat_keys.append(beat_key)
+
+    return updated_beats, changed_fields, changed_beat_keys
+
+
+def _read_beat_sheet_edit_history_payload(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    raw_history = payload.get("edit_history")
+    if not isinstance(raw_history, list):
+        return []
+
+    return [dict(entry) for entry in raw_history if isinstance(entry, Mapping)]
+
+
+def _build_beat_sheet_edit_history_entry(
+    *,
+    summary_text: str,
+    origin: str,
+    changed_fields: list[str],
+    beat_keys: list[str],
+    refreshes_downstream: bool,
+    created_at,
+) -> dict[str, Any]:
+    return {
+        "id": f"beat-edit-{uuid4().hex[:12]}",
+        "summary_text": summary_text,
+        "origin": origin,
+        "changed_fields": list(changed_fields),
+        "beat_keys": list(beat_keys),
+        "material_change": True,
+        "refreshes_downstream": refreshes_downstream,
+        "created_at": created_at.isoformat(),
+    }
+
+
 def _next_beat_sheet_revision_number(beat_sheets: list[BeatSheet]) -> int:
     if not beat_sheets:
         return 1
@@ -2945,6 +3288,25 @@ def _build_beat_sheet_refinement_summary_text(
 def _build_beat_sheet_selection_detail(beat_sheet: BeatSheet) -> str:
     summary = beat_sheet.summary or "Beat sheet accepted for downstream planning."
     return f"Accepted beat sheet revision {beat_sheet.revision_number}. {summary}"
+
+
+def _build_beat_sheet_edit_stage_detail(beat_sheet: BeatSheet) -> str:
+    return (
+        f"Edited beat sheet revision {beat_sheet.revision_number}. "
+        "Accept a revision to continue."
+    )
+
+
+def _build_beat_sheet_edit_invalidation_detail(
+    beat_sheet: BeatSheet,
+    *,
+    summary_text: str,
+) -> str:
+    return (
+        f"Beat sheet revision {beat_sheet.revision_number} changed. "
+        "Refresh story setup and composition prompts before continuing. "
+        f"{summary_text}"
+    )
 
 
 def _build_beat_sheet_invalidation_detail(beat_sheet: BeatSheet) -> str:
@@ -3007,6 +3369,53 @@ def _read_beat_sheet_selection_rationale(beat_sheet: BeatSheet) -> str | None:
 
     rationale = refinement.get("selection_rationale")
     return rationale if isinstance(rationale, str) and rationale else None
+
+
+def _humanize_beat_key(value: str) -> str:
+    return value.replace("_", " ").replace("-", " ").title()
+
+
+def _format_humanized_list(values: list[str]) -> str:
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+
+def _build_beat_sheet_edit_summary_text(
+    beat_sheet: BeatSheet,
+    *,
+    beat_keys: list[str],
+    changed_fields: list[str],
+    refreshes_downstream: bool,
+    requested_summary: str | None,
+) -> str:
+    if requested_summary is not None:
+        return requested_summary
+
+    targets: list[str] = []
+    if beat_keys:
+        targets.extend(_humanize_beat_key(beat_key) for beat_key in beat_keys)
+
+    top_level_fields = {
+        "summary": "arc summary",
+        "bedtime_notes": "overall bedtime notes",
+        "bedtime_goal": "bedtime goal",
+    }
+    for field_name, label in top_level_fields.items():
+        if field_name in changed_fields:
+            targets.append(label)
+
+    target_summary = _format_humanized_list(targets) or "the beat sheet"
+    message = (
+        f"Updated beat sheet revision {beat_sheet.revision_number}: {target_summary}."
+    )
+    if refreshes_downstream:
+        return message + " Story setup and composition need refresh."
+    return message
 
 
 def _normalize_beat_name_list(values: list[str] | None) -> list[str]:

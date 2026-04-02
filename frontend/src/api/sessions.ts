@@ -116,6 +116,17 @@ export type BeatSheetBeatView = {
   bedtime_softening_note?: string | null
 }
 
+export type BeatSheetEditView = {
+  id: string
+  summary_text: string
+  origin: string
+  changed_fields: string[]
+  beat_keys: string[]
+  material_change: boolean
+  refreshes_downstream: boolean
+  created_at: string
+}
+
 export type BeatSheetView = {
   id: string
   revision_number: number
@@ -130,6 +141,7 @@ export type BeatSheetView = {
   focus_beats: string[]
   bedtime_goal?: string | null
   selection_rationale?: string | null
+  edit_history?: BeatSheetEditView[] | null
   is_selected?: boolean
   accepted_at?: string | null
   created_at?: string
@@ -360,6 +372,24 @@ export type SessionContextUpdateRequest = {
   values: SessionContextStageNoteValues
 }
 
+export type EditSessionBeatSheetBeatRequest = {
+  key: string
+  summary?: string | null
+  emotional_intent?: string | null
+  bedtime_softening_note?: string | null
+}
+
+export type EditSessionBeatSheetRequest = {
+  beat_sheet_id?: string | null
+  revision_number?: number | null
+  summary?: string | null
+  bedtime_notes?: string | null
+  bedtime_goal?: string | null
+  beat_updates?: EditSessionBeatSheetBeatRequest[]
+  summary_text?: string | null
+  origin?: string
+}
+
 export type SessionSnapshot = RecentSessionSummary & {
   stage_states: SessionStageStateView[]
   story_brief?: StoryBriefView | null
@@ -396,6 +426,11 @@ export type SessionHydration = {
 }
 
 export type SessionContextUpdateResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
+export type SessionBeatSheetUpdateResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
 }
@@ -638,6 +673,16 @@ export function refineSessionBeatSheet(
 ) {
   return postJson<SessionBeatSheetGenerationResponse>(
     `/api/v1/sessions/${sessionId}/beats/refine`,
+    body,
+  )
+}
+
+export function editSessionBeatSheet(
+  sessionId: string,
+  body: EditSessionBeatSheetRequest,
+) {
+  return postJson<SessionBeatSheetUpdateResponse>(
+    `/api/v1/sessions/${sessionId}/beats/edit`,
     body,
   )
 }

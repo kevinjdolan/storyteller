@@ -45,6 +45,7 @@ def test_editing_upstream_stages_invalidates_only_the_required_dependents() -> N
         WorkflowStage.FINALIZE,
     )
     assert get_invalidated_stages_after_edit(WorkflowStage.BEATS) == (
+        WorkflowStage.STORY_SETUP,
         WorkflowStage.COMPOSITION,
         WorkflowStage.AUDIO,
         WorkflowStage.FINALIZE,

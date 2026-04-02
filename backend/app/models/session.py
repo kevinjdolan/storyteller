@@ -155,6 +155,17 @@ class BeatSheetBeatView(BaseModel):
     bedtime_softening_note: str | None = None
 
 
+class BeatSheetEditView(BaseModel):
+    id: str
+    summary_text: str
+    origin: str = "workspace"
+    changed_fields: list[str] = Field(default_factory=list)
+    beat_keys: list[str] = Field(default_factory=list)
+    material_change: bool = False
+    refreshes_downstream: bool = False
+    created_at: datetime
+
+
 class BeatSheetView(BaseModel):
     id: str
     revision_number: int
@@ -169,6 +180,7 @@ class BeatSheetView(BaseModel):
     focus_beats: list[str] = Field(default_factory=list)
     bedtime_goal: str | None = None
     selection_rationale: str | None = None
+    edit_history: list[BeatSheetEditView] = Field(default_factory=list)
     is_selected: bool = False
     accepted_at: datetime | None = None
     created_at: datetime | None = None
@@ -456,6 +468,49 @@ class RefineSessionBeatSheetRequest(BaseModel):
     origin: str = Field(default="workspace", min_length=1)
 
 
+class EditSessionBeatSheetBeatRequest(BaseModel):
+    key: str = Field(min_length=1)
+    summary: str | None = Field(default=None, min_length=1)
+    emotional_intent: str | None = Field(default=None, min_length=1)
+    bedtime_softening_note: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "EditSessionBeatSheetBeatRequest":
+        if (
+            self.summary is None
+            and self.emotional_intent is None
+            and self.bedtime_softening_note is None
+        ):
+            raise ValueError("beat updates require at least one edited field")
+
+        return self
+
+
+class EditSessionBeatSheetRequest(BaseModel):
+    beat_sheet_id: str | None = Field(default=None, min_length=1)
+    revision_number: int | None = Field(default=None, ge=1)
+    summary: str | None = Field(default=None, min_length=1)
+    bedtime_notes: str | None = Field(default=None, min_length=1)
+    bedtime_goal: str | None = Field(default=None, min_length=1)
+    beat_updates: list[EditSessionBeatSheetBeatRequest] = Field(default_factory=list)
+    summary_text: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "EditSessionBeatSheetRequest":
+        values = [
+            self.summary,
+            self.bedtime_notes,
+            self.bedtime_goal,
+        ]
+        if not self.beat_updates and all(value is None for value in values):
+            raise ValueError(
+                "beat-sheet edits require at least one top-level field or beat update"
+            )
+
+        return self
+
+
 class SaveSessionStoryBriefRequest(BaseModel):
     story_idea: str | None = Field(default=None, min_length=1)
     desired_themes: str | None = Field(default=None, min_length=1)
@@ -514,6 +569,11 @@ class SessionContextUpdateRequest(BaseModel):
 
 
 class SessionContextUpdateResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
+class SessionBeatSheetUpdateResponse(BaseModel):
     snapshot: "SessionSnapshot"
     event: SessionEventView
 
@@ -588,6 +648,7 @@ ExportAssetView = SessionAssetView
 
 SessionContextUpdateResponse.model_rebuild()
 SessionBeatSheetGenerationResponse.model_rebuild()
+SessionBeatSheetUpdateResponse.model_rebuild()
 SessionCharacterSheetGenerationResponse.model_rebuild()
 SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()

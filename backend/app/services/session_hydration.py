@@ -12,6 +12,7 @@ from app.models import (
     AudioJobView,
     AudioProgressEventPayload,
     BeatSheetBeatView,
+    BeatSheetEditView,
     BeatSheetView,
     CharacterProfileView,
     CharacterSheetBatchView,
@@ -890,6 +891,51 @@ def _read_beat_sheet_refinement_metadata(row) -> dict[str, Any]:
     return dict(refinement) if isinstance(refinement, Mapping) else {}
 
 
+def _build_beat_sheet_edit_history(payload: Mapping[str, Any] | dict[str, Any]) -> list[BeatSheetEditView]:
+    raw_history = payload.get("edit_history")
+    if not isinstance(raw_history, list):
+        return []
+
+    history: list[BeatSheetEditView] = []
+    for raw_entry in raw_history:
+        if not isinstance(raw_entry, Mapping):
+            continue
+
+        edit_id = raw_entry.get("id") if isinstance(raw_entry.get("id"), str) else None
+        summary_text = (
+            raw_entry.get("summary_text")
+            if isinstance(raw_entry.get("summary_text"), str)
+            else None
+        )
+        created_at_value = raw_entry.get("created_at")
+        if edit_id is None or summary_text is None or not isinstance(created_at_value, str):
+            continue
+
+        try:
+            created_at = datetime.fromisoformat(created_at_value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+
+        history.append(
+            BeatSheetEditView(
+                id=edit_id,
+                summary_text=summary_text,
+                origin=(
+                    raw_entry.get("origin")
+                    if isinstance(raw_entry.get("origin"), str)
+                    else "workspace"
+                ),
+                changed_fields=_read_string_list(raw_entry.get("changed_fields")),
+                beat_keys=_read_string_list(raw_entry.get("beat_keys")),
+                material_change=bool(raw_entry.get("material_change")),
+                refreshes_downstream=bool(raw_entry.get("refreshes_downstream")),
+                created_at=created_at,
+            )
+        )
+
+    return sorted(history, key=lambda entry: entry.created_at, reverse=True)
+
+
 def build_beat_entries(row) -> list[BeatSheetBeatView]:
     raw = getattr(row, "beats", None)
     if isinstance(raw, Mapping):
@@ -1207,6 +1253,7 @@ def build_beat_sheet_view(row) -> BeatSheetView | None:
             refinement_metadata,
             "selection_rationale",
         ),
+        edit_history=_build_beat_sheet_edit_history(payload),
         is_selected=row.is_selected,
         accepted_at=row.accepted_at,
         created_at=row.created_at,

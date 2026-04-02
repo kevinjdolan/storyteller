@@ -22,6 +22,7 @@ from app.api.dependencies import (
 )
 from app.models import (
     CreateSessionRequest,
+    EditSessionBeatSheetRequest,
     GenerateSessionBeatSheetRequest,
     GenerateSessionCharacterSheetsRequest,
     GenerateSessionPitchesRequest,
@@ -41,6 +42,7 @@ from app.models import (
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
     SessionBeatSheetGenerationResponse,
+    SessionBeatSheetUpdateResponse,
     SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
@@ -66,6 +68,7 @@ from app.services.sessions import (
     SessionCharacterSheetGenerationError,
     SessionCharacterSheetSelectionError,
     SessionBeatSheetGenerationError,
+    SessionBeatSheetEditError,
     SessionBeatSheetSelectionError,
     SessionGenreSelectionError,
     SessionNotFoundError,
@@ -622,6 +625,42 @@ def refine_session_beat_sheet(
             detail=str(exc),
         ) from exc
     except (SessionBeatSheetSelectionError, SessionBeatSheetGenerationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/beats/edit",
+    response_model=SessionBeatSheetUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist structured edits to a saved beat sheet",
+)
+def edit_session_beat_sheet(
+    session_id: str,
+    payload: EditSessionBeatSheetRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionBeatSheetUpdateResponse:
+    try:
+        return SessionService(db_session).edit_beat_sheet(
+            session_id,
+            payload=payload,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (
+        SessionBeatSheetEditError,
+        SessionBeatSheetSelectionError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

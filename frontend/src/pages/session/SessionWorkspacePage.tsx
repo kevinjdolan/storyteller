@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
+  editSessionBeatSheet,
   generateSessionBeatSheet,
   generateSessionCharacterSheets,
   generateSessionPitches,
@@ -1090,6 +1091,44 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyBeatSheetEdit(options: {
+    origin: string
+    beatSheetId?: string | null
+    revisionNumber?: number | null
+    summary?: string | null
+    bedtimeNotes?: string | null
+    bedtimeGoal?: string | null
+    beatUpdates?: Array<{
+      key: string
+      summary?: string | null
+      emotionalIntent?: string | null
+      bedtimeSofteningNote?: string | null
+    }>
+    summaryText?: string | null
+  }) {
+    const result = await editSessionBeatSheet(sessionId, {
+      beat_sheet_id: options.beatSheetId ?? null,
+      revision_number: options.revisionNumber ?? null,
+      summary: options.summary ?? null,
+      bedtime_notes: options.bedtimeNotes ?? null,
+      bedtime_goal: options.bedtimeGoal ?? null,
+      beat_updates:
+        options.beatUpdates?.map((beatUpdate) => ({
+          key: beatUpdate.key,
+          summary: beatUpdate.summary ?? null,
+          emotional_intent: beatUpdate.emotionalIntent ?? null,
+          bedtime_softening_note: beatUpdate.bedtimeSofteningNote ?? null,
+        })) ?? [],
+      summary_text: options.summaryText ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1650,6 +1689,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 />
               ) : selectedStage.stage === 'beats' ? (
                 <BeatSheetStage
+                  onEditBeatSheet={applyBeatSheetEdit}
                   onGenerateBeatSheet={applyBeatSheetGeneration}
                   onPreviewStage={setPreviewStage}
                   onRefineBeatSheet={applyBeatSheetRefinement}
