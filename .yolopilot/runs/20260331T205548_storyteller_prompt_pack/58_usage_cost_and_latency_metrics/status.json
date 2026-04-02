@@ -1,0 +1,135 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'rg -n \"usageMetadata|promptTokenCount|candidatesTokenCount|totalTokenCount|cachedContentTokenCount|thoughtsTokenCount|toolUsePromptTokenCount\" backend/tests backend/app'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'python -m ruff check backend/app backend/tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_model_usage_service.py backend/tests/test_session_api.py backend/tests/test_settings.py backend/tests/test_migrations.py backend/tests/test_brief_normalization_service.py backend/tests/test_pitch_generation_service.py backend/tests/test_character_generation_service.py backend/tests/test_beat_sheet_generation_service.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'python -m ruff check --fix backend/app/db/__init__.py backend/app/models/__init__.py backend/app/services/sessions.py backend/tests/test_session_api.py backend/tests/test_settings.py backend/app/repositories/model_usage.py backend/app/services/model_usage.py backend/app/services/intent_parser.py backend/app/services/session_hydration.py backend/app/services/brief_normalization.py backend/app/services/pitch_generation.py backend/app/services/character_generation.py backend/app/services/beat_sheet_generation.py backend/tests/test_model_usage_service.py backend/tests/test_brief_normalization_service.py backend/tests/test_pitch_generation_service.py backend/tests/test_character_generation_service.py backend/tests/test_beat_sheet_generation_service.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_model_usage_service.py backend/tests/test_session_api.py backend/tests/test_settings.py backend/tests/test_migrations.py backend/tests/test_brief_normalization_service.py backend/tests/test_pitch_generation_service.py backend/tests/test_character_generation_service.py backend/tests/test_beat_sheet_generation_service.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T12:22:46.885581Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/db/models.py:",
+      "2026-04-02T12:27:08.920261Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:",
+      "2026-04-02T12:29:27.549906Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/sessions.py:",
+      "2026-04-02T12:36:13.488302Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_character_generation_service.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 372,
+    "file_paths": [
+      "backend/app/models/model_usage.py",
+      "backend/app/settings/config.py",
+      "backend/app/db/models.py",
+      "backend/app/db/__init__.py",
+      "backend/migrations/versions/20260402_05_add_model_usage_metrics.py",
+      "backend/app/repositories/model_usage.py",
+      "backend/app/repositories/__init__.py",
+      "backend/app/services/model_usage.py",
+      "backend/app/models/__init__.py",
+      "backend/app/models/session.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/services/sessions.py",
+      "backend/app/services/intent_parser.py",
+      "backend/app/services/brief_normalization.py",
+      "backend/app/services/pitch_generation.py",
+      "backend/app/services/character_generation.py",
+      "backend/app/services/beat_sheet_generation.py",
+      "backend/app/api/v1/routes/sessions.py",
+      "backend/tests/test_migrations.py",
+      "backend/tests/test_settings.py",
+      "backend/tests/test_session_api.py",
+      "backend/tests/test_model_usage_service.py",
+      "backend/tests/test_brief_normalization_service.py",
+      "backend/tests/test_pitch_generation_service.py",
+      "backend/tests/test_character_generation_service.py",
+      "backend/tests/test_beat_sheet_generation_service.py",
+      "secrets.example.yaml",
+      "docs/secrets-and-local-config.md",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/58_usage_cost_and_latency_metrics/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4e1c-93a3-7232-83a5-f2f9e88eb4d3",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 23613952,
+      "input_tokens": 24188690,
+      "output_tokens": 67652,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T12:22:46.885581Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/db/models.py:",
+    "2026-04-02T12:27:08.920261Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:",
+    "2026-04-02T12:29:27.549906Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/sessions.py:",
+    "2026-04-02T12:36:13.488302Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_character_generation_service.py:"
+  ],
+  "head_commit": "eb2f81a33d37be0e6d5107c3d03e353c2758bf81",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "58-usage-cost-and-latency-metrics.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_58_usage_cost_and_latency_metrics",
+  "task_name_human": "58 usage cost and latency metrics",
+  "task_name_system": "58_usage_cost_and_latency_metrics",
+  "timing": {
+    "duration_seconds": 1743.0,
+    "finished_at": "2026-04-02T05:42:10-07:00",
+    "started_at": "2026-04-02T05:13:07-07:00"
+  }
+}

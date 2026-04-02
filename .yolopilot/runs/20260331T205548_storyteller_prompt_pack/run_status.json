@@ -57,9 +57,10 @@
     "54-chapter-scene-card-editor.md",
     "55-continuity-bible.md",
     "56-revision-history-and-branches.md",
-    "57-composition-prompt-assembly.md"
+    "57-composition-prompt-assembly.md",
+    "58-usage-cost-and-latency-metrics.md"
   ],
-  "current_success_ref": "83fee63eed64ccae8de33ddf88288257004bcd53",
+  "current_success_ref": "eb2f81a33d37be0e6d5107c3d03e353c2758bf81",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
