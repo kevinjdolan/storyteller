@@ -13,6 +13,7 @@ from app.models import (
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    SaveSessionStoryBriefRequest,
     SelectSessionGenreRequest,
     SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
@@ -24,6 +25,7 @@ from app.models import (
     SessionHydrationView,
     SessionSelectionResponse,
     SessionSnapshot,
+    SessionStoryBriefResponse,
 )
 from app.services import SessionActionPolicyService, SessionIntentParserService
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
@@ -32,6 +34,7 @@ from app.services.sessions import (
     SessionGenreSelectionError,
     SessionNotFoundError,
     SessionService,
+    SessionStoryBriefSaveError,
     SessionToneSelectionError,
     UnsupportedSessionContextUpdateError,
 )
@@ -188,6 +191,48 @@ def select_session_tone(
     except SessionToneSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/story-brief",
+    response_model=SessionStoryBriefResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist a revisioned story brief for a story session",
+)
+def save_session_story_brief(
+    session_id: str,
+    payload: SaveSessionStoryBriefRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionStoryBriefResponse:
+    try:
+        return SessionService(db_session).save_story_brief(
+            session_id,
+            story_idea=payload.story_idea,
+            desired_themes=payload.desired_themes,
+            key_images=payload.key_images,
+            audience_notes=payload.audience_notes,
+            must_have_elements=payload.must_have_elements,
+            raw_brief=payload.raw_brief,
+            normalized_summary=payload.normalized_summary,
+            planning_notes=payload.planning_notes,
+            edit_mode=payload.edit_mode,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except SessionStoryBriefSaveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 

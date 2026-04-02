@@ -158,6 +158,11 @@ class SelectToneValues(ChatToUIExtractedValues):
 
 
 class UpdateStoryBriefValues(ChatToUIExtractedValues):
+    story_idea: str | None = Field(default=None, min_length=1)
+    desired_themes: str | None = Field(default=None, min_length=1)
+    key_images: str | None = Field(default=None, min_length=1)
+    audience_notes: str | None = Field(default=None, min_length=1)
+    must_have_elements: str | None = Field(default=None, min_length=1)
     raw_brief: str | None = Field(default=None, min_length=1)
     normalized_summary: str | None = Field(default=None, min_length=1)
     planning_notes: str | None = Field(default=None, min_length=1)
@@ -167,12 +172,18 @@ class UpdateStoryBriefValues(ChatToUIExtractedValues):
     def validate_story_brief(self) -> UpdateStoryBriefValues:
         _require_any_field(
             {
+                "story_idea": self.story_idea,
+                "desired_themes": self.desired_themes,
+                "key_images": self.key_images,
+                "audience_notes": self.audience_notes,
+                "must_have_elements": self.must_have_elements,
                 "raw_brief": self.raw_brief,
                 "normalized_summary": self.normalized_summary,
                 "planning_notes": self.planning_notes,
             },
             error_message=(
-                "update_story_brief requires raw_brief, normalized_summary, or planning_notes"
+                "update_story_brief requires a story brief field, "
+                "normalized_summary, or planning_notes"
             ),
         )
         return self

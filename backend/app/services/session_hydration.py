@@ -167,6 +167,11 @@ def build_session_snapshot(
         display_title=resolve_display_title(
             working_title=story_session.working_title,
             pitch_title=aggregate.selected_pitch.title if aggregate.selected_pitch else None,
+            story_idea=(
+                aggregate.active_story_brief.story_idea
+                if aggregate.active_story_brief
+                else None
+            ),
             normalized_summary=(
                 aggregate.active_story_brief.normalized_summary
                 if aggregate.active_story_brief
@@ -697,10 +702,16 @@ def build_story_brief_view(row) -> StoryBriefView | None:
     return StoryBriefView(
         id=row.id,
         revision_number=row.revision_number,
+        story_idea=row.story_idea,
+        desired_themes=row.desired_themes,
+        key_images=row.key_images,
+        audience_notes=row.audience_notes,
+        must_have_elements=row.must_have_elements,
         raw_brief=row.raw_brief,
         normalized_summary=row.normalized_summary,
         planning_notes=row.planning_notes,
         accepted_at=row.accepted_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -836,10 +847,11 @@ def resolve_display_title(
     *,
     working_title: str | None,
     pitch_title: str | None = None,
+    story_idea: str | None = None,
     normalized_summary: str | None = None,
     raw_brief: str | None = None,
 ) -> str:
-    for candidate in (working_title, pitch_title, normalized_summary, raw_brief):
+    for candidate in (working_title, pitch_title, story_idea, normalized_summary, raw_brief):
         normalized = normalize_optional_text(candidate)
         if normalized:
             return normalized[:120]

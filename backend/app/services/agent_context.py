@@ -34,7 +34,11 @@ def build_session_agent_context_summary(
     if snapshot.story_brief is not None:
         lines.append(
             "Story brief: "
-            + _truncate(snapshot.story_brief.normalized_summary or snapshot.story_brief.raw_brief)
+            + _truncate(
+                snapshot.story_brief.normalized_summary
+                or snapshot.story_brief.story_idea
+                or snapshot.story_brief.raw_brief
+            )
         )
 
     if snapshot.selected_pitch is not None:

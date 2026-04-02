@@ -338,6 +338,102 @@ def test_select_session_tone_endpoint_requires_genre_first(
     assert response.json()["detail"] == "select a genre before choosing a tone"
 
 
+def test_save_story_brief_endpoint_persists_revisioned_brief_and_returns_snapshot(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Brief API"},
+    )
+    created = create_response.json()
+
+    genre_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/genre",
+        json={
+            "genre_slug": "quest-fantasy",
+            "origin": "workspace",
+        },
+    )
+    assert genre_response.status_code == 200
+
+    tone_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/tone",
+        json={
+            "tone_profile_slug": "hushed-wonder",
+            "origin": "workspace",
+        },
+    )
+    assert tone_response.status_code == 200
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-brief",
+        json={
+            "story_idea": (
+                "A child follows floating lanterns through a harbor and helps a shy "
+                "otter guide each light back to bed."
+            ),
+            "desired_themes": "gentle bravery, belonging, quiet wonder",
+            "key_images": "floating lanterns, moonlit water, otter paws on a skiff rail",
+            "audience_notes": "Ideal for kids who like wonder without spooky twists.",
+            "must_have_elements": "End with the harbor settled and the child tucked in safely.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "content.user_edit.recorded"
+    assert payload["event"]["stage"] == "brief"
+    assert payload["event"]["payload"]["target_kind"] == "story_brief"
+    assert payload["event"]["payload"]["revision_number"] == 1
+    assert payload["snapshot"]["current_stage"] == "pitches"
+    assert payload["snapshot"]["resume_stage"] == "pitches"
+    assert payload["snapshot"]["story_brief"]["story_idea"].startswith(
+        "A child follows floating lanterns"
+    )
+    assert (
+        "Desired themes: gentle bravery, belonging, quiet wonder"
+        in payload["snapshot"]["story_brief"]["raw_brief"]
+    )
+    assert payload["snapshot"]["stage_states"][2]["status"] == "completed"
+    assert payload["snapshot"]["stage_states"][2]["detail"].startswith(
+        "Saved story brief:"
+    )
+
+
+def test_save_story_brief_endpoint_requires_tone_prerequisite(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Brief API Guardrail"},
+    )
+    created = create_response.json()
+
+    genre_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/genre",
+        json={
+            "genre_slug": "quest-fantasy",
+            "origin": "workspace",
+        },
+    )
+    assert genre_response.status_code == 200
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-brief",
+        json={
+            "story_idea": "A soft harbor lantern story.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "cannot set 'brief' to 'completed'" in response.json()["detail"]
+
+
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
     session_api_client: TestClient,
 ) -> None:

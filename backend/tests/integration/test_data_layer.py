@@ -95,6 +95,24 @@ EXPECTED_SESSION_MEMORY_COLUMNS = {
     "summary_data",
     "created_at",
 }
+EXPECTED_STORY_BRIEF_COLUMNS = {
+    "id",
+    "session_id",
+    "revision_number",
+    "story_idea",
+    "desired_themes",
+    "key_images",
+    "audience_notes",
+    "must_have_elements",
+    "raw_brief",
+    "normalized_summary",
+    "planning_notes",
+    "model_output",
+    "is_active",
+    "accepted_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -145,6 +163,7 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
+    assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,
         "session_memory_snapshots",
@@ -158,6 +177,7 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
+    assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
     assert EXPECTED_SESSION_MEMORY_COLUMNS <= _column_names(
         database_url,
         "session_memory_snapshots",

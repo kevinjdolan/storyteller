@@ -386,6 +386,11 @@ class StoryBrief(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    story_idea: Mapped[str | None] = mapped_column(Text)
+    desired_themes: Mapped[str | None] = mapped_column(Text)
+    key_images: Mapped[str | None] = mapped_column(Text)
+    audience_notes: Mapped[str | None] = mapped_column(Text)
+    must_have_elements: Mapped[str | None] = mapped_column(Text)
     raw_brief: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_summary: Mapped[str | None] = mapped_column(Text)
     planning_notes: Mapped[str | None] = mapped_column(Text)

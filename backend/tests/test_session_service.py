@@ -24,7 +24,12 @@ from app.db import (
     ToneProfile,
     make_engine,
 )
-from app.models import SessionContextUpdateRequest, WorkflowStage, WorkflowStageState
+from app.models import (
+    SessionContextUpdateRequest,
+    UserEditTargetKind,
+    WorkflowStage,
+    WorkflowStageState,
+)
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.sessions import (
     InvalidStageTransitionError,
@@ -172,6 +177,11 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     brief = StoryBrief(
         session_id=story_session.id,
         revision_number=1,
+        story_idea="A young fox rows across a moonlit lake.",
+        desired_themes="quiet courage, wonder, coming home soothed",
+        key_images="moonlit reeds, silver water, a sleeping heron",
+        audience_notes="A good fit for children who like gentle nighttime journeys.",
+        must_have_elements="The fox should come home feeling calmer than when the story began.",
         raw_brief="A young fox rows across a moonlit lake.",
         normalized_summary="A sleepy quest to find a glowing reed before dawn.",
         planning_notes="Keep the tension soft and quickly reparative.",
@@ -295,6 +305,7 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.selected_genre is not None and snapshot.selected_genre.slug == "quest-fantasy"
     assert snapshot.selected_tone_profile is not None
     assert snapshot.story_brief is not None
+    assert snapshot.story_brief.story_idea == "A young fox rows across a moonlit lake."
     assert snapshot.story_brief.raw_brief.startswith("A young fox")
     assert snapshot.selected_pitch is not None
     assert snapshot.selected_pitch.title == "The Reed of Quiet Light"
@@ -511,6 +522,154 @@ def test_select_tone_invalidates_brief_and_later_stages_when_changed(db_session)
     assert history.events[-2].payload is not None
     assert history.events[-2].payload.invalidated_stages == [WorkflowStage.BRIEF]
     assert history.events[-1].summary == "Selected tone profile: Lantern Brave."
+
+
+def test_save_story_brief_persists_revision_and_advances_to_pitches(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Brief First")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+
+    result = service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child follows floating lanterns across a harbor and helps a shy otter "
+            "guardian bring every light home."
+        ),
+        desired_themes="gentle bravery, belonging, helping others rest",
+        key_images="floating lanterns, moonlit harbor water, otter paws on a skiff rail",
+        audience_notes="Best for listeners who want wonder without spooky stakes.",
+        must_have_elements="End with the harbor quiet again and the child tucked safely in bed.",
+    )
+
+    updated_snapshot = result.snapshot
+    brief_stage = next(
+        stage for stage in updated_snapshot.stage_states if stage.stage == WorkflowStage.BRIEF
+    )
+
+    assert result.event.event_type == "content.user_edit.recorded"
+    assert result.event.stage == WorkflowStage.BRIEF
+    assert result.event.payload is not None
+    assert result.event.payload.target_kind == UserEditTargetKind.STORY_BRIEF
+    assert result.event.payload.revision_number == 1
+    assert "story_idea" in result.event.payload.changed_fields
+    assert updated_snapshot.current_stage == WorkflowStage.PITCHES
+    assert updated_snapshot.resume_stage == WorkflowStage.PITCHES
+    assert updated_snapshot.story_brief is not None
+    assert (
+        updated_snapshot.story_brief.story_idea
+        == (
+            "A child follows floating lanterns across a harbor and helps a shy "
+            "otter guardian bring every light home."
+        )
+    )
+    assert updated_snapshot.story_brief.desired_themes == (
+        "gentle bravery, belonging, helping others rest"
+    )
+    assert (
+        "Desired themes: gentle bravery, belonging, helping others rest"
+        in updated_snapshot.story_brief.raw_brief
+    )
+    assert brief_stage.status == WorkflowStageState.COMPLETED
+    assert brief_stage.detail is not None
+    assert brief_stage.detail.startswith("Saved story brief:")
+    assert brief_stage.last_event_type == "content.user_edit.recorded"
+
+    stored_briefs = (
+        db_session.query(StoryBrief)
+        .filter(StoryBrief.session_id == snapshot.id)
+        .order_by(StoryBrief.revision_number.asc())
+        .all()
+    )
+    assert len(stored_briefs) == 1
+    assert stored_briefs[0].is_active is True
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "workflow.stage_changed"
+    assert history.events[-1].event_type == "content.user_edit.recorded"
+
+
+def test_save_story_brief_creates_new_revision_and_invalidates_later_stages(
+    db_session,
+) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Brief Reset")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea="A harbor child follows lanterns into the fog and returns home calm.",
+        desired_themes="curiosity, trust, quiet courage",
+    )
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.PITCHES,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted the lantern harbor pitch.",
+    )
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.CHARACTERS,
+        status=WorkflowStageState.COMPLETED,
+        detail="Locked the child and otter cast sheet.",
+    )
+
+    result = service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A harbor child and an otter guide lanterns home before the moon "
+            "slips behind the clouds."
+        ),
+        must_have_elements="Keep the ending tucked-in, quiet, and emotionally repaired.",
+    )
+
+    updated_snapshot = result.snapshot
+    stage_map = {stage.stage: stage for stage in updated_snapshot.stage_states}
+    stored_briefs = (
+        db_session.query(StoryBrief)
+        .filter(StoryBrief.session_id == snapshot.id)
+        .order_by(StoryBrief.revision_number.asc())
+        .all()
+    )
+
+    assert len(stored_briefs) == 2
+    assert stored_briefs[0].is_active is False
+    assert stored_briefs[1].is_active is True
+    assert stored_briefs[1].revision_number == 2
+    assert updated_snapshot.current_stage == WorkflowStage.PITCHES
+    assert updated_snapshot.resume_stage == WorkflowStage.PITCHES
+    assert updated_snapshot.overall_status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.BRIEF].status == WorkflowStageState.COMPLETED
+    assert stage_map[WorkflowStage.PITCHES].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.PITCHES].detail == (
+        "Story brief changed. Refresh pitches and any downstream planning."
+    )
+    assert stage_map[WorkflowStage.CHARACTERS].status == WorkflowStageState.NEEDS_REGENERATION
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "workflow.stage_changed"
+    assert history.events[-2].payload is not None
+    assert history.events[-2].payload.invalidated_stages == [
+        WorkflowStage.PITCHES,
+        WorkflowStage.CHARACTERS,
+    ]
+    assert history.events[-1].payload is not None
+    assert history.events[-1].payload.revision_number == 2
+
+
+def test_save_story_brief_rejects_skipping_tone_prerequisite(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Brief Guardrail")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+
+    with pytest.raises(InvalidStageTransitionError):
+        service.save_story_brief(
+            snapshot.id,
+            story_idea="A sleepy harbor lantern story.",
+        )
 
 
 def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:

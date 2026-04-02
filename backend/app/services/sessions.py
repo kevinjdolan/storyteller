@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 from sqlalchemy.orm import Session
 
+from app.db import StoryBrief
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
@@ -16,6 +17,8 @@ from app.models import (
     SessionHistoryView,
     SessionSelectionResponse,
     SessionSnapshot,
+    SessionStoryBriefResponse,
+    StoryBriefEditMode,
     UserEditTargetKind,
     WorkflowStage,
     WorkflowStageState,
@@ -57,6 +60,10 @@ class SessionGenreSelectionError(SessionServiceError):
 
 class SessionToneSelectionError(SessionServiceError):
     """Raised when a tone selection request cannot be fulfilled."""
+
+
+class SessionStoryBriefSaveError(SessionServiceError):
+    """Raised when a story brief save request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -331,6 +338,127 @@ class SessionService:
         return SessionSelectionResponse(
             snapshot=self.load_session_snapshot(story_session.id),
             event=self._event_log.build_event_view(selection_event),
+        )
+
+    def save_story_brief(
+        self,
+        session_id: str,
+        *,
+        story_idea: str | None = None,
+        desired_themes: str | None = None,
+        key_images: str | None = None,
+        audience_notes: str | None = None,
+        must_have_elements: str | None = None,
+        raw_brief: str | None = None,
+        normalized_summary: str | None = None,
+        planning_notes: str | None = None,
+        edit_mode: StoryBriefEditMode = StoryBriefEditMode.REPLACE,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionStoryBriefResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        current_brief = self._sessions.get_active_story_brief(session_id)
+        resolved_brief = _resolve_story_brief_revision(
+            current_brief,
+            story_idea=story_idea,
+            desired_themes=desired_themes,
+            key_images=key_images,
+            audience_notes=audience_notes,
+            must_have_elements=must_have_elements,
+            raw_brief=raw_brief,
+            normalized_summary=normalized_summary,
+            planning_notes=planning_notes,
+            edit_mode=edit_mode,
+        )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.BRIEF,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.BRIEF]
+        previous_status = stage_snapshot.status
+        now = utc_now()
+
+        if current_brief is not None:
+            current_brief.is_active = False
+
+        next_revision_number = 1 if current_brief is None else current_brief.revision_number + 1
+        new_brief = StoryBrief(
+            session_id=story_session.id,
+            revision_number=next_revision_number,
+            story_idea=resolved_brief["story_idea"],
+            desired_themes=resolved_brief["desired_themes"],
+            key_images=resolved_brief["key_images"],
+            audience_notes=resolved_brief["audience_notes"],
+            must_have_elements=resolved_brief["must_have_elements"],
+            raw_brief=resolved_brief["raw_brief"],
+            normalized_summary=resolved_brief["normalized_summary"],
+            planning_notes=resolved_brief["planning_notes"],
+            is_active=True,
+            accepted_at=now,
+        )
+        self._session.add(new_brief)
+        self._session.flush()
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_story_brief_stage_detail(
+            resolved_brief["normalized_summary"]
+            or resolved_brief["story_idea"]
+            or resolved_brief["raw_brief"]
+        )
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.BRIEF,
+            detail=_build_story_brief_invalidation_detail(),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if previous_status != stage_snapshot.status or invalidated_stages:
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.BRIEF,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        edit_event = self._event_log.record_user_edit(
+            story_session.id,
+            target_kind=UserEditTargetKind.STORY_BRIEF,
+            stage=WorkflowStage.BRIEF,
+            target_id=new_brief.id,
+            revision_number=new_brief.revision_number,
+            changed_fields=_build_story_brief_changed_fields(current_brief, new_brief),
+            source=origin,
+            field_values=_build_story_brief_event_values(new_brief, edit_mode=edit_mode),
+            summary_text=_build_story_brief_summary_text(
+                has_existing_brief=current_brief is not None,
+                origin=origin,
+            ),
+            actor=actor,
+        )
+        stage_snapshot.last_event = edit_event
+        self._session.commit()
+        return SessionStoryBriefResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(edit_event),
         )
 
     def apply_context_update(
@@ -616,3 +744,224 @@ def _build_tone_selection_detail(label: str) -> str:
 
 def _build_tone_invalidation_detail(label: str) -> str:
     return f"Tone changed to {label}. Revisit the brief and any downstream planning."
+
+
+_STORY_BRIEF_TEXT_FIELDS = (
+    "story_idea",
+    "desired_themes",
+    "key_images",
+    "audience_notes",
+    "must_have_elements",
+    "normalized_summary",
+    "planning_notes",
+)
+
+
+def _resolve_story_brief_revision(
+    current_brief: StoryBrief | None,
+    *,
+    story_idea: str | None,
+    desired_themes: str | None,
+    key_images: str | None,
+    audience_notes: str | None,
+    must_have_elements: str | None,
+    raw_brief: str | None,
+    normalized_summary: str | None,
+    planning_notes: str | None,
+    edit_mode: StoryBriefEditMode,
+) -> dict[str, str | None]:
+    incoming_story_idea = _normalize_optional_text(story_idea)
+    if incoming_story_idea is None:
+        incoming_story_idea = _normalize_optional_text(raw_brief)
+
+    current_values = {
+        "story_idea": _normalize_optional_text(current_brief.story_idea)
+        if current_brief is not None
+        else None,
+        "desired_themes": _normalize_optional_text(current_brief.desired_themes)
+        if current_brief is not None
+        else None,
+        "key_images": _normalize_optional_text(current_brief.key_images)
+        if current_brief is not None
+        else None,
+        "audience_notes": _normalize_optional_text(current_brief.audience_notes)
+        if current_brief is not None
+        else None,
+        "must_have_elements": _normalize_optional_text(current_brief.must_have_elements)
+        if current_brief is not None
+        else None,
+        "normalized_summary": _normalize_optional_text(current_brief.normalized_summary)
+        if current_brief is not None
+        else None,
+        "planning_notes": _normalize_optional_text(current_brief.planning_notes)
+        if current_brief is not None
+        else None,
+        "raw_brief": _normalize_optional_text(current_brief.raw_brief)
+        if current_brief is not None
+        else None,
+    }
+    incoming_values = {
+        "story_idea": incoming_story_idea,
+        "desired_themes": _normalize_optional_text(desired_themes),
+        "key_images": _normalize_optional_text(key_images),
+        "audience_notes": _normalize_optional_text(audience_notes),
+        "must_have_elements": _normalize_optional_text(must_have_elements),
+        "normalized_summary": _normalize_optional_text(normalized_summary),
+        "planning_notes": _normalize_optional_text(planning_notes),
+    }
+
+    resolved_values = {
+        field_name: _resolve_story_brief_value(
+            current_values[field_name],
+            incoming_values[field_name],
+            edit_mode=edit_mode,
+        )
+        for field_name in _STORY_BRIEF_TEXT_FIELDS
+    }
+    composed_raw_brief = _compose_story_brief_text(
+        story_idea=resolved_values["story_idea"],
+        desired_themes=resolved_values["desired_themes"],
+        key_images=resolved_values["key_images"],
+        audience_notes=resolved_values["audience_notes"],
+        must_have_elements=resolved_values["must_have_elements"],
+    )
+
+    if composed_raw_brief is None:
+        composed_raw_brief = _resolve_story_brief_value(
+            current_values["raw_brief"],
+            _normalize_optional_text(raw_brief),
+            edit_mode=edit_mode,
+        )
+
+    if composed_raw_brief is None:
+        raise SessionStoryBriefSaveError(
+            "story brief content requires a story idea or free-form brief before it can be saved"
+        )
+
+    resolved_values["raw_brief"] = composed_raw_brief
+    return resolved_values
+
+
+def _resolve_story_brief_value(
+    current_value: str | None,
+    incoming_value: str | None,
+    *,
+    edit_mode: StoryBriefEditMode,
+) -> str | None:
+    if edit_mode == StoryBriefEditMode.REPLACE:
+        return incoming_value
+
+    if edit_mode == StoryBriefEditMode.APPEND:
+        if incoming_value is None:
+            return current_value
+        if current_value is None:
+            return incoming_value
+        if incoming_value in current_value:
+            return current_value
+        return f"{current_value.rstrip()}\n\n{incoming_value.lstrip()}"
+
+    return incoming_value if incoming_value is not None else current_value
+
+
+def _compose_story_brief_text(
+    *,
+    story_idea: str | None,
+    desired_themes: str | None,
+    key_images: str | None,
+    audience_notes: str | None,
+    must_have_elements: str | None,
+) -> str | None:
+    sections: list[str] = []
+
+    if story_idea is not None:
+        sections.append(story_idea)
+
+    for label, value in (
+        ("Desired themes", desired_themes),
+        ("Key images", key_images),
+        ("Target audience notes", audience_notes),
+        ("Must-have elements", must_have_elements),
+    ):
+        if value is not None:
+            sections.append(f"{label}: {value}")
+
+    if not sections:
+        return None
+
+    return "\n\n".join(sections)
+
+
+def _build_story_brief_stage_detail(value: str) -> str:
+    return f"Saved story brief: {_truncate_story_brief_text(value, limit=160)}"
+
+
+def _build_story_brief_invalidation_detail() -> str:
+    return "Story brief changed. Refresh pitches and any downstream planning."
+
+
+def _build_story_brief_changed_fields(
+    previous_brief: StoryBrief | None,
+    new_brief: StoryBrief,
+) -> list[str]:
+    if previous_brief is None:
+        return [
+            field_name
+            for field_name in (
+                "story_idea",
+                "desired_themes",
+                "key_images",
+                "audience_notes",
+                "must_have_elements",
+                "raw_brief",
+                "normalized_summary",
+                "planning_notes",
+            )
+            if getattr(new_brief, field_name) is not None
+        ]
+
+    changed_fields: list[str] = []
+    for field_name in (
+        "story_idea",
+        "desired_themes",
+        "key_images",
+        "audience_notes",
+        "must_have_elements",
+        "raw_brief",
+        "normalized_summary",
+        "planning_notes",
+    ):
+        if getattr(previous_brief, field_name) != getattr(new_brief, field_name):
+            changed_fields.append(field_name)
+
+    return changed_fields or ["raw_brief"]
+
+
+def _build_story_brief_event_values(
+    story_brief: StoryBrief,
+    *,
+    edit_mode: StoryBriefEditMode,
+) -> dict[str, str | int | None]:
+    return {
+        "story_idea": story_brief.story_idea,
+        "desired_themes": story_brief.desired_themes,
+        "key_images": story_brief.key_images,
+        "audience_notes": story_brief.audience_notes,
+        "must_have_elements": story_brief.must_have_elements,
+        "raw_brief": story_brief.raw_brief,
+        "normalized_summary": story_brief.normalized_summary,
+        "planning_notes": story_brief.planning_notes,
+        "edit_mode": edit_mode.value,
+        "revision_number": story_brief.revision_number,
+    }
+
+
+def _build_story_brief_summary_text(*, has_existing_brief: bool, origin: str) -> str:
+    action = "Updated" if has_existing_brief else "Saved"
+    return f"{action} story brief from {origin}."
+
+
+def _truncate_story_brief_text(value: str, *, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+
+    return f"{value[: limit - 3].rstrip()}..."

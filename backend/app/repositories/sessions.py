@@ -105,6 +105,9 @@ class StorySessionRepository:
             latest_audio_asset=self._get_latest_audio_asset(session_id),
         )
 
+    def get_active_story_brief(self, session_id: str) -> StoryBrief | None:
+        return self._get_active_story_brief(session_id)
+
     def list_recent(self, *, limit: int = 20) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)

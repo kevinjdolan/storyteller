@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.chat_actions import StoryBriefEditMode
 from app.models.events import SessionEventView, SessionHistoryView
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
@@ -38,10 +39,16 @@ class SessionStageStateView(BaseModel):
 class StoryBriefView(BaseModel):
     id: str
     revision_number: int
+    story_idea: str | None = None
+    desired_themes: str | None = None
+    key_images: str | None = None
+    audience_notes: str | None = None
+    must_have_elements: str | None = None
     raw_brief: str
     normalized_summary: str | None = None
     planning_notes: str | None = None
     accepted_at: datetime | None = None
+    updated_at: datetime
 
 
 class PitchView(BaseModel):
@@ -216,6 +223,41 @@ class SessionSelectionResponse(BaseModel):
     event: SessionEventView
 
 
+class SaveSessionStoryBriefRequest(BaseModel):
+    story_idea: str | None = Field(default=None, min_length=1)
+    desired_themes: str | None = Field(default=None, min_length=1)
+    key_images: str | None = Field(default=None, min_length=1)
+    audience_notes: str | None = Field(default=None, min_length=1)
+    must_have_elements: str | None = Field(default=None, min_length=1)
+    raw_brief: str | None = Field(default=None, min_length=1)
+    normalized_summary: str | None = Field(default=None, min_length=1)
+    planning_notes: str | None = Field(default=None, min_length=1)
+    edit_mode: StoryBriefEditMode = StoryBriefEditMode.REPLACE
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "SaveSessionStoryBriefRequest":
+        values = [
+            self.story_idea,
+            self.desired_themes,
+            self.key_images,
+            self.audience_notes,
+            self.must_have_elements,
+            self.raw_brief,
+            self.normalized_summary,
+            self.planning_notes,
+        ]
+        if all(value is None for value in values):
+            raise ValueError("story brief saves require at least one populated field")
+
+        return self
+
+
+class SessionStoryBriefResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
 class RecordSessionUIActionRequest(BaseModel):
     action: str = Field(min_length=1)
     stage: WorkflowStage | None = None
@@ -308,4 +350,5 @@ ExportAssetView = SessionAssetView
 
 SessionContextUpdateResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()
+SessionStoryBriefResponse.model_rebuild()
 SessionHydrationView.model_rebuild()

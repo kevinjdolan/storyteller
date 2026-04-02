@@ -165,6 +165,7 @@ def _build_story_decisions(aggregate: SessionAggregate) -> list[str]:
             "Story brief: "
             + _truncate(
                 aggregate.active_story_brief.normalized_summary
+                or aggregate.active_story_brief.story_idea
                 or aggregate.active_story_brief.raw_brief
             )
         )
@@ -397,6 +398,11 @@ def _resolve_display_title(aggregate: SessionAggregate) -> str:
     for candidate in (
         aggregate.session.working_title,
         aggregate.selected_pitch.title if aggregate.selected_pitch is not None else None,
+        (
+            aggregate.active_story_brief.story_idea
+            if aggregate.active_story_brief is not None
+            else None
+        ),
         (
             aggregate.active_story_brief.normalized_summary
             if aggregate.active_story_brief is not None

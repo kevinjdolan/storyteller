@@ -127,6 +127,11 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
         brief = StoryBrief(
             session=draft_session,
             revision_number=1,
+            story_idea="A sleepy fox rows across a moonlit lake.",
+            desired_themes="gentle courage, listening, finding home again",
+            key_images="silver ripples, lantern reeds, a sleepy heron",
+            audience_notes="Best for children who like calm adventure without loud peril.",
+            must_have_elements="The fox returns home feeling safer than when the journey began.",
             raw_brief="A sleepy fox rows across a moonlit lake.",
             normalized_summary=(
                 "A bedtime-safe quest about crossing the lake to find a glowing reed."
@@ -306,6 +311,9 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             index["name"] for index in inspector.get_indexes("workflow_stage_states")
         }
         asset_indexes = {index["name"] for index in inspector.get_indexes("session_assets")}
+        story_brief_columns = {
+            column["name"] for column in inspector.get_columns("story_briefs")
+        }
 
         assert {
             "ix_story_sessions_current_stage",
@@ -318,6 +326,13 @@ def test_story_schema_exposes_expected_indexes_and_foreign_keys() -> None:
             "ix_session_assets_composition_job_id_asset_kind_segment_index",
             "ix_session_assets_session_id_asset_kind_status",
         } <= asset_indexes
+        assert {
+            "story_idea",
+            "desired_themes",
+            "key_images",
+            "audience_notes",
+            "must_have_elements",
+        } <= story_brief_columns
 
         tone_profile_foreign_keys = {
             fk["constrained_columns"][0]: fk["referred_table"]
