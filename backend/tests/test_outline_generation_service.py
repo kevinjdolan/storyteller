@@ -179,3 +179,62 @@ def test_generate_outline_preserves_ordered_beat_coverage() -> None:
 
     assert flattened == [beat.key for beat in _build_beats()]
     assert all(card.emotional_shift for card in plan.cards)
+
+
+def test_eval_outline_chapter_plan_preserves_targets_tone_and_guardrails() -> None:
+    plan = StoryOutlineGenerationService().generate_outline(
+        StoryOutlinePlanningContext(
+            genre_label="Quest Fantasy",
+            tone_label="Hushed Wonder",
+            beat_sheet_summary="A harbor quest that lands in calm belonging.",
+            beats=_build_beats(),
+            target_word_count=1800,
+            target_runtime_minutes=12,
+            chapter_count=4,
+            approximate_scene_count=8,
+            guidance_notes="Keep each chapter ending calmer than it began.",
+        )
+    )
+
+    assert plan.outline_kind == "chapter"
+    assert len(plan.cards) == 4
+    assert sum(card.target_word_count or 0 for card in plan.cards) == 1800
+    assert sum(card.target_runtime_minutes or 0 for card in plan.cards) == 12
+    assert all(card.tone_direction is not None for card in plan.cards)
+    assert all(card.drafting_brief is not None for card in plan.cards)
+    assert all(card.bedtime_guardrail is not None for card in plan.cards)
+    assert any(
+        "visible companionship" in (card.bedtime_guardrail or "").lower()
+        for card in plan.cards
+    )
+    assert "Lane: Quest Fantasy / Hushed Wonder." in plan.summary
+
+
+def test_eval_outline_scene_mode_uses_softened_beats_in_scene_cards() -> None:
+    plan = StoryOutlineGenerationService().generate_outline(
+        StoryOutlinePlanningContext(
+            genre_label="Cozy Mystery",
+            tone_label="Sleepy Curiosity",
+            beat_sheet_summary="A calm harbor mystery that resolves before bed.",
+            beats=_build_beats(),
+            approximate_scene_count=6,
+            target_word_count=1500,
+            target_runtime_minutes=10,
+            guidance_notes="Keep the emotional lows brief and visibly supported.",
+        )
+    )
+
+    midpoint_card = next(
+        card for card in plan.cards if "midpoint" in card.beat_keys
+    )
+    all_is_lost_card = next(
+        card for card in plan.cards if "all_is_lost" in card.beat_keys
+    )
+
+    assert plan.outline_kind == "scene"
+    assert len(plan.cards) == 6
+    assert all(card.card_type == "scene" for card in plan.cards)
+    assert all(card.target_scene_count == 1 for card in plan.cards)
+    assert "luminous and quickly reassuring" in (midpoint_card.bedtime_guardrail or "")
+    assert "visible companionship" in (all_is_lost_card.bedtime_guardrail or "")
+    assert all("Sleepy Curiosity" in (card.drafting_brief or "") for card in plan.cards)

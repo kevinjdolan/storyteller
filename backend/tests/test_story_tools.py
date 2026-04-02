@@ -298,6 +298,105 @@ def test_story_workflow_tool_service_seeds_composition_segments_from_outline_car
     assert "Chapter 1" in job.metadata_json["outline_card_title"]
 
 
+def test_eval_composition_payload_inherits_outline_metadata_and_drafting_brief(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(db_session)
+
+    result = StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+        session_id=seeded["session_id"],
+        arguments={},
+    )
+
+    job = db_session.get(CompositionJob, result.composition_job_id)
+    segment = db_session.get(CompositionSegment, result.segment_id)
+
+    assert job is not None
+    assert segment is not None
+    assert job.metadata_json["story_outline_id"]
+    assert job.metadata_json["outline_card_key"] == "chapter-1"
+    assert job.metadata_json["outline_card_position"] == 1
+    assert job.metadata_json["outline_card_beat_keys"] == [
+        "opening_image",
+        "catalyst",
+    ]
+    assert (
+        segment.planned_summary
+        == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."
+    )
+    assert (
+        segment.payload["outline_card_drafting_brief"]
+        == "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous."
+    )
+
+
+def test_eval_outline_edit_revisions_keep_locked_structure_and_refresh_downstream(
+    db_session,
+) -> None:
+    seeded = _seed_story_setup_session(
+        db_session,
+        composition_status=JobStatus.IN_PROGRESS,
+        audio_status=JobStatus.IN_PROGRESS,
+    )
+    snapshot = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    assert snapshot.selected_story_outline is not None
+
+    original_cards = snapshot.selected_story_outline.cards
+    edited_cards = []
+    for card in original_cards:
+        edited_cards.append(
+            {
+                **card.model_dump(mode="json"),
+                "title": (
+                    "Chapter 1: Lantern Wake and Gentle Departure"
+                    if card.card_key == "chapter-1"
+                    else card.title
+                ),
+                "drafting_brief": (
+                    "Chapter 1 should move from harbor stillness into a visibly safe departure."
+                    if card.card_key == "chapter-1"
+                    else card.drafting_brief
+                ),
+            }
+        )
+
+    StoryWorkflowToolService(db_session).execute(
+        tool_name=StoryWorkflowToolName.UPDATE_STORY_OUTLINE,
+        session_id=seeded["session_id"],
+        arguments={
+            "outline_id": snapshot.selected_story_outline.id,
+            "summary": snapshot.selected_story_outline.summary,
+            "cards": edited_cards,
+            "origin": "workspace",
+        },
+    )
+
+    refreshed = SessionService(db_session).load_session_snapshot(seeded["session_id"])
+    assert refreshed.selected_story_outline is not None
+
+    edited_card = refreshed.selected_story_outline.cards[0]
+    original_card = original_cards[0]
+
+    assert refreshed.selected_story_outline.revision_number == 2
+    assert edited_card.title == "Chapter 1: Lantern Wake and Gentle Departure"
+    assert (
+        edited_card.drafting_brief
+        == "Chapter 1 should move from harbor stillness into a visibly safe departure."
+    )
+    assert edited_card.beat_keys == original_card.beat_keys
+    assert edited_card.target_word_count == original_card.target_word_count
+    assert edited_card.target_scene_count == original_card.target_scene_count
+    assert _stage_status(
+        refreshed,
+        WorkflowStage.COMPOSITION,
+    ) == WorkflowStageState.NEEDS_REGENERATION
+    assert _stage_status(
+        refreshed,
+        WorkflowStage.AUDIO,
+    ) == WorkflowStageState.NEEDS_REGENERATION
+
+
 def test_worker_processes_story_tool_job_via_default_registry(tmp_path: Path) -> None:
     session_factory = _build_session_factory(tmp_path)
 
@@ -554,9 +653,15 @@ def _seed_story_setup_session(
                 "target_word_count": 533,
                 "target_runtime_minutes": 4,
                 "target_scene_count": 3,
-                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "tone_direction": (
+                    "Stay anchored in the Hushed Wonder tone while advancing "
+                    "the Quest Fantasy lane."
+                ),
                 "bedtime_guardrail": "Keep the problem small, visible, and quickly reassuring.",
-                "drafting_brief": "Chapter 1 should cover Opening Image and Catalyst while staying calm and luminous.",
+                "drafting_brief": (
+                    "Chapter 1 should cover Opening Image and Catalyst while "
+                    "staying calm and luminous."
+                ),
             },
             {
                 "card_key": "chapter-2",
@@ -570,9 +675,15 @@ def _seed_story_setup_session(
                 "target_word_count": 533,
                 "target_runtime_minutes": 4,
                 "target_scene_count": 3,
-                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "tone_direction": (
+                    "Stay anchored in the Hushed Wonder tone while advancing "
+                    "the Quest Fantasy lane."
+                ),
                 "bedtime_guardrail": "Keep the reveal luminous and quickly reassuring.",
-                "drafting_brief": "Chapter 2 should center the midpoint reveal and make it feel awe-filled rather than sharp.",
+                "drafting_brief": (
+                    "Chapter 2 should center the midpoint reveal and make it "
+                    "feel awe-filled rather than sharp."
+                ),
             },
             {
                 "card_key": "chapter-3",
@@ -586,9 +697,15 @@ def _seed_story_setup_session(
                 "target_word_count": 534,
                 "target_runtime_minutes": 3,
                 "target_scene_count": 3,
-                "tone_direction": "Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.",
+                "tone_direction": (
+                    "Stay anchored in the Hushed Wonder tone while advancing "
+                    "the Quest Fantasy lane."
+                ),
                 "bedtime_guardrail": "Buffer the low point with visible companionship.",
-                "drafting_brief": "Chapter 3 should keep the low point brief, then land in repair and sleepy calm.",
+                "drafting_brief": (
+                    "Chapter 3 should keep the low point brief, then land in "
+                    "repair and sleepy calm."
+                ),
             },
         ],
         metadata_json={
