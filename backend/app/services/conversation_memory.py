@@ -375,6 +375,8 @@ def _build_story_setup_summary(aggregate: SessionAggregate) -> str | None:
         setup_bits.append(f"{aggregate.selected_story_setup.target_runtime_minutes} minutes")
     if aggregate.selected_story_setup.chapter_count is not None:
         setup_bits.append(f"{aggregate.selected_story_setup.chapter_count} chapters")
+    if aggregate.selected_story_setup.approximate_scene_count is not None:
+        setup_bits.append(f"about {aggregate.selected_story_setup.approximate_scene_count} scenes")
     if aggregate.selected_story_setup.chapter_style:
         setup_bits.append(aggregate.selected_story_setup.chapter_style)
 

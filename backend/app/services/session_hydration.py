@@ -1291,6 +1291,7 @@ def build_story_setup_view(row) -> StorySetupView | None:
         target_word_count=row.target_word_count,
         target_runtime_minutes=row.target_runtime_minutes,
         chapter_count=row.chapter_count,
+        approximate_scene_count=row.approximate_scene_count,
         chapter_style=row.chapter_style,
         guidance_notes=row.guidance_notes,
         preferences=row.preferences,

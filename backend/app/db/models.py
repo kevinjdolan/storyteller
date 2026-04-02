@@ -531,6 +531,7 @@ class StorySetup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     target_word_count: Mapped[int | None] = mapped_column(Integer)
     target_runtime_minutes: Mapped[int | None] = mapped_column(Integer)
     chapter_count: Mapped[int | None] = mapped_column(Integer)
+    approximate_scene_count: Mapped[int | None] = mapped_column(Integer)
     chapter_style: Mapped[str | None] = mapped_column(String(120))
     guidance_notes: Mapped[str | None] = mapped_column(Text)
     preferences: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)

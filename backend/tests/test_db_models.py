@@ -182,6 +182,7 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             target_word_count=1800,
             target_runtime_minutes=12,
             chapter_count=3,
+            approximate_scene_count=9,
             chapter_style="three gentle chapters",
             is_selected=True,
             accepted_at=now,

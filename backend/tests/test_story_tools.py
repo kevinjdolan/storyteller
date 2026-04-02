@@ -179,6 +179,7 @@ def test_story_workflow_tool_service_updates_setup_and_cancels_invalidated_jobs(
         arguments={
             "target_runtime_minutes": 8,
             "chapter_count": 2,
+            "approximate_scene_count": 7,
             "guidance_notes": "Keep the ending even softer.",
         },
     )
@@ -191,6 +192,7 @@ def test_story_workflow_tool_service_updates_setup_and_cancels_invalidated_jobs(
     assert result.revision_number == 2
     assert snapshot.selected_story_setup.target_runtime_minutes == 8
     assert snapshot.selected_story_setup.chapter_count == 2
+    assert snapshot.selected_story_setup.approximate_scene_count == 7
     assert snapshot.selected_story_setup.guidance_notes == "Keep the ending even softer."
     assert composition_job is not None and composition_job.status == JobStatus.CANCELLED
     assert audio_job is not None and audio_job.status == JobStatus.CANCELLED
@@ -410,6 +412,7 @@ def _seed_story_setup_session(
         target_word_count=1600,
         target_runtime_minutes=11,
         chapter_count=3,
+        approximate_scene_count=9,
         chapter_style="three gentle chapters",
         guidance_notes="End each chapter with a calmer image than it began.",
         is_selected=True,

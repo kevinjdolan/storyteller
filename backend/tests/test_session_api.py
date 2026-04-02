@@ -1418,6 +1418,118 @@ def test_select_session_beat_sheet_endpoint_marks_choice_and_advances_to_story_s
     assert payload["snapshot"]["stage_states"][5]["status"] == "completed"
 
 
+def test_save_session_story_setup_endpoint_persists_soft_targets_and_returns_selection_event(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Story Setup API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_pitches = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_pitch_id = generated_pitches["snapshot"]["pitch_batches"][0]["pitches"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/pitch",
+            json={"pitch_id": selected_pitch_id, "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    generated_characters = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/characters/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    selected_character_sheet_id = generated_characters["snapshot"]["character_sheet_batches"][0][
+        "character_sheets"
+    ][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/character-sheet",
+            json={
+                "character_sheet_id": selected_character_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated_beats = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/beats/generate",
+        json={"origin": "workspace"},
+    ).json()
+    first_beat_sheet_id = generated_beats["snapshot"]["beat_sheet_revisions"][0]["id"]
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/beat-sheet",
+            json={
+                "beat_sheet_id": first_beat_sheet_id,
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-setup",
+        json={
+            "target_word_count": 1800,
+            "target_runtime_minutes": 12,
+            "chapter_count": 3,
+            "approximate_scene_count": 8,
+            "guidance_notes": "Treat these as calm planning targets, not promises.",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["stage"] == "story_setup"
+    assert payload["event"]["payload"]["selection_kind"] == "story_setup"
+    assert payload["event"]["payload"]["source"] == "workspace"
+    assert payload["snapshot"]["current_stage"] == "composition"
+    assert payload["snapshot"]["resume_stage"] == "composition"
+    assert payload["snapshot"]["selected_story_setup"]["target_word_count"] == 1800
+    assert payload["snapshot"]["selected_story_setup"]["target_runtime_minutes"] == 12
+    assert payload["snapshot"]["selected_story_setup"]["chapter_count"] == 3
+    assert payload["snapshot"]["selected_story_setup"]["approximate_scene_count"] == 8
+    assert payload["snapshot"]["selected_story_setup"]["guidance_notes"] == (
+        "Treat these as calm planning targets, not promises."
+    )
+    assert payload["snapshot"]["stage_states"][6]["status"] == "completed"
+
+
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
     session_api_client: TestClient,
 ) -> None:
@@ -1687,6 +1799,27 @@ def test_apply_session_context_update_endpoint_returns_422_for_unsupported_stage
 
     assert response.status_code == 422
     assert "does not support durable note edits" in response.json()["detail"]
+
+
+def test_save_session_story_setup_endpoint_returns_422_before_beat_selection(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Setup Guard"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/story-setup",
+        json={
+            "target_runtime_minutes": 9,
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "requires a selected beat sheet" in response.json()["detail"]
 
 
 def test_apply_session_context_update_endpoint_returns_409_for_invalid_transition(

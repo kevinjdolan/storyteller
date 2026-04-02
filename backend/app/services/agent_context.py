@@ -161,6 +161,8 @@ def _build_story_setup_summary(snapshot: SessionSnapshot) -> str | None:
         setup_bits.append(f"{snapshot.selected_story_setup.target_runtime_minutes} minutes")
     if snapshot.selected_story_setup.chapter_count is not None:
         setup_bits.append(f"{snapshot.selected_story_setup.chapter_count} chapters")
+    if snapshot.selected_story_setup.approximate_scene_count is not None:
+        setup_bits.append(f"about {snapshot.selected_story_setup.approximate_scene_count} scenes")
     if snapshot.selected_story_setup.chapter_style:
         setup_bits.append(snapshot.selected_story_setup.chapter_style)
     if snapshot.selected_story_setup.guidance_notes:

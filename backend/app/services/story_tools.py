@@ -827,21 +827,25 @@ class StoryWorkflowToolService:
             )
 
         current_setup = self._get_selected_story_setup_row(session_id)
+        provided_fields = request.model_fields_set
         merged_values = {
             "target_word_count": request.target_word_count
-            if request.target_word_count is not None
+            if "target_word_count" in provided_fields
             else getattr(current_setup, "target_word_count", None),
             "target_runtime_minutes": request.target_runtime_minutes
-            if request.target_runtime_minutes is not None
+            if "target_runtime_minutes" in provided_fields
             else getattr(current_setup, "target_runtime_minutes", None),
             "chapter_count": request.chapter_count
-            if request.chapter_count is not None
+            if "chapter_count" in provided_fields
             else getattr(current_setup, "chapter_count", None),
+            "approximate_scene_count": request.approximate_scene_count
+            if "approximate_scene_count" in provided_fields
+            else getattr(current_setup, "approximate_scene_count", None),
             "chapter_style": request.chapter_style
-            if request.chapter_style is not None
+            if "chapter_style" in provided_fields
             else getattr(current_setup, "chapter_style", None),
             "guidance_notes": request.guidance_notes
-            if request.guidance_notes is not None
+            if "guidance_notes" in provided_fields
             else getattr(current_setup, "guidance_notes", None),
         }
 
@@ -874,10 +878,11 @@ class StoryWorkflowToolService:
             target_word_count=merged_values["target_word_count"],
             target_runtime_minutes=merged_values["target_runtime_minutes"],
             chapter_count=merged_values["chapter_count"],
+            approximate_scene_count=merged_values["approximate_scene_count"],
             chapter_style=merged_values["chapter_style"],
             guidance_notes=merged_values["guidance_notes"],
             preferences={
-                "source": "story_workflow_tool_registry",
+                "source": request.origin,
             },
             is_selected=True,
             accepted_at=utc_now(),
@@ -887,8 +892,8 @@ class StoryWorkflowToolService:
 
         changed_fields = sorted(
             field
-            for field, value in request.model_dump(mode="json", exclude_none=True).items()
-            if value is not None
+            for field in provided_fields
+            if field != "origin"
         )
         self._events.record_user_edit(
             session_id,
@@ -897,9 +902,9 @@ class StoryWorkflowToolService:
             target_id=setup.id,
             revision_number=setup.revision_number,
             changed_fields=changed_fields,
-            source="story_tool",
-            field_values=request.model_dump(mode="json", exclude_none=True),
-            summary_text="Updated story setup heuristics from the shared tool registry.",
+            source=request.origin,
+            field_values=request.model_dump(mode="json", exclude_unset=True),
+            summary_text="Updated story setup preferences.",
             actor=actor,
         )
         self._events.record_selection(
@@ -909,7 +914,7 @@ class StoryWorkflowToolService:
             selection_id=setup.id,
             label=_story_setup_label(setup),
             previous_selection_id=previous_selection_id,
-            source="story_tool",
+            source=request.origin,
             actor=actor,
         )
         stage_snapshot = self._sessions.update_stage_state(
@@ -1410,6 +1415,8 @@ def _story_setup_label(row: StorySetup) -> str:
         parts.append(f"{row.target_word_count} words")
     if row.chapter_count is not None:
         parts.append(f"{row.chapter_count} chapters")
+    if row.approximate_scene_count is not None:
+        parts.append(f"about {row.approximate_scene_count} scenes")
     if row.chapter_style:
         parts.append(row.chapter_style)
     if row.guidance_notes:
@@ -1422,6 +1429,7 @@ def _story_setup_matches(current: StorySetup, merged_values: dict[str, Any]) -> 
         current.target_word_count == merged_values["target_word_count"]
         and current.target_runtime_minutes == merged_values["target_runtime_minutes"]
         and current.chapter_count == merged_values["chapter_count"]
+        and current.approximate_scene_count == merged_values["approximate_scene_count"]
         and current.chapter_style == merged_values["chapter_style"]
         and current.guidance_notes == merged_values["guidance_notes"]
     )

@@ -121,23 +121,23 @@ class UpdateSetupHeuristicsToolInput(StoryWorkflowToolModel):
     target_word_count: int | None = Field(default=None, ge=100, le=10000)
     target_runtime_minutes: int | None = Field(default=None, ge=1, le=180)
     chapter_count: int | None = Field(default=None, ge=1, le=24)
+    approximate_scene_count: int | None = Field(default=None, ge=1, le=48)
     chapter_style: str | None = Field(default=None, min_length=1)
     guidance_notes: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="story_tool", min_length=1)
 
     @model_validator(mode="after")
     def validate_payload(self) -> UpdateSetupHeuristicsToolInput:
-        _require_any_field(
-            {
-                "target_word_count": self.target_word_count,
-                "target_runtime_minutes": self.target_runtime_minutes,
-                "chapter_count": self.chapter_count,
-                "chapter_style": self.chapter_style,
-                "guidance_notes": self.guidance_notes,
-            },
-            error_message=(
-                "update_setup_heuristics requires at least one planning preference"
-            ),
-        )
+        editable_fields = {
+            "target_word_count",
+            "target_runtime_minutes",
+            "chapter_count",
+            "approximate_scene_count",
+            "chapter_style",
+            "guidance_notes",
+        }
+        if not editable_fields.intersection(self.model_fields_set):
+            raise ValueError("update_setup_heuristics requires at least one planning preference")
         return self
 
 

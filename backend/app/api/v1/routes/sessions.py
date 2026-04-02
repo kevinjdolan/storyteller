@@ -34,6 +34,7 @@ from app.models import (
     RefineSessionCharacterSheetRequest,
     RefineSessionPitchRequest,
     SaveSessionStoryBriefRequest,
+    SaveSessionStorySetupRequest,
     SelectSessionCharacterSheetRequest,
     SelectSessionBeatSheetRequest,
     SelectSessionGenreRequest,
@@ -53,6 +54,9 @@ from app.models import (
     SessionSelectionResponse,
     SessionSnapshot,
     SessionStoryBriefResponse,
+    SessionStorySetupResponse,
+    StoryWorkflowToolName,
+    WorkflowStage,
 )
 from app.services import (
     BeatSheetGenerationService,
@@ -61,6 +65,7 @@ from app.services import (
     PitchGenerationService,
     SessionActionPolicyService,
     SessionIntentParserService,
+    StoryWorkflowToolService,
 )
 from app.services.session_hydration import SessionHydrationNotFoundError, SessionHydrationService
 from app.services.sessions import (
@@ -79,6 +84,7 @@ from app.services.sessions import (
     SessionToneSelectionError,
     UnsupportedSessionContextUpdateError,
 )
+from app.services.story_tools import StoryWorkflowToolServiceError
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -282,6 +288,49 @@ def save_session_story_brief(
             detail=str(exc),
         ) from exc
     except SessionStoryBriefSaveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/story-setup",
+    response_model=SessionStorySetupResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist soft story setup targets for a story session",
+)
+def save_session_story_setup(
+    session_id: str,
+    payload: SaveSessionStorySetupRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionStorySetupResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        result = StoryWorkflowToolService(db_session).execute(
+            tool_name=StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,
+            session_id=session_id,
+            arguments=payload.model_dump(mode="json", exclude_unset=True),
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        event = _resolve_story_setup_response_event(
+            session_service=session_service,
+            session_id=session_id,
+            story_setup_id=getattr(result, "story_setup_id", None),
+        )
+        return SessionStorySetupResponse(snapshot=snapshot, event=event)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except StoryWorkflowToolServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
@@ -810,3 +859,27 @@ def evaluate_session_actions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+
+def _resolve_story_setup_response_event(
+    *,
+    session_service: SessionService,
+    session_id: str,
+    story_setup_id: str | None,
+) -> SessionEventView:
+    history = session_service.load_session_history(session_id, limit=12)
+
+    if story_setup_id is not None:
+        for event in reversed(history.events):
+            if event.stage != WorkflowStage.STORY_SETUP:
+                continue
+            if event.event_type != "selection.recorded":
+                continue
+            if getattr(event.payload, "selection_id", None) == story_setup_id:
+                return event
+
+    for event in reversed(history.events):
+        if event.stage == WorkflowStage.STORY_SETUP:
+            return event
+
+    raise RuntimeError("story setup save did not produce a replayable event")

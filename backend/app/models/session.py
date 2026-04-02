@@ -193,6 +193,7 @@ class StorySetupView(BaseModel):
     target_word_count: int | None = None
     target_runtime_minutes: int | None = None
     chapter_count: int | None = None
+    approximate_scene_count: int | None = None
     chapter_style: str | None = None
     guidance_notes: str | None = None
     preferences: dict[str, Any] | list[Any] | None = None
@@ -359,6 +360,34 @@ class GenerateSessionBeatSheetRequest(BaseModel):
 
 
 class SessionBeatSheetGenerationResponse(BaseModel):
+    snapshot: "SessionSnapshot"
+    event: SessionEventView
+
+
+class SaveSessionStorySetupRequest(BaseModel):
+    target_word_count: int | None = Field(default=None, ge=100, le=10000)
+    target_runtime_minutes: int | None = Field(default=None, ge=1, le=180)
+    chapter_count: int | None = Field(default=None, ge=1, le=24)
+    approximate_scene_count: int | None = Field(default=None, ge=1, le=48)
+    guidance_notes: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "SaveSessionStorySetupRequest":
+        editable_fields = {
+            "target_word_count",
+            "target_runtime_minutes",
+            "chapter_count",
+            "approximate_scene_count",
+            "guidance_notes",
+        }
+        if not editable_fields.intersection(self.model_fields_set):
+            raise ValueError("story setup saves require at least one provided field")
+
+        return self
+
+
+class SessionStorySetupResponse(BaseModel):
     snapshot: "SessionSnapshot"
     event: SessionEventView
 
@@ -653,4 +682,5 @@ SessionCharacterSheetGenerationResponse.model_rebuild()
 SessionPitchGenerationResponse.model_rebuild()
 SessionSelectionResponse.model_rebuild()
 SessionStoryBriefResponse.model_rebuild()
+SessionStorySetupResponse.model_rebuild()
 SessionHydrationView.model_rebuild()
