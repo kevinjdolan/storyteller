@@ -107,12 +107,33 @@ export type PitchBatchView = {
   pitches: PitchView[]
 }
 
+export type BeatSheetBeatView = {
+  key: string
+  label: string
+  order: number
+  summary: string
+  emotional_intent?: string | null
+  bedtime_softening_note?: string | null
+}
+
 export type BeatSheetView = {
   id: string
   revision_number: number
+  generation_kind?: string
   summary?: string | null
+  beats: BeatSheetBeatView[]
   bedtime_notes?: string | null
+  source_beat_sheet_id?: string | null
+  source_beat_sheet_revision_number?: number | null
+  guidance?: string | null
+  refinement_instructions?: string | null
+  focus_beats: string[]
+  bedtime_goal?: string | null
+  selection_rationale?: string | null
+  is_selected?: boolean
   accepted_at?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export type CharacterProfileView = {
@@ -346,6 +367,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   selected_pitch?: PitchView | null
   character_sheet_batches?: CharacterSheetBatchView[] | null
   selected_character_sheet?: CharacterSheetView | null
+  beat_sheet_revisions?: BeatSheetView[] | null
   selected_beat_sheet?: BeatSheetView | null
   selected_story_setup?: StorySetupView | null
   latest_composition_job?: CompositionJobView | null
@@ -410,6 +432,13 @@ export type GenerateSessionCharacterSheetsRequest = {
   origin?: string
 }
 
+export type GenerateSessionBeatSheetRequest = {
+  guidance?: string | null
+  focus_beats?: string[]
+  bedtime_goal?: string | null
+  origin?: string
+}
+
 export type SelectSessionPitchRequest = {
   pitch_id?: string | null
   generation_key?: string | null
@@ -422,6 +451,12 @@ export type SelectSessionCharacterSheetRequest = {
   character_sheet_id?: string | null
   revision_number?: number | null
   title?: string | null
+  origin?: string
+}
+
+export type SelectSessionBeatSheetRequest = {
+  beat_sheet_id?: string | null
+  revision_number?: number | null
   origin?: string
 }
 
@@ -445,12 +480,26 @@ export type RefineSessionCharacterSheetRequest = {
   origin?: string
 }
 
+export type RefineSessionBeatSheetRequest = {
+  beat_sheet_id?: string | null
+  revision_number?: number | null
+  instructions: string
+  beat_names?: string[]
+  bedtime_goal?: string | null
+  origin?: string
+}
+
 export type SessionPitchGenerationResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
 }
 
 export type SessionCharacterSheetGenerationResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
+export type SessionBeatSheetGenerationResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
 }
@@ -523,6 +572,16 @@ export function generateSessionCharacterSheets(
   )
 }
 
+export function generateSessionBeatSheet(
+  sessionId: string,
+  body: GenerateSessionBeatSheetRequest,
+) {
+  return postJson<SessionBeatSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/beats/generate`,
+    body,
+  )
+}
+
 export function selectSessionPitch(
   sessionId: string,
   body: SelectSessionPitchRequest,
@@ -543,6 +602,16 @@ export function selectSessionCharacterSheet(
   )
 }
 
+export function selectSessionBeatSheet(
+  sessionId: string,
+  body: SelectSessionBeatSheetRequest,
+) {
+  return postJson<SessionBeatSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/selections/beat-sheet`,
+    body,
+  )
+}
+
 export function refineSessionPitch(
   sessionId: string,
   body: RefineSessionPitchRequest,
@@ -559,6 +628,16 @@ export function refineSessionCharacterSheet(
 ) {
   return postJson<SessionCharacterSheetGenerationResponse>(
     `/api/v1/sessions/${sessionId}/characters/refine`,
+    body,
+  )
+}
+
+export function refineSessionBeatSheet(
+  sessionId: string,
+  body: RefineSessionBeatSheetRequest,
+) {
+  return postJson<SessionBeatSheetGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/beats/refine`,
     body,
   )
 }

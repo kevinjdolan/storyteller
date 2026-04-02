@@ -3,13 +3,16 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
   applySessionContextUpdate,
+  generateSessionBeatSheet,
   generateSessionCharacterSheets,
   generateSessionPitches,
   parseSessionChatIntent,
+  refineSessionBeatSheet,
   refineSessionCharacterSheet,
   refineSessionPitch,
   recordSessionUiAction,
   saveSessionStoryBrief,
+  selectSessionBeatSheet,
   selectSessionCharacterSheet,
   selectSessionPitch,
   type NormalizedBriefPreferencesView,
@@ -19,6 +22,7 @@ import {
 import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
+import { BeatSheetStage } from '../../features/session/BeatSheetStage.tsx'
 import { CharacterSelectionStage } from '../../features/session/CharacterSelectionStage.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
 import { PitchSelectionStage } from '../../features/session/PitchSelectionStage.tsx'
@@ -407,6 +411,12 @@ function buildPendingChatConfirmationTitle(action: ChatToUiAction) {
       return 'Refine this character sheet'
     case 'select_character_sheet':
       return 'Select this character sheet'
+    case 'regenerate_beat_sheet':
+      return 'Generate a new beat-sheet revision'
+    case 'refine_beat_sheet':
+      return 'Refine this beat sheet'
+    case 'accept_beat_sheet':
+      return 'Accept this beat sheet'
     default:
       return 'Apply chat change'
   }
@@ -424,6 +434,9 @@ function canApplyChatAction(action: ChatToUiAction) {
     action.action_type === 'regenerate_character_sheet' ||
     action.action_type === 'refine_character_sheet' ||
     action.action_type === 'select_character_sheet' ||
+    action.action_type === 'regenerate_beat_sheet' ||
+    action.action_type === 'refine_beat_sheet' ||
+    action.action_type === 'accept_beat_sheet' ||
     action.action_type === 'open_finalize_view'
   )
 }
@@ -1007,6 +1020,76 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyBeatSheetGeneration(options: {
+    guidance?: string | null
+    focusBeats?: string[]
+    bedtimeGoal?: string | null
+    origin: string
+    previewCurrentStage?: boolean
+  }) {
+    const result = await generateSessionBeatSheet(sessionId, {
+      guidance: options.guidance ?? null,
+      focus_beats: options.focusBeats ?? [],
+      bedtime_goal: options.bedtimeGoal ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
+  async function applyBeatSheetSelection(options: {
+    origin: string
+    beatSheetId?: string | null
+    previewCurrentStage?: boolean
+    revisionNumber?: number | null
+  }) {
+    const result = await selectSessionBeatSheet(sessionId, {
+      beat_sheet_id: options.beatSheetId ?? null,
+      revision_number: options.revisionNumber ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
+  async function applyBeatSheetRefinement(options: {
+    instructions: string
+    origin: string
+    beatNames?: string[]
+    beatSheetId?: string | null
+    bedtimeGoal?: string | null
+    revisionNumber?: number | null
+  }) {
+    const result = await refineSessionBeatSheet(sessionId, {
+      beat_sheet_id: options.beatSheetId ?? null,
+      revision_number: options.revisionNumber ?? null,
+      instructions: options.instructions,
+      beat_names: options.beatNames ?? [],
+      bedtime_goal: options.bedtimeGoal ?? null,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage(result.snapshot.current_stage)
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -1122,6 +1205,35 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         characterSheetId: action.extracted_values.character_sheet_id ?? null,
         revisionNumber: action.extracted_values.revision_number ?? null,
         title: action.extracted_values.title ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'regenerate_beat_sheet') {
+      await applyBeatSheetGeneration({
+        guidance: action.extracted_values.guidance ?? null,
+        focusBeats: action.extracted_values.focus_beats ?? [],
+        bedtimeGoal: null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'refine_beat_sheet') {
+      await applyBeatSheetRefinement({
+        instructions: action.extracted_values.instructions,
+        beatNames: action.extracted_values.beat_names ?? [],
+        bedtimeGoal: action.extracted_values.bedtime_goal ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'accept_beat_sheet') {
+      await applyBeatSheetSelection({
+        beatSheetId: action.extracted_values.beat_sheet_id ?? null,
+        revisionNumber: action.extracted_values.revision_number ?? null,
         origin: 'chat',
       })
       return
@@ -1533,6 +1645,15 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   onPreviewStage={setPreviewStage}
                   onRefineCharacterSheet={applyCharacterSheetRefinement}
                   onSelectCharacterSheet={applyCharacterSheetSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'beats' ? (
+                <BeatSheetStage
+                  onGenerateBeatSheet={applyBeatSheetGeneration}
+                  onPreviewStage={setPreviewStage}
+                  onRefineBeatSheet={applyBeatSheetRefinement}
+                  onSelectBeatSheet={applyBeatSheetSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />
