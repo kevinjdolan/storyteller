@@ -2059,6 +2059,16 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       jobId,
                     })
                   }
+                  onReturnToPlan={async () => {
+                    setPreviewStage('story_setup')
+                    await persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'story_setup',
+                      controlId: 'composition-return-to-plan',
+                      origin: 'workspace',
+                      valueSummary: getWorkflowStageLabel('story_setup'),
+                    })
+                  }}
                   onStartComposition={async (body) =>
                     applyCompositionStart({
                       mode: body.mode ?? 'fresh',
@@ -2217,7 +2227,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             />
           </section>
 
-          {snapshot.continuity_bible != null && continuityFactGroups.length > 0 ? (
+          {snapshot.continuity_bible != null &&
+          continuityFactGroups.length > 0 ? (
             <section
               aria-label="Continuity bible"
               className="workspace-stage-panel continuity-inspector"

@@ -84,6 +84,24 @@ const sampleSnapshot: SessionSnapshot = {
         bedtime_guardrail: 'Keep the problem small and reassuring.',
         drafting_brief: 'Open the harbor and launch the first promise.',
       },
+      {
+        card_key: 'chapter-2',
+        card_type: 'chapter',
+        position: 2,
+        title: 'Lantern cove',
+        purpose: 'Let the quieter cove feel safe and luminous.',
+        summary: 'Mira follows the drifting bell into the lantern cove.',
+        beat_keys: ['fun_and_games', 'midpoint'],
+        beat_labels: ['Fun and Games', 'Midpoint'],
+        emotional_shift: 'Move from curiosity to anchored wonder.',
+        target_word_count: 580,
+        target_runtime_minutes: 4,
+        target_scene_count: 2,
+        tone_direction: 'Keep the lanterns gentle and warm.',
+        bedtime_guardrail: 'Make the discovery awe-filled instead of sharp.',
+        drafting_brief:
+          'Let the cove widen the wonder without raising the tension.',
+      },
     ],
     genre_label: 'Quest Fantasy',
     tone_label: 'Hushed Wonder',
@@ -140,11 +158,12 @@ const liveComposition: SessionCompositionStreamState = {
 }
 
 describe('CompositionStage', () => {
-  it('renders the live manuscript and routes redirect requests through the callbacks', async () => {
+  it('renders the current segment focus, archive, and routes control requests through the callbacks', async () => {
     const onCancelComposition = vi.fn().mockResolvedValue(undefined)
     const onPauseComposition = vi.fn().mockResolvedValue(undefined)
     const onRedirectComposition = vi.fn().mockResolvedValue(undefined)
     const onResumeComposition = vi.fn().mockResolvedValue(undefined)
+    const onReturnToPlan = vi.fn().mockResolvedValue(undefined)
     const onStartComposition = vi.fn().mockResolvedValue(undefined)
 
     renderWithAppProviders(
@@ -155,16 +174,28 @@ describe('CompositionStage', () => {
         onPauseComposition={onPauseComposition}
         onRedirectComposition={onRedirectComposition}
         onResumeComposition={onResumeComposition}
+        onReturnToPlan={onReturnToPlan}
         onStartComposition={onStartComposition}
         snapshot={sampleSnapshot}
       />,
     )
 
-    expect(screen.getByText('Segment 2 / 3')).toBeInTheDocument()
-    expect(screen.getByTestId('composition-manuscript')).toHaveTextContent(
+    expect(screen.getByText('Writing segment 2 of 3')).toBeInTheDocument()
+    expect(screen.getAllByText('Lantern cove')).not.toHaveLength(0)
+    expect(screen.getByText('Earlier accepted manuscript')).toBeInTheDocument()
+    expect(screen.getByTestId('composition-current-surface')).toHaveTextContent(
       'Mira followed the bell toward the quieter cove.',
     )
+    expect(
+      screen.getByTestId('composition-current-surface'),
+    ).not.toHaveTextContent('Draft segment 1 settles the harbor.')
+    expect(
+      screen.getByTestId('composition-manuscript-archive'),
+    ).toHaveTextContent('Draft segment 1 settles the harbor.')
     expect(screen.getByText('Live chunks')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Return to plan' }),
+    ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause writing' }))
     await waitFor(() => {
@@ -176,18 +207,66 @@ describe('CompositionStage', () => {
         value: 'Soften the midpoint and bring Pip into the scene earlier.',
       },
     })
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Rewrite from current segment' }),
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Request rewrite' }))
 
     await waitFor(() => {
       expect(onRedirectComposition).toHaveBeenCalledWith({
-        instructions: 'Soften the midpoint and bring Pip into the scene earlier.',
+        instructions:
+          'Soften the midpoint and bring Pip into the scene earlier.',
         rewriteFromSegmentIndex: 2,
       })
     })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return to plan' }))
+    await waitFor(() => {
+      expect(onReturnToPlan).toHaveBeenCalledTimes(1)
+    })
+
     expect(onCancelComposition).not.toHaveBeenCalled()
     expect(onResumeComposition).not.toHaveBeenCalled()
     expect(onStartComposition).not.toHaveBeenCalled()
+  })
+
+  it('shows a ready-to-write state without an archive before the first segment exists', () => {
+    const idleSnapshot: SessionSnapshot = {
+      ...sampleSnapshot,
+      latest_composition_job: null,
+      active_composition_job: null,
+    }
+    const idleComposition: SessionCompositionStreamState = {
+      jobId: null,
+      status: null,
+      currentSegmentId: null,
+      currentSegmentIndex: null,
+      totalSegments: null,
+      storyText: '',
+      latestPartialOutput: '',
+      latestSegmentSummary: null,
+      lastChunkText: null,
+      source: 'none',
+      updatedAt: null,
+    }
+
+    renderWithAppProviders(
+      <CompositionStage
+        composition={idleComposition}
+        connectionState="idle"
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={idleSnapshot}
+      />,
+    )
+
+    expect(screen.getByText('Ready to write')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Start writing' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('composition-manuscript-archive'),
+    ).not.toBeInTheDocument()
   })
 })
