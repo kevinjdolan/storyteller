@@ -72,9 +72,10 @@
     "69-composition-loop-e2e-test.md",
     "70-audio-settings-model-and-ui.md",
     "71-audio-length-estimation.md",
-    "72-narration-segmentation.md"
+    "72-narration-segmentation.md",
+    "73-gemini-tts-integration.md"
   ],
-  "current_success_ref": "9310192b04184a32e152b9038f105acc848921d6",
+  "current_success_ref": "38bb998c56e75466348ca712e8217ec65105a977",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
