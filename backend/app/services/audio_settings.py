@@ -23,7 +23,6 @@ from app.services.planning_heuristics import (
     estimate_runtime_from_word_count,
 )
 
-
 AUDIO_VOICE_LABELS: dict[AudioVoiceKey, str] = {
     AudioVoiceKey.MOONBEAM: "Moonbeam",
     AudioVoiceKey.HEARTHSIDE: "Hearthside",
@@ -82,7 +81,10 @@ def build_audio_settings_view(
                 else None
             ),
         ),
-        narration_volume=_coerce_volume(story_session.audio_narration_volume, DEFAULT_AUDIO_NARRATION_VOLUME),
+        narration_volume=_coerce_volume(
+            story_session.audio_narration_volume,
+            DEFAULT_AUDIO_NARRATION_VOLUME,
+        ),
         music_volume=_coerce_volume(story_session.audio_music_volume, DEFAULT_AUDIO_MUSIC_VOLUME),
         guidance_notes=_normalize_optional_text(story_session.audio_guidance_notes),
     )
@@ -181,7 +183,9 @@ def build_audio_settings_stage_detail(
         f"Style: {AUDIO_NARRATION_STYLE_LABELS[settings.narration_style]}.",
         f"Playback speed {settings.playback_speed:g}x.",
         (
-            f"Music: {AUDIO_MUSIC_PROFILE_LABELS[settings.music_profile]} at {settings.music_volume}%."
+            "Music: "
+            f"{AUDIO_MUSIC_PROFILE_LABELS[settings.music_profile]} "
+            f"at {settings.music_volume}%."
             if settings.include_background_music
             else "Music off."
         ),
@@ -198,7 +202,8 @@ def build_audio_settings_stage_detail(
         )
     else:
         detail.append(
-            "Runtime is still an estimate and will sharpen after story setup or accepted draft text is available."
+            "Runtime is still an estimate and will sharpen after story setup "
+            "or accepted draft text is available."
         )
 
     if settings.guidance_notes:

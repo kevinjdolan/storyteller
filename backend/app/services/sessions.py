@@ -59,8 +59,8 @@ from app.models import (
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
 from app.services.audio_settings import (
     audio_settings_field_values,
-    build_audio_settings_event_summary,
     build_audio_runtime_estimate,
+    build_audio_settings_event_summary,
     build_audio_settings_stage_detail,
     build_audio_settings_view,
     persist_audio_settings,
@@ -755,7 +755,9 @@ class SessionService:
             and getattr(current_settings, field_name) != getattr(next_settings, field_name)
         ]
         if not changed_fields:
-            raise SessionAudioSettingsSaveError("audio settings save did not change any saved fields")
+            raise SessionAudioSettingsSaveError(
+                "audio settings save did not change any saved fields"
+            )
 
         persist_audio_settings(story_session, next_settings)
 

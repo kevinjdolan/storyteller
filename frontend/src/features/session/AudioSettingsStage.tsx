@@ -265,7 +265,7 @@ export function AudioSettingsStage({
           </div>
         </div>
 
-        <CardGrid className="audio-stage__cards" columns={4}>
+        <CardGrid className="audio-stage__cards" columns={3}>
           <SummaryPanel
             description={voiceDescription}
             label="Voice"

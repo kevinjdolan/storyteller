@@ -16,8 +16,8 @@ from app.db import (
     CompositionSegmentAcceptanceState,
     JobStatus,
     SessionAsset,
-    StorySetup,
     StorySession,
+    StorySetup,
 )
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
