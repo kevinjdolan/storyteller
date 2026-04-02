@@ -115,10 +115,18 @@ const sampleSnapshot = {
   story_brief: {
     id: 'brief-1',
     revision_number: 1,
+    story_idea:
+      'A child follows floating lanterns across a harbor and helps a shy otter guardian bring them home.',
+    desired_themes: 'Belonging, gentle courage, and a calm return home.',
+    key_images: 'Lanterns on dark water, otter paws, and moonlit docks.',
+    audience_notes:
+      'For an early-elementary read-aloud that stays cozy instead of suspenseful.',
+    must_have_elements: 'A harbor reunion and a restful ending.',
     raw_brief:
       'A child follows floating lanterns across a harbor and helps a shy otter guardian bring them home.',
     normalized_summary:
       'A harbor bedtime quest where floating lanterns guide a child and an otter toward a calm reunion.',
+    updated_at: '2026-04-01T05:14:00Z',
   },
   selected_pitch: {
     id: 'pitch-1',
@@ -564,6 +572,9 @@ function buildToneSelectionResponse(body: Record<string, unknown>) {
         slug: requestedTone.slug,
         label: requestedTone.label,
       },
+      story_brief: null,
+      selected_pitch: null,
+      selected_story_setup: null,
       progress: {
         total_stages: 10,
         completed_stages: 2,
@@ -624,6 +635,185 @@ function buildToneSelectionResponse(body: Record<string, unknown>) {
         source: body.origin ?? 'workspace',
       },
       created_at: '2026-04-01T05:17:00Z',
+    },
+  }
+}
+
+function readStoryBriefText(body: Record<string, unknown>, key: string) {
+  const value = body[key]
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null
+}
+
+function truncateStoryBriefText(value: string, limit = 160) {
+  if (value.length <= limit) {
+    return value
+  }
+
+  return `${value.slice(0, limit - 3).trimEnd()}...`
+}
+
+function buildStoryBriefRawText(body: Record<string, unknown>) {
+  const storyIdea =
+    readStoryBriefText(body, 'story_idea') ?? readStoryBriefText(body, 'raw_brief')
+
+  if (storyIdea == null) {
+    return null
+  }
+
+  const sections = [storyIdea]
+
+  for (const [label, key] of [
+    ['Desired themes', 'desired_themes'],
+    ['Key images', 'key_images'],
+    ['Target audience notes', 'audience_notes'],
+    ['Must-have elements', 'must_have_elements'],
+  ] as const) {
+    const value = readStoryBriefText(body, key)
+
+    if (value != null) {
+      sections.push(`${label}: ${value}`)
+    }
+  }
+
+  return sections.join('\n\n')
+}
+
+function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
+  const storyIdea =
+    readStoryBriefText(body, 'story_idea') ??
+    readStoryBriefText(body, 'raw_brief') ??
+    'A harbor bedtime story waits here.'
+  const desiredThemes = readStoryBriefText(body, 'desired_themes')
+  const keyImages = readStoryBriefText(body, 'key_images')
+  const audienceNotes = readStoryBriefText(body, 'audience_notes')
+  const mustHaveElements = readStoryBriefText(body, 'must_have_elements')
+  const rawBrief = buildStoryBriefRawText(body) ?? storyIdea
+  const normalizedSummary =
+    readStoryBriefText(body, 'normalized_summary') ?? storyIdea
+  const planningNotes = readStoryBriefText(body, 'planning_notes')
+  const changedFields = [
+    'story_idea',
+    'desired_themes',
+    'key_images',
+    'audience_notes',
+    'must_have_elements',
+  ].filter((field) => readStoryBriefText(body, field) != null)
+  const summary = `Saved story brief: ${truncateStoryBriefText(rawBrief)}`
+
+  return {
+    snapshot: {
+      ...sampleSnapshot,
+      current_stage: 'pitches',
+      resume_stage: 'pitches',
+      furthest_completed_stage: 'brief',
+      overall_status: 'in_progress',
+      updated_at: '2026-04-01T05:18:00Z',
+      story_brief: {
+        id: 'brief-2',
+        revision_number: 1,
+        story_idea: storyIdea,
+        desired_themes: desiredThemes,
+        key_images: keyImages,
+        audience_notes: audienceNotes,
+        must_have_elements: mustHaveElements,
+        raw_brief: rawBrief,
+        normalized_summary: normalizedSummary,
+        planning_notes: planningNotes,
+        updated_at: '2026-04-01T05:18:00Z',
+      },
+      selected_pitch: null,
+      selected_story_setup: null,
+      progress: {
+        total_stages: 10,
+        completed_stages: 3,
+        in_progress_stages: 1,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: sampleSnapshot.stage_states.map((stageState, index) => {
+        if (index === 0) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail:
+              'Selected genre: Quest Fantasy. Tone choices filter from this lane next.',
+            last_event_summary: 'Selected genre: Quest Fantasy.',
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:16:00Z',
+          }
+        }
+
+        if (index === 1) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail:
+              'Selected tone: Hushed Wonder. The story brief will inherit this bedtime texture.',
+            last_event_summary: 'Selected tone profile: Hushed Wonder.',
+            last_event_type: 'selection.recorded',
+            last_event_at: '2026-04-01T05:17:00Z',
+          }
+        }
+
+        if (index === 2) {
+          return {
+            ...stageState,
+            status: 'completed',
+            detail: summary,
+            last_event_summary: summary,
+            last_event_type: 'content.user_edit.recorded',
+            last_event_at: '2026-04-01T05:18:00Z',
+          }
+        }
+
+        if (index === 3) {
+          return {
+            ...stageState,
+            status: 'in_progress',
+            detail: 'The saved bedtime brief is ready for pitch generation.',
+            last_event_summary: null,
+            last_event_type: null,
+            last_event_at: null,
+          }
+        }
+
+        return {
+          ...stageState,
+          status: 'draft',
+          detail: null,
+          last_event_summary: null,
+          last_event_type: null,
+          last_event_at: null,
+        }
+      }),
+    },
+    event: {
+      id: 'story-brief-save-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 12,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'content.user_edit.recorded',
+      stage: 'brief',
+      summary,
+      payload: {
+        schema_version: 1,
+        target_kind: 'story_brief',
+        changed_fields: changedFields,
+        source: body.origin ?? 'workspace',
+        field_values: {
+          story_idea: storyIdea,
+          desired_themes: desiredThemes,
+          key_images: keyImages,
+          audience_notes: audienceNotes,
+          must_have_elements: mustHaveElements,
+        },
+        summary_text: summary,
+      },
+      created_at: '2026-04-01T05:18:00Z',
     },
   }
 }
@@ -707,6 +897,9 @@ function mockWorkspaceApi(options?: {
   genreSelectionResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
+  storyBriefSaveResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   toneCatalogByGenre?: Record<string, unknown>
   toneSelectionResponse?:
     | unknown
@@ -732,9 +925,12 @@ function mockWorkspaceApi(options?: {
   const hydrationStatus = options?.hydrationStatus ?? 200
   const chatIntentRequests: Record<string, unknown>[] = []
   const genreSelectionRequests: Record<string, unknown>[] = []
+  const storyBriefSaveRequests: Record<string, unknown>[] = []
   const toneSelectionRequests: Record<string, unknown>[] = []
   const genreSelectionResponse =
     options?.genreSelectionResponse ?? buildGenreSelectionResponse
+  const storyBriefSaveResponse =
+    options?.storyBriefSaveResponse ?? buildStoryBriefSaveResponse
   const toneSelectionResponse =
     options?.toneSelectionResponse ?? buildToneSelectionResponse
   const chatIntentResponse = options?.chatIntentResponse ?? {
@@ -898,6 +1094,25 @@ function mockWorkspaceApi(options?: {
         )
       }
 
+      if (
+        pathname === '/api/v1/sessions/moonlit-harbor/story-brief' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        storyBriefSaveRequests.push(requestBody)
+        const resolvedStoryBriefSaveResponse =
+          typeof storyBriefSaveResponse === 'function'
+            ? storyBriefSaveResponse(requestBody)
+            : storyBriefSaveResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedStoryBriefSaveResponse),
+        )
+      }
+
       throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${url}`)
     }),
   )
@@ -905,6 +1120,7 @@ function mockWorkspaceApi(options?: {
   return {
     chatIntentRequests,
     genreSelectionRequests,
+    storyBriefSaveRequests,
     toneSelectionRequests,
   }
 }
@@ -1184,14 +1400,112 @@ describe('SessionWorkspacePage', () => {
       }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Quest Fantasy / Hushed Wonder'),
-    ).toBeInTheDocument()
+      screen.getAllByText('Quest Fantasy / Hushed Wonder').length,
+    ).toBeGreaterThan(0)
     expect(toneSelectionRequests).toEqual([
       {
         tone_profile_id: 'tone-1',
         origin: 'workspace',
       },
     ])
+  })
+
+  it('renders the story brief editor and persists a saved brief', async () => {
+    const briefStageSnapshot = buildToneSelectionResponse({
+      tone_profile_id: 'tone-1',
+      origin: 'workspace',
+    }).snapshot
+    const briefStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 3,
+      events: [
+        sampleHistory.events[0],
+        sampleHistory.events[1],
+        sampleHistory.events[2],
+      ],
+    } as const
+
+    const { storyBriefSaveRequests } = mockWorkspaceApi({
+      history: briefStageHistory,
+      hydration: {
+        snapshot: briefStageSnapshot,
+        recent_history: briefStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 3,
+          history_event_count: 3,
+          materialized_through_sequence_number: 3,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Capture the free-form story brief',
+      }),
+    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('Story idea')).toBeInTheDocument()
+    expect(screen.getByLabelText('Desired themes')).toBeInTheDocument()
+    expect(screen.getByLabelText('Key images')).toBeInTheDocument()
+    expect(screen.getByLabelText('Target audience notes')).toBeInTheDocument()
+    expect(screen.getByLabelText('Must-have elements')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Story idea'), {
+      target: {
+        value:
+          'A sleepy child follows floating lanterns across a moonlit harbor to help an otter guardian guide them home.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Desired themes'), {
+      target: {
+        value: 'Gentle courage, belonging, and returning home.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Key images'), {
+      target: {
+        value: 'Floating lanterns, still water, and a warm harbor light.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Target audience notes'), {
+      target: {
+        value:
+          'For a sensitive five-year-old who likes rescue stories without villains.',
+      },
+    })
+    fireEvent.change(screen.getByLabelText('Must-have elements'), {
+      target: {
+        value: 'An otter friend and a restful final page.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save brief' }))
+
+    expect(storyBriefSaveRequests).toHaveLength(1)
+    expect(storyBriefSaveRequests[0]).toMatchObject({
+      story_idea:
+        'A sleepy child follows floating lanterns across a moonlit harbor to help an otter guardian guide them home.',
+      desired_themes: 'Gentle courage, belonging, and returning home.',
+      key_images: 'Floating lanterns, still water, and a warm harbor light.',
+      audience_notes:
+        'For a sensitive five-year-old who likes rescue stories without villains.',
+      must_have_elements: 'An otter friend and a restful final page.',
+      raw_brief: null,
+      normalized_summary: null,
+      planning_notes: null,
+      edit_mode: 'replace',
+      origin: 'workspace',
+    })
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Review and select story pitches',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(/saved story brief:/i),
+    ).toBeInTheDocument()
   })
 
   it('supports route-backed stage preview without changing the durable current step', async () => {
@@ -1412,6 +1726,127 @@ describe('SessionWorkspacePage', () => {
         origin: 'chat',
       },
     ])
+  })
+
+  it('applies accepted chat-driven story brief updates through the workspace runtime', async () => {
+    const briefStageSnapshot = buildToneSelectionResponse({
+      tone_profile_id: 'tone-1',
+      origin: 'workspace',
+    }).snapshot
+    const briefStageHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 3,
+      events: [
+        sampleHistory.events[0],
+        sampleHistory.events[1],
+        sampleHistory.events[2],
+      ],
+    } as const
+
+    const { storyBriefSaveRequests } = mockWorkspaceApi({
+      history: briefStageHistory,
+      hydration: {
+        snapshot: briefStageSnapshot,
+        recent_history: briefStageHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 3,
+          history_event_count: 3,
+          materialized_through_sequence_number: 3,
+        },
+      },
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response:
+          'I can save that harbor-lantern brief and move the workspace on to pitches.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'update_story_brief',
+              target_stage: 'brief',
+              confidence: 0.91,
+              rationale:
+                'The user provided story brief details for the brief stage.',
+              requires_confirmation: false,
+              extracted_values: {
+                story_idea:
+                  'A child and an otter guardian drift after runaway lanterns to bring each light home before the harbor sleeps.',
+                desired_themes:
+                  'Gentle courage, belonging, and a calm return home.',
+                key_images:
+                  'Lantern reflections, otter paws, and quiet docks.',
+                audience_notes:
+                  'Keep it cozy for a sensitive five-year-old.',
+                must_have_elements:
+                  'A harbor reunion and a soft bedtime ending.',
+                edit_mode: 'replace',
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'update_story_brief',
+              target_stage: 'brief',
+              decision: 'accepted',
+              summary: 'Story brief updates are allowed.',
+              reasons: [],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value:
+          'Save this as the brief: a child and an otter guardian drift after runaway lanterns to bring each light home before the harbor sleeps.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      within(screen.getByRole('log')).getByText(
+        'Save this as the brief: a child and an otter guardian drift after runaway lanterns to bring each light home before the harbor sleeps.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'I can save that harbor-lantern brief and move the workspace on to pitches.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Review and select story pitches',
+      }),
+    ).toBeInTheDocument()
+    expect(storyBriefSaveRequests).toHaveLength(1)
+    expect(storyBriefSaveRequests[0]).toMatchObject({
+      story_idea:
+        'A child and an otter guardian drift after runaway lanterns to bring each light home before the harbor sleeps.',
+      desired_themes: 'Gentle courage, belonging, and a calm return home.',
+      key_images: 'Lantern reflections, otter paws, and quiet docks.',
+      audience_notes: 'Keep it cozy for a sensitive five-year-old.',
+      must_have_elements: 'A harbor reunion and a soft bedtime ending.',
+      edit_mode: 'replace',
+      origin: 'chat',
+    })
   })
 
   it('shows rejected chat-driven action echoes without mutating the visible workspace stage', async () => {

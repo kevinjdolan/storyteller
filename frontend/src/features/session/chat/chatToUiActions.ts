@@ -80,6 +80,11 @@ export type SelectToneValues = {
 }
 
 export type UpdateStoryBriefValues = {
+  story_idea?: string | null
+  desired_themes?: string | null
+  key_images?: string | null
+  audience_notes?: string | null
+  must_have_elements?: string | null
   raw_brief?: string | null
   normalized_summary?: string | null
   planning_notes?: string | null
@@ -586,6 +591,14 @@ function parseChatToUiAction(record: JsonRecord): ChatToUiAction | null {
         ? extractedValues.edit_mode
         : 'merge'
       const values: UpdateStoryBriefValues = {
+        story_idea: readOptionalString(extractedValues, 'story_idea'),
+        desired_themes: readOptionalString(extractedValues, 'desired_themes'),
+        key_images: readOptionalString(extractedValues, 'key_images'),
+        audience_notes: readOptionalString(extractedValues, 'audience_notes'),
+        must_have_elements: readOptionalString(
+          extractedValues,
+          'must_have_elements',
+        ),
         raw_brief: readOptionalString(extractedValues, 'raw_brief'),
         normalized_summary: readOptionalString(
           extractedValues,
@@ -596,6 +609,11 @@ function parseChatToUiAction(record: JsonRecord): ChatToUiAction | null {
       }
 
       return hasAnyDefined([
+        values.story_idea,
+        values.desired_themes,
+        values.key_images,
+        values.audience_notes,
+        values.must_have_elements,
         values.raw_brief,
         values.normalized_summary,
         values.planning_notes,

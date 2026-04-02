@@ -110,6 +110,7 @@ function buildSampleSnapshot(): SessionSnapshot {
       revision_number: 1,
       raw_brief: 'A child follows floating lanterns across the harbor.',
       normalized_summary: 'A calm harbor quest.',
+      updated_at: '2026-04-01T08:09:00Z',
     },
     selected_pitch: {
       id: 'pitch-1',

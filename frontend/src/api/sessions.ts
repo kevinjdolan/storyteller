@@ -50,10 +50,16 @@ export type SessionStageStateView = {
 export type StoryBriefView = {
   id: string
   revision_number: number
+  story_idea?: string | null
+  desired_themes?: string | null
+  key_images?: string | null
+  audience_notes?: string | null
+  must_have_elements?: string | null
   raw_brief: string
   normalized_summary?: string | null
   planning_notes?: string | null
   accepted_at?: string | null
+  updated_at: string
 }
 
 export type PitchView = {
@@ -288,6 +294,24 @@ export type SessionContextUpdateResponse = {
   event: SessionHistoryEvent
 }
 
+export type SaveSessionStoryBriefRequest = {
+  story_idea?: string | null
+  desired_themes?: string | null
+  key_images?: string | null
+  audience_notes?: string | null
+  must_have_elements?: string | null
+  raw_brief?: string | null
+  normalized_summary?: string | null
+  planning_notes?: string | null
+  edit_mode?: 'replace' | 'append' | 'merge'
+  origin?: string
+}
+
+export type SessionStoryBriefResponse = {
+  snapshot: SessionSnapshot
+  event: SessionHistoryEvent
+}
+
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
 export function fetchRecentSessions(limit = 20) {
@@ -322,6 +346,16 @@ export function applySessionContextUpdate(
 ) {
   return postJson<SessionContextUpdateResponse>(
     `/api/v1/sessions/${sessionId}/context-updates`,
+    body,
+  )
+}
+
+export function saveSessionStoryBrief(
+  sessionId: string,
+  body: SaveSessionStoryBriefRequest,
+) {
+  return postJson<SessionStoryBriefResponse>(
+    `/api/v1/sessions/${sessionId}/story-brief`,
     body,
   )
 }

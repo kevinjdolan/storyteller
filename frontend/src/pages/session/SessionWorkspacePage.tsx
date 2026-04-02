@@ -5,6 +5,7 @@ import {
   applySessionContextUpdate,
   parseSessionChatIntent,
   recordSessionUiAction,
+  saveSessionStoryBrief,
   type SessionHistoryEvent,
   type SessionSnapshot,
 } from '../../api/sessions.ts'
@@ -12,6 +13,7 @@ import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { SessionWorkspaceErrorBoundary } from '../../features/session/SessionWorkspaceErrorBoundary.tsx'
 import { SessionStageEditorPreview } from '../../features/session/SessionStageEditorPreview.tsx'
 import { GenreSelectionStage } from '../../features/session/GenreSelectionStage.tsx'
+import { StoryBriefStage } from '../../features/session/StoryBriefStage.tsx'
 import { ToneSelectionStage } from '../../features/session/ToneSelectionStage.tsx'
 import {
   useSessionChatMessages,
@@ -187,6 +189,10 @@ function buildPlanFocusCopy(snapshot: SessionSnapshot) {
 
   if (snapshot.story_brief?.normalized_summary) {
     return snapshot.story_brief.normalized_summary
+  }
+
+  if (snapshot.story_brief?.story_idea) {
+    return snapshot.story_brief.story_idea
   }
 
   if (snapshot.story_brief?.raw_brief) {
@@ -755,6 +761,42 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyStoryBriefSave(options: {
+    audienceNotes?: string | null
+    desiredThemes?: string | null
+    keyImages?: string | null
+    mustHaveElements?: string | null
+    normalizedSummary?: string | null
+    origin: string
+    planningNotes?: string | null
+    previewCurrentStage?: boolean
+    rawBrief?: string | null
+    storyIdea?: string | null
+    editMode?: 'replace' | 'append' | 'merge'
+  }) {
+    const result = await saveSessionStoryBrief(sessionId, {
+      story_idea: options.storyIdea ?? null,
+      desired_themes: options.desiredThemes ?? null,
+      key_images: options.keyImages ?? null,
+      audience_notes: options.audienceNotes ?? null,
+      must_have_elements: options.mustHaveElements ?? null,
+      raw_brief: options.rawBrief ?? null,
+      normalized_summary: options.normalizedSummary ?? null,
+      planning_notes: options.planningNotes ?? null,
+      edit_mode: options.editMode ?? 'replace',
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+
+    if (options.previewCurrentStage !== false) {
+      setPreviewStage(result.snapshot.current_stage)
+    }
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -783,6 +825,25 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         toneProfileId: action.extracted_values.tone_profile_id ?? null,
         toneProfileLabel: action.extracted_values.tone_profile_label ?? null,
         toneProfileSlug: action.extracted_values.tone_profile_slug ?? null,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'update_story_brief') {
+      await applyStoryBriefSave({
+        storyIdea:
+          action.extracted_values.story_idea ??
+          action.extracted_values.raw_brief ??
+          null,
+        desiredThemes: action.extracted_values.desired_themes ?? null,
+        keyImages: action.extracted_values.key_images ?? null,
+        audienceNotes: action.extracted_values.audience_notes ?? null,
+        mustHaveElements: action.extracted_values.must_have_elements ?? null,
+        rawBrief: action.extracted_values.raw_brief ?? null,
+        normalizedSummary: action.extracted_values.normalized_summary ?? null,
+        planningNotes: action.extracted_values.planning_notes ?? null,
+        editMode: action.extracted_values.edit_mode,
         origin: 'chat',
       })
       return
@@ -858,6 +919,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         (action.action_type !== 'navigate_to_stage' &&
           action.action_type !== 'select_genre' &&
           action.action_type !== 'select_tone' &&
+          action.action_type !== 'update_story_brief' &&
           action.action_type !== 'open_finalize_view')
       ) {
         continue
@@ -1140,6 +1202,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 <ToneSelectionStage
                   onPreviewStage={setPreviewStage}
                   onSelectTone={applyToneSelection}
+                  selectedStage={selectedStage}
+                  snapshot={snapshot}
+                />
+              ) : selectedStage.stage === 'brief' ? (
+                <StoryBriefStage
+                  onPreviewStage={setPreviewStage}
+                  onSaveStoryBrief={applyStoryBriefSave}
                   selectedStage={selectedStage}
                   snapshot={snapshot}
                 />
