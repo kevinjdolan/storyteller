@@ -481,6 +481,68 @@ const sampleHydration: SessionHydration = {
   },
 }
 
+const sampleContinuityBible = {
+  id: 'continuity-3',
+  revision_number: 3,
+  source_stage: 'beats',
+  source_summary: 'Accepted beat sheet: Harbor lantern return.',
+  summary_text:
+    'Mira anchors the current story in Juniper Harbor. Protect the promise of helping every lantern home before sleep.',
+  facts: [
+    {
+      key: 'character:mira:1',
+      category: 'character',
+      title: 'Mira',
+      detail:
+        'Curious harbor child who needs to trust that steady help is enough.',
+      source_stage: 'characters',
+      source_label: 'Juniper Keeper Cast',
+    },
+    {
+      key: 'location:juniper-harbor:1',
+      category: 'location',
+      title: 'Juniper Harbor',
+      detail: 'Use the harbor docks and lantern routes as the default world anchor.',
+      source_stage: 'brief',
+      source_label: 'Story brief',
+    },
+    {
+      key: 'promise:lanterns-home:1',
+      category: 'promise',
+      title: 'Safe return promise',
+      detail: 'Every drifting lantern reaches home before the harbor fully sleeps.',
+      source_stage: 'beats',
+      source_label: 'Revision 3',
+    },
+    {
+      key: 'voice:guardrail:1',
+      category: 'voice_constraint',
+      title: 'Bedtime guardrail',
+      detail: 'Keep every surprise luminous, buffered by company, and quick to settle.',
+      source_stage: 'tone',
+      source_label: 'Hushed Wonder',
+    },
+    {
+      key: 'thread:midpoint:1',
+      category: 'unresolved_thread',
+      title: 'Midpoint reveal',
+      detail: 'The hidden lantern map still needs a gentle explanation before the finale.',
+      source_stage: 'beats',
+      source_label: 'Revision 3',
+    },
+    {
+      key: 'locked:chapter-1:1',
+      category: 'locked_detail',
+      title: 'Chapter 1: Lantern Wake',
+      detail: 'Mira has already promised Pip that no lantern will drift alone tonight.',
+      source_stage: 'composition',
+      source_label: 'Segment 1',
+    },
+  ],
+  created_at: '2026-04-01T05:16:00Z',
+  updated_at: '2026-04-01T05:16:00Z',
+} as const
+
 const sampleGenreCatalog = [
   {
     id: 'genre-1',
@@ -3444,6 +3506,44 @@ describe('SessionWorkspacePage', () => {
     expect(
       screen.getByText(
         'Slash commands: /next-stage, /regenerate-pitches, /plan',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the continuity bible inspector when hydrated facts are available', async () => {
+    mockWorkspaceApi({
+      hydration: {
+        ...sampleHydration,
+        snapshot: {
+          ...sampleSnapshot,
+          continuity_bible: sampleContinuityBible,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    const continuityRegion = await screen.findByRole('region', {
+      name: 'Continuity bible',
+    })
+
+    expect(
+      within(continuityRegion).getByText(sampleContinuityBible.summary_text),
+    ).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Revision 3')).toBeInTheDocument()
+    expect(
+      within(continuityRegion).getByText(
+        'Last refreshed from beat sheet: Accepted beat sheet: Harbor lantern return.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Characters')).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Voice guardrails')).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Open threads')).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Mira')).toBeInTheDocument()
+    expect(within(continuityRegion).getByText('Midpoint reveal')).toBeInTheDocument()
+    expect(
+      within(continuityRegion).getByText(
+        'Mira has already promised Pip that no lantern will drift alone tonight.',
       ),
     ).toBeInTheDocument()
   })

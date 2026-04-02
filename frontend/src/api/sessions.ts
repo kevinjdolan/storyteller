@@ -218,6 +218,33 @@ export type StorySetupView = {
   accepted_at?: string | null
 }
 
+export type ContinuityFactView = {
+  key: string
+  category:
+    | 'character'
+    | 'location'
+    | 'object'
+    | 'promise'
+    | 'voice_constraint'
+    | 'unresolved_thread'
+    | 'locked_detail'
+  title: string
+  detail: string
+  source_stage?: WorkflowStageId | null
+  source_label?: string | null
+}
+
+export type ContinuityBibleView = {
+  id: string
+  revision_number: number
+  source_stage?: WorkflowStageId | null
+  source_summary?: string | null
+  summary_text: string
+  facts: ContinuityFactView[]
+  created_at: string
+  updated_at: string
+}
+
 export type StoryOutlineCard = {
   card_key: string
   card_type: 'chapter' | 'scene'
@@ -466,6 +493,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   active_audio_job?: AudioJobView | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
+  continuity_bible?: ContinuityBibleView | null
   agent_context_summary?: string | null
 }
 

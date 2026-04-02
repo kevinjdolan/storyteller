@@ -2026,6 +2026,34 @@ h4 {
   gap: var(--space-3);
 }
 
+.continuity-inspector__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.continuity-inspector__list li {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(39, 69, 99, 0.08);
+}
+
+.continuity-inspector__list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.continuity-inspector__list strong {
+  color: var(--color-ink);
+}
+
+.continuity-inspector__list span {
+  color: var(--color-ink-muted);
+}
+
 .workspace-summary-card {
   padding: 1rem;
   border-radius: var(--radius-lg);

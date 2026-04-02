@@ -276,6 +276,63 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
   return 'Composition and audio controls will take over this area once the planning stages are complete.'
 }
 
+const continuityCategoryOrder = [
+  'character',
+  'location',
+  'object',
+  'promise',
+  'voice_constraint',
+  'unresolved_thread',
+  'locked_detail',
+] as const
+
+const continuityCategoryLabels: Record<
+  (typeof continuityCategoryOrder)[number],
+  string
+> = {
+  character: 'Characters',
+  location: 'Locations',
+  object: 'Objects',
+  promise: 'Promises',
+  voice_constraint: 'Voice guardrails',
+  unresolved_thread: 'Open threads',
+  locked_detail: 'Locked details',
+}
+
+function buildContinuityFactGroups(snapshot: SessionSnapshot) {
+  const continuityBible = snapshot.continuity_bible
+  if (continuityBible == null) {
+    return []
+  }
+
+  return continuityCategoryOrder
+    .map((category) => ({
+      category,
+      facts: continuityBible.facts.filter((fact) => fact.category === category),
+      label: continuityCategoryLabels[category],
+    }))
+    .filter((group) => group.facts.length > 0)
+}
+
+function buildContinuitySourceCopy(snapshot: SessionSnapshot) {
+  const continuityBible = snapshot.continuity_bible
+  if (continuityBible == null) {
+    return null
+  }
+
+  const stageLabel =
+    continuityBible.source_stage != null
+      ? getWorkflowStageLabel(continuityBible.source_stage)
+      : 'Session state'
+  const summary = continuityBible.source_summary?.trim()
+
+  if (summary) {
+    return `Last refreshed from ${stageLabel.toLowerCase()}: ${summary}`
+  }
+
+  return `Last refreshed from ${stageLabel.toLowerCase()}.`
+}
+
 function buildChatActivityState(
   snapshot: SessionSnapshot,
   pendingActionsCount: number,
@@ -728,6 +785,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     snapshot,
     selectedStage: selectedStage.stage,
   })
+  const continuityFactGroups = buildContinuityFactGroups(snapshot)
+  const continuitySourceCopy = buildContinuitySourceCopy(snapshot)
   const slashCommandHint = buildSessionChatSlashCommandHint(chatQuickActions)
   const stageNoteEditingSupported = supportsStageNoteEditing(
     selectedStage.stage,
@@ -1921,6 +1980,54 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               title={activeStage.label}
             />
           </section>
+
+          {snapshot.continuity_bible != null && continuityFactGroups.length > 0 ? (
+            <section
+              aria-label="Continuity bible"
+              className="workspace-stage-panel continuity-inspector"
+            >
+              <div className="panel-heading">
+                <div>
+                  <h3>Continuity bible</h3>
+                  <p>{snapshot.continuity_bible.summary_text}</p>
+                </div>
+                <Badge tone="brand">
+                  Revision {snapshot.continuity_bible.revision_number}
+                </Badge>
+              </div>
+
+              {continuitySourceCopy != null ? (
+                <p className="workspace-stage-detail__note">
+                  {continuitySourceCopy}
+                </p>
+              ) : null}
+
+              <CardGrid columns={3}>
+                {continuityFactGroups.map((group) => (
+                  <SummaryPanel
+                    key={group.category}
+                    label={group.label}
+                    title={`${group.facts.length} fact${group.facts.length === 1 ? '' : 's'}`}
+                    tone={
+                      group.category === 'voice_constraint' ||
+                      group.category === 'unresolved_thread'
+                        ? 'accent'
+                        : 'default'
+                    }
+                  >
+                    <ul className="continuity-inspector__list">
+                      {group.facts.map((fact) => (
+                        <li key={fact.key}>
+                          <strong>{fact.title}</strong>
+                          <span>{fact.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </SummaryPanel>
+                ))}
+              </CardGrid>
+            </section>
+          ) : null}
         </section>
       </div>
     </section>
