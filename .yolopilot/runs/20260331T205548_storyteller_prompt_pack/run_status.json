@@ -38,9 +38,10 @@
     "35-chat-commands-and-quick-actions.md",
     "36-conversation-memory-summaries.md",
     "37-agent-tool-registry.md",
-    "38-session-replay-and-resume-hydration.md"
+    "38-session-replay-and-resume-hydration.md",
+    "39-bridge-and-replay-tests.md"
   ],
-  "current_success_ref": "dbd84087b07ca52c727baa8783725d7433ddb7a1",
+  "current_success_ref": "4613823f1cdffd2a0b77d6a11b29f6ad3dfdb7c9",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
