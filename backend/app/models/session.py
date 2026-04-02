@@ -188,6 +188,29 @@ class SelectSessionGenreRequest(BaseModel):
         return self
 
 
+class SelectSessionToneRequest(BaseModel):
+    tone_profile_id: str | None = Field(default=None, min_length=1)
+    tone_profile_slug: str | None = Field(default=None, min_length=1)
+    tone_profile_label: str | None = Field(default=None, min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectSessionToneRequest":
+        selectors = [
+            self.tone_profile_id,
+            self.tone_profile_slug,
+            self.tone_profile_label,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count != 1:
+            raise ValueError(
+                "exactly one of tone_profile_id, tone_profile_slug, or "
+                "tone_profile_label is required"
+            )
+
+        return self
+
+
 class SessionSelectionResponse(BaseModel):
     snapshot: "SessionSnapshot"
     event: SessionEventView

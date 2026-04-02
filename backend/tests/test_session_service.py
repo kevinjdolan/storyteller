@@ -30,6 +30,7 @@ from app.services.sessions import (
     InvalidStageTransitionError,
     SessionNotFoundError,
     SessionService,
+    SessionToneSelectionError,
 )
 from sqlalchemy.orm import sessionmaker
 
@@ -421,6 +422,93 @@ def test_select_genre_clears_tone_and_invalidates_later_stages(db_session) -> No
         WorkflowStage.BRIEF,
     ]
     assert history.events[-1].summary == "Selected genre: Gentle Mystery."
+
+
+def test_select_tone_requires_genre_first(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Tone Guardrail")
+
+    with pytest.raises(SessionToneSelectionError, match="select a genre before choosing a tone"):
+        service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+
+
+def test_select_tone_persists_catalog_choice_and_advances_to_brief(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Tone First")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+
+    result = service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    updated_snapshot = result.snapshot
+    tone_stage = next(
+        stage for stage in updated_snapshot.stage_states if stage.stage == WorkflowStage.TONE
+    )
+
+    assert result.event.event_type == "selection.recorded"
+    assert result.event.stage == WorkflowStage.TONE
+    assert result.event.payload is not None
+    assert result.event.payload.selection_kind == "tone_profile"
+    assert result.event.payload.slug == "hushed-wonder"
+    assert updated_snapshot.selected_tone_profile is not None
+    assert updated_snapshot.selected_tone_profile.slug == "hushed-wonder"
+    assert updated_snapshot.current_stage == WorkflowStage.BRIEF
+    assert updated_snapshot.resume_stage == WorkflowStage.BRIEF
+    assert updated_snapshot.overall_status == WorkflowStageState.IN_PROGRESS
+    assert tone_stage.status == WorkflowStageState.COMPLETED
+    assert tone_stage.detail == (
+        "Selected tone: Hushed Wonder. The story brief will inherit this bedtime texture."
+    )
+    assert tone_stage.last_event_type == "selection.recorded"
+    assert tone_stage.last_event_summary == "Selected tone profile: Hushed Wonder."
+
+    history = service.load_session_history(snapshot.id)
+    assert [event.event_type for event in history.events] == [
+        "session.created",
+        "workflow.stage_changed",
+        "selection.recorded",
+        "workflow.stage_changed",
+        "selection.recorded",
+    ]
+    assert history.events[-1].summary == "Selected tone profile: Hushed Wonder."
+
+
+def test_select_tone_invalidates_brief_and_later_stages_when_changed(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    snapshot = service.create_session(working_title="Tone Reset")
+
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    first_selection = service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder").snapshot
+    service.update_stage_state(
+        snapshot.id,
+        stage=WorkflowStage.BRIEF,
+        status=WorkflowStageState.COMPLETED,
+        detail="Accepted normalized brief.",
+    )
+
+    result = service.select_tone(snapshot.id, tone_profile_slug="lantern-brave")
+    updated_snapshot = result.snapshot
+    stage_map = {stage.stage: stage for stage in updated_snapshot.stage_states}
+
+    assert first_selection.selected_tone_profile is not None
+    assert updated_snapshot.selected_tone_profile is not None
+    assert updated_snapshot.selected_tone_profile.slug == "lantern-brave"
+    assert updated_snapshot.current_stage == WorkflowStage.BRIEF
+    assert updated_snapshot.resume_stage == WorkflowStage.BRIEF
+    assert stage_map[WorkflowStage.TONE].status == WorkflowStageState.COMPLETED
+    assert stage_map[WorkflowStage.TONE].last_event_type == "selection.recorded"
+    assert stage_map[WorkflowStage.TONE].last_event_summary == "Selected tone profile: Lantern Brave."
+    assert stage_map[WorkflowStage.BRIEF].status == WorkflowStageState.NEEDS_REGENERATION
+    assert stage_map[WorkflowStage.BRIEF].detail == (
+        "Tone changed to Lantern Brave. Revisit the brief and any downstream planning."
+    )
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "workflow.stage_changed"
+    assert history.events[-2].payload is not None
+    assert history.events[-2].payload.invalidated_stages == [WorkflowStage.BRIEF]
+    assert history.events[-1].summary == "Selected tone profile: Lantern Brave."
 
 
 def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:

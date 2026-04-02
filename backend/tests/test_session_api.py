@@ -131,6 +131,44 @@ def test_get_genre_catalog_endpoint_returns_seeded_genres(
     assert payload[0]["arc_notes"]["core_arc"].startswith("Leave a familiar safe place")
 
 
+def test_get_tone_catalog_endpoint_returns_only_requested_genre_tones(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+
+    response = session_api_client.get("/api/v1/catalog/genres/quest-fantasy/tones")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert [tone["slug"] for tone in payload] == [
+        "hushed-wonder",
+        "lantern-brave",
+        "fireside-reassurance",
+    ]
+    assert payload[0]["description"].startswith("Moonlit awe")
+    assert payload[0]["descriptors"] == [
+        "luminous",
+        "moonlit",
+        "gentle",
+        "reverent",
+    ]
+    assert payload[0]["default_planning_hints"]["ending_style"].startswith(
+        "return home carrying"
+    )
+
+
+def test_get_tone_catalog_endpoint_returns_404_for_unknown_genre(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+
+    response = session_api_client.get("/api/v1/catalog/genres/unknown-genre/tones")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "no active genre matched 'unknown-genre'"
+
+
 def test_hydrate_session_endpoint_returns_snapshot_history_and_metadata(
     session_api_client: TestClient,
 ) -> None:
@@ -234,6 +272,70 @@ def test_select_session_genre_endpoint_persists_choice_and_returns_snapshot(
     assert payload["snapshot"]["stage_states"][0]["last_event_summary"] == (
         "Selected genre: Quest Fantasy."
     )
+
+
+def test_select_session_tone_endpoint_persists_choice_and_returns_snapshot(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Tone API"},
+    )
+    created = create_response.json()
+
+    genre_response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/genre",
+        json={
+            "genre_slug": "quest-fantasy",
+            "origin": "workspace",
+        },
+    )
+    assert genre_response.status_code == 200
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/tone",
+        json={
+            "tone_profile_slug": "hushed-wonder",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["stage"] == "tone"
+    assert payload["event"]["payload"]["selection_kind"] == "tone_profile"
+    assert payload["snapshot"]["selected_tone_profile"]["slug"] == "hushed-wonder"
+    assert payload["snapshot"]["current_stage"] == "brief"
+    assert payload["snapshot"]["resume_stage"] == "brief"
+    assert payload["snapshot"]["stage_states"][1]["status"] == "completed"
+    assert payload["snapshot"]["stage_states"][1]["last_event_summary"] == (
+        "Selected tone profile: Hushed Wonder."
+    )
+
+
+def test_select_session_tone_endpoint_requires_genre_first(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Tone API Guardrail"},
+    )
+    created = create_response.json()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/selections/tone",
+        json={
+            "tone_profile_slug": "hushed-wonder",
+            "origin": "workspace",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "select a genre before choosing a tone"
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(

@@ -75,6 +75,61 @@ def _build_tone_entry(row: ToneProfile) -> ToneCatalogEntry:
     )
 
 
+def find_active_genre(
+    session: Session,
+    *,
+    genre_slug: str | None = None,
+    genre_id: str | None = None,
+    genre_label: str | None = None,
+) -> Genre | None:
+    selected_count = sum(
+        value is not None for value in (genre_slug, genre_id, genre_label)
+    )
+    if selected_count != 1:
+        raise ValueError("exactly one genre selector is required")
+
+    stmt: Select[tuple[Genre]] = select(Genre).where(Genre.is_active.is_(True))
+
+    if genre_slug is not None:
+        stmt = stmt.where(Genre.slug == genre_slug)
+    elif genre_id is not None:
+        stmt = stmt.where(Genre.id == genre_id)
+    else:
+        stmt = stmt.where(Genre.label.ilike(genre_label))
+
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def find_active_tone_for_genre(
+    session: Session,
+    *,
+    genre_id: str,
+    tone_profile_id: str | None = None,
+    tone_profile_slug: str | None = None,
+    tone_profile_label: str | None = None,
+) -> ToneProfile | None:
+    selected_count = sum(
+        value is not None
+        for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
+    )
+    if selected_count != 1:
+        raise ValueError("exactly one tone selector is required")
+
+    stmt: Select[tuple[ToneProfile]] = select(ToneProfile).where(
+        ToneProfile.genre_id == genre_id,
+        ToneProfile.is_active.is_(True),
+    )
+
+    if tone_profile_id is not None:
+        stmt = stmt.where(ToneProfile.id == tone_profile_id)
+    elif tone_profile_slug is not None:
+        stmt = stmt.where(ToneProfile.slug == tone_profile_slug)
+    else:
+        stmt = stmt.where(ToneProfile.label.ilike(tone_profile_label))
+
+    return session.execute(stmt).scalar_one_or_none()
+
+
 def list_active_genres(session: Session) -> list[GenreCatalogEntry]:
     stmt: Select[tuple[Genre]] = (
         select(Genre)

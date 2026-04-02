@@ -14,6 +14,7 @@ from app.models import (
     RecentSessionSummary,
     RecordSessionUIActionRequest,
     SelectSessionGenreRequest,
+    SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
     SessionContextUpdateRequest,
@@ -31,6 +32,7 @@ from app.services.sessions import (
     SessionGenreSelectionError,
     SessionNotFoundError,
     SessionService,
+    SessionToneSelectionError,
     UnsupportedSessionContextUpdateError,
 )
 
@@ -153,6 +155,37 @@ def select_session_genre(
             detail=str(exc),
         ) from exc
     except SessionGenreSelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/selections/tone",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Persist the selected tone for a story session",
+)
+def select_session_tone(
+    session_id: str,
+    payload: SelectSessionToneRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).select_tone(
+            session_id,
+            tone_profile_id=payload.tone_profile_id,
+            tone_profile_slug=payload.tone_profile_slug,
+            tone_profile_label=payload.tone_profile_label,
+            origin=payload.origin,
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except SessionToneSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

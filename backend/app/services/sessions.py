@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import Genre
 from app.db.base import utc_now
 from app.models import (
     WORKFLOW_STAGE_SEQUENCE,
@@ -26,6 +24,7 @@ from app.models import (
     resolve_resume_stage,
 )
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
+from app.services.catalog import find_active_genre, find_active_tone_for_genre
 from app.services.event_log import SessionEventLogService
 from app.services.session_hydration import (
     SessionHydrationNotFoundError,
@@ -54,6 +53,10 @@ class UnsupportedSessionContextUpdateError(SessionServiceError):
 
 class SessionGenreSelectionError(SessionServiceError):
     """Raised when a genre selection request cannot be fulfilled."""
+
+
+class SessionToneSelectionError(SessionServiceError):
+    """Raised when a tone selection request cannot be fulfilled."""
 
 
 STAGE_EDIT_TARGET_KIND_MAP: dict[WorkflowStage, UserEditTargetKind] = {
@@ -226,6 +229,99 @@ class SessionService:
             selection_id=genre.id,
             slug=genre.slug,
             previous_selection_id=previous_genre_id,
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
+        )
+
+    def select_tone(
+        self,
+        session_id: str,
+        *,
+        tone_profile_id: str | None = None,
+        tone_profile_slug: str | None = None,
+        tone_profile_label: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        selected_count = sum(
+            value is not None
+            for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
+        )
+        if selected_count != 1:
+            raise ValueError("exactly one tone selector is required")
+
+        if story_session.selected_genre_id is None:
+            raise SessionToneSelectionError("select a genre before choosing a tone")
+
+        tone_profile = self._load_active_tone_for_genre(
+            genre_id=story_session.selected_genre_id,
+            tone_profile_id=tone_profile_id,
+            tone_profile_slug=tone_profile_slug,
+            tone_profile_label=tone_profile_label,
+        )
+        if tone_profile is None:
+            raise SessionToneSelectionError(
+                "no active tone matched the requested selection for the current genre"
+            )
+
+        previous_tone_profile_id = story_session.selected_tone_profile_id
+        story_session.selected_tone_profile = tone_profile
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        stage_snapshot = stage_map[WorkflowStage.TONE]
+        previous_status = stage_snapshot.status
+        now = utc_now()
+
+        selection_detail = _build_tone_selection_detail(tone_profile.label)
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = selection_detail
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidation_detail = _build_tone_invalidation_detail(tone_profile.label)
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.TONE,
+            detail=invalidation_detail,
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if previous_status != stage_snapshot.status or invalidated_stages:
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.TONE,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.TONE_PROFILE,
+            stage=WorkflowStage.TONE,
+            label=tone_profile.label,
+            selection_id=tone_profile.id,
+            slug=tone_profile.slug,
+            previous_selection_id=previous_tone_profile_id,
             source=origin,
             accepted=True,
             actor=actor,
@@ -419,17 +515,29 @@ class SessionService:
         genre_id: str | None = None,
         genre_slug: str | None = None,
         genre_label: str | None = None,
-    ) -> Genre | None:
-        stmt = select(Genre).where(Genre.is_active.is_(True))
+    ):
+        return find_active_genre(
+            self._session,
+            genre_id=genre_id,
+            genre_slug=genre_slug,
+            genre_label=genre_label,
+        )
 
-        if genre_id is not None:
-            stmt = stmt.where(Genre.id == genre_id)
-        elif genre_slug is not None:
-            stmt = stmt.where(Genre.slug == genre_slug)
-        elif genre_label is not None:
-            stmt = stmt.where(func.lower(Genre.label) == genre_label.lower())
-
-        return self._session.execute(stmt).scalar_one_or_none()
+    def _load_active_tone_for_genre(
+        self,
+        *,
+        genre_id: str,
+        tone_profile_id: str | None = None,
+        tone_profile_slug: str | None = None,
+        tone_profile_label: str | None = None,
+    ):
+        return find_active_tone_for_genre(
+            self._session,
+            genre_id=genre_id,
+            tone_profile_id=tone_profile_id,
+            tone_profile_slug=tone_profile_slug,
+            tone_profile_label=tone_profile_label,
+        )
 
     def _invalidate_dependent_stages(
         self,
@@ -500,3 +608,11 @@ def _build_genre_selection_detail(label: str) -> str:
 
 def _build_genre_invalidation_detail(label: str) -> str:
     return f"Genre changed to {label}. Revisit tone and any downstream planning."
+
+
+def _build_tone_selection_detail(label: str) -> str:
+    return f"Selected tone: {label}. The story brief will inherit this bedtime texture."
+
+
+def _build_tone_invalidation_detail(label: str) -> str:
+    return f"Tone changed to {label}. Revisit the brief and any downstream planning."
