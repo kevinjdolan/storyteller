@@ -567,6 +567,7 @@ class SessionService:
         current_selected_pitch = self._sessions.get_selected_pitch(session_id)
         generation_result = generator.generate_pitches(
             candidate_count=candidate_count,
+            generation_goal="alternatives",
             raw_brief=active_brief.raw_brief,
             genre_label=(
                 story_session.selected_genre.label
@@ -648,7 +649,11 @@ class SessionService:
                     pitch.is_selected = False
 
         generation_key = _build_pitch_generation_key()
-        model_output = build_pitch_model_output(generation_result)
+        model_output = _build_pitch_persistence_metadata(
+            generation_result,
+            generation_kind="generated",
+            guidance=guidance,
+        )
 
         for index, candidate in enumerate(generation_result.pitches, start=1):
             self._session.add(
@@ -710,6 +715,217 @@ class SessionService:
         return SessionPitchGenerationResponse(
             snapshot=self.load_session_snapshot(story_session.id),
             event=self._event_log.build_event_view(ai_event),
+        )
+
+    def refine_pitch(
+        self,
+        session_id: str,
+        *,
+        instructions: str,
+        pitch_id: str | None = None,
+        generation_key: str | None = None,
+        pitch_index: int | None = None,
+        title: str | None = None,
+        origin: str = "workspace",
+        actor: SessionEventActor | None = None,
+        pitch_generation_service: PitchGenerationService | None = None,
+    ) -> SessionSelectionResponse:
+        story_session = self._sessions.get_for_update(session_id)
+        if story_session is None:
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        active_brief = self._sessions.get_active_story_brief(session_id)
+        if active_brief is None:
+            raise SessionPitchGenerationError(
+                "save a story brief before refining pitches",
+            )
+
+        normalized_instructions = _normalize_optional_text(instructions)
+        if normalized_instructions is None:
+            raise SessionPitchGenerationError("pitch refinement instructions are required")
+
+        matches = _find_matching_pitches(
+            self._sessions.list_pitches(session_id),
+            pitch_id=pitch_id,
+            generation_key=generation_key,
+            pitch_index=pitch_index,
+            title=title,
+        )
+        if not matches:
+            raise SessionPitchSelectionError("no generated pitch matched the requested refinement")
+        if len(matches) > 1:
+            raise SessionPitchSelectionError(
+                "the requested pitch refinement matched more than one candidate"
+            )
+
+        source_pitch = matches[0]
+        previous_selected_pitch = self._sessions.get_selected_pitch(session_id)
+        generator = pitch_generation_service or PitchGenerationService()
+        generation_result = generator.generate_pitches(
+            candidate_count=1,
+            generation_goal="refinement",
+            raw_brief=active_brief.raw_brief,
+            genre_label=(
+                story_session.selected_genre.label
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_description=(
+                story_session.selected_genre.description
+                if story_session.selected_genre is not None
+                else None
+            ),
+            genre_bedtime_safety_notes=(
+                story_session.selected_genre.bedtime_safety_notes
+                if story_session.selected_genre is not None
+                else None
+            ),
+            tone_label=(
+                story_session.selected_tone_profile.label
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_description=(
+                story_session.selected_tone_profile.description
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            tone_bedtime_notes=(
+                story_session.selected_tone_profile.bedtime_notes
+                if story_session.selected_tone_profile is not None
+                else None
+            ),
+            normalized_summary=active_brief.normalized_summary,
+            story_idea=active_brief.story_idea,
+            desired_themes=active_brief.desired_themes,
+            key_images=active_brief.key_images,
+            audience_notes=active_brief.audience_notes,
+            must_have_elements=active_brief.must_have_elements,
+            planning_notes=active_brief.planning_notes,
+            normalized_preferences=NormalizedBriefPreferences.model_validate(
+                active_brief.normalized_preferences or {}
+            ),
+            guidance=normalized_instructions,
+            selected_pitch=_build_selected_pitch_context(source_pitch),
+        )
+        if not generation_result.evaluation.passed or not generation_result.pitches:
+            raise SessionPitchGenerationError(
+                "pitch refinement produced an invalid candidate batch"
+            )
+
+        stage_map = self._stage_states.ensure_for_session(story_session)
+        self._validate_stage_transition(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            status=WorkflowStageState.COMPLETED,
+        )
+        stage_snapshot = stage_map[WorkflowStage.PITCHES]
+        previous_status = stage_snapshot.status
+        previous_detail = stage_snapshot.detail
+        now = utc_now()
+
+        for pitch in self._sessions.list_pitches(session_id):
+            pitch.is_selected = False
+
+        refinement_rationale = _build_pitch_refinement_rationale(
+            source_pitch,
+            normalized_instructions,
+        )
+        generation_key = _build_pitch_generation_key()
+        model_output = _build_pitch_persistence_metadata(
+            generation_result,
+            generation_kind="refinement",
+            guidance=normalized_instructions,
+            source_pitch=source_pitch,
+            selection_rationale=refinement_rationale,
+        )
+        refined_candidate = generation_result.pitches[0]
+        refined_pitch = Pitch(
+            session_id=story_session.id,
+            story_brief_id=active_brief.id,
+            generation_key=generation_key,
+            pitch_index=1,
+            title=refined_candidate.title,
+            logline=refined_candidate.hook,
+            summary=refined_candidate.central_conflict,
+            bedtime_notes=refined_candidate.why_it_fits,
+            model_output={
+                **model_output,
+                "candidate": refined_candidate.model_dump(mode="json"),
+                "pitch_index": 1,
+            },
+            is_selected=True,
+            accepted_at=now,
+        )
+        self._session.add(refined_pitch)
+        self._session.flush()
+
+        stage_snapshot.status = WorkflowStageState.COMPLETED
+        stage_snapshot.detail = _build_pitch_selection_detail(refined_pitch)
+        stage_snapshot.started_at = stage_snapshot.started_at or now
+        stage_snapshot.completed_at = now
+
+        invalidated_stages = self._invalidate_dependent_stages(
+            stage_map,
+            stage=WorkflowStage.PITCHES,
+            detail=_build_pitch_invalidation_detail(refined_pitch),
+        )
+        self._apply_rollups(story_session, stage_map)
+
+        stage_event = None
+        if (
+            previous_status != stage_snapshot.status
+            or previous_detail != stage_snapshot.detail
+            or invalidated_stages
+        ):
+            stage_event = self._event_log.record_stage_state_changed(
+                story_session.id,
+                stage=WorkflowStage.PITCHES,
+                previous_status=previous_status,
+                status=stage_snapshot.status,
+                detail=stage_snapshot.detail,
+                invalidated_stages=invalidated_stages,
+                current_stage=story_session.current_stage,
+                resume_stage=story_session.resume_stage,
+                furthest_completed_stage=story_session.furthest_completed_stage,
+                overall_status=story_session.overall_status,
+                actor=actor,
+            )
+            for invalidated_stage in invalidated_stages:
+                stage_map[invalidated_stage].last_event = stage_event
+
+        self._event_log.record_ai_output(
+            story_session.id,
+            output_kind=AIOutputKind.PITCH_BATCH,
+            stage=WorkflowStage.PITCHES,
+            generation_key=generation_key,
+            candidate_count=1,
+            model_id=generation_result.model_id,
+            summary_text=_build_pitch_refinement_summary_text(
+                refined_pitch,
+                source_pitch=source_pitch,
+            ),
+            actor=actor,
+        )
+        selection_event = self._event_log.record_selection(
+            story_session.id,
+            selection_kind=SelectionKind.PITCH,
+            stage=WorkflowStage.PITCHES,
+            label=refined_pitch.title,
+            selection_id=refined_pitch.id,
+            rationale=refinement_rationale,
+            previous_selection_id=(
+                previous_selected_pitch.id if previous_selected_pitch is not None else None
+            ),
+            source=origin,
+            accepted=True,
+            actor=actor,
+        )
+        stage_snapshot.last_event = selection_event
+        self._session.commit()
+        return SessionSelectionResponse(
+            snapshot=self.load_session_snapshot(story_session.id),
+            event=self._event_log.build_event_view(selection_event),
         )
 
     def select_pitch(
@@ -1118,6 +1334,14 @@ def _build_pitch_generation_summary_text(pitches: list[object]) -> str:
     return "Generated pitches: " + ", ".join(summarized_titles[:3]) + "."
 
 
+def _build_pitch_refinement_rationale(pitch: Pitch, instructions: str) -> str:
+    return f'Refined from "{pitch.title}" with: {instructions}'
+
+
+def _build_pitch_refinement_summary_text(refined_pitch: Pitch, *, source_pitch: Pitch) -> str:
+    return f"Generated refined pitch {refined_pitch.title} from {source_pitch.title}."
+
+
 def _build_pitch_selection_detail(pitch: Pitch) -> str:
     return f"Selected pitch: {pitch.title}. {pitch.logline}"
 
@@ -1152,6 +1376,30 @@ def _find_matching_pitches(
         matches.append(pitch)
 
     return matches
+
+
+def _build_pitch_persistence_metadata(
+    result,
+    *,
+    generation_kind: str,
+    guidance: str | None = None,
+    source_pitch: Pitch | None = None,
+    selection_rationale: str | None = None,
+) -> dict[str, Any]:
+    payload = build_pitch_model_output(result)
+    payload["batch_metadata"] = {
+        "generation_kind": generation_kind,
+        "guidance": guidance,
+    }
+    if source_pitch is not None:
+        payload["refinement"] = {
+            "source_pitch_id": source_pitch.id,
+            "source_pitch_title": source_pitch.title,
+            "source_generation_key": source_pitch.generation_key,
+            "refinement_instructions": guidance,
+            "selection_rationale": selection_rationale,
+        }
+    return payload
 
 
 _STORY_BRIEF_TEXT_FIELDS = (

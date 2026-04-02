@@ -36,7 +36,7 @@ The story workflow tool registry now centralizes:
 | Tool | Stage | Mode | Worker job type | Related chat actions | Result shape | Durable side effects |
 | --- | --- | --- | --- | --- | --- | --- |
 | `generate_pitches` | `pitches` | `background` | `story.generate_pitches` | `regenerate_pitches` | `StageOperationToolResult` | marks `pitches` in progress and refreshes downstream staleness |
-| `refine_pitch` | `pitches` | `background` | `story.refine_pitch` | `regenerate_pitches` | `StageOperationToolResult` | marks `pitches` in progress for a targeted pitch revision |
+| `refine_pitch` | `pitches` | `background` | `story.refine_pitch` | `refine_pitch` | `StageOperationToolResult` | creates a linked refined pitch revision, selects it, and refreshes downstream planning |
 | `generate_character_sheets` | `characters` | `background` | `story.generate_character_sheets` | `regenerate_character_sheet` | `StageOperationToolResult` | marks `characters` in progress and invalidates later planning |
 | `refine_character_sheet` | `characters` | `background` | `story.refine_character_sheet` | `refine_character_sheet` | `StageOperationToolResult` | marks `characters` in progress for a revision pass |
 | `generate_beat_sheet` | `beats` | `background` | `story.generate_beat_sheet` | `refine_beat_sheet`, `regenerate_beat_sheet` | `StageOperationToolResult` | marks `beats` in progress and invalidates composition work |

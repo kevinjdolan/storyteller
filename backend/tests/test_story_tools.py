@@ -96,6 +96,16 @@ def test_story_workflow_action_router_maps_chat_actions_to_shared_tool_calls() -
         {
             "actions": [
                 {
+                    "action_type": "refine_pitch",
+                    "target_stage": "pitches",
+                    "confidence": 0.86,
+                    "requires_confirmation": True,
+                    "extracted_values": {
+                        "pitch_index": 2,
+                        "instructions": "Make the pitch about siblings.",
+                    },
+                },
+                {
                     "action_type": "update_story_setup",
                     "target_stage": "story_setup",
                     "confidence": 0.9,
@@ -136,11 +146,17 @@ def test_story_workflow_action_router_maps_chat_actions_to_shared_tool_calls() -
     )
 
     assert [call.tool_name for call in plan.calls] == [
+        StoryWorkflowToolName.REFINE_PITCH,
         StoryWorkflowToolName.UPDATE_SETUP_HEURISTICS,
         StoryWorkflowToolName.REWRITE_SEGMENTS,
         StoryWorkflowToolName.START_AUDIO_GENERATION,
     ]
-    assert plan.calls[1].arguments == {
+    assert plan.calls[0].arguments == {
+        "instructions": "Make the pitch about siblings.",
+        "pitch_index": 2,
+        "schema_version": 1,
+    }
+    assert plan.calls[2].arguments == {
         "instructions": "Rewrite the opening scene to feel gentler.",
         "rewrite_from_segment_index": 1,
         "preserve_completed_segments": False,

@@ -121,4 +121,47 @@ describe('SessionChatPane', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
   })
+
+  it('renders pending confirmations and routes confirm and dismiss clicks', async () => {
+    const onConfirmPendingAction = vi.fn(async () => undefined)
+    const onDismissPendingAction = vi.fn()
+
+    render(
+      <SessionChatPane
+        activityLabel="One chat-requested pitch change is waiting for review."
+        connectionLabel="Live feed connected"
+        connectionTone="success"
+        messages={sampleMessages}
+        onConfirmPendingAction={onConfirmPendingAction}
+        onDismissPendingAction={onDismissPendingAction}
+        onSubmit={() => undefined}
+        pendingConfirmations={[
+          {
+            id: 'pending-1',
+            title: 'Refine this pitch',
+            summary:
+              'Generate a targeted revision from pitch two before locking the choice.',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('Pending confirmations')).toBeInTheDocument()
+    expect(screen.getByText('Refine this pitch')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Generate a targeted revision from pitch two before locking the choice.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(onConfirmPendingAction).toHaveBeenCalledWith('pending-1')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+
+    expect(onDismissPendingAction).toHaveBeenCalledWith('pending-1')
+  })
 })

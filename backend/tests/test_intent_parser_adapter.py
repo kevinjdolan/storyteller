@@ -45,6 +45,7 @@ def test_render_intent_parser_prompt_includes_guardrails_and_context() -> None:
 
     assert "backend-only chat intent parser" in prompt
     assert 'status="needs_clarification"' in prompt
+    assert '"action_type": "refine_pitch"' in prompt
     assert '"current_stage": "beats"' in prompt
     assert "Selected tone: Hushed Wonder" in prompt
     assert "make it a little more mysterious and shorter" in prompt
@@ -149,6 +150,6 @@ def test_gemini_intent_parser_adapter_requests_json_schema_and_parses_response()
     )
     assert result.structured_output.status == IntentParserStatus.PARSED
     assert result.structured_output.proposed_actions.actions[0].action_type == "refine_beat_sheet"
-    assert result.invocation.prompt_version == "intent_parser.v1"
+    assert result.invocation.prompt_version == "intent_parser.v2"
 
     adapter.close()

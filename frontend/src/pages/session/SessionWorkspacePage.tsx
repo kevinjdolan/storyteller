@@ -5,6 +5,7 @@ import {
   applySessionContextUpdate,
   generateSessionPitches,
   parseSessionChatIntent,
+  refineSessionPitch,
   recordSessionUiAction,
   saveSessionStoryBrief,
   selectSessionPitch,
@@ -24,7 +25,6 @@ import {
   useCurrentSessionHydrationQuery,
   useSessionCurrentSnapshot,
   useSessionEventStream,
-  useSessionPendingActions,
   useSessionRuntimeActions,
 } from '../../features/session/sessionWorkspaceContext.ts'
 import { SessionWorkspaceProvider } from '../../features/session/SessionWorkspaceProvider.tsx'
@@ -287,7 +287,7 @@ function buildChatActivityState(
     const suffix = pendingActionsCount === 1 ? '' : 's'
 
     return {
-      activityLabel: `${pendingActionsCount} workspace action${suffix} still need confirmation from the live runtime feed.`,
+      activityLabel: `${pendingActionsCount} chat-requested change${suffix} still need confirmation before they apply.`,
       disabledReason: null,
       isBusy: true,
     }
@@ -375,6 +375,43 @@ function buildChatMessagesFromRecordedEvent(
       events: [event],
     },
     snapshot,
+  )
+}
+
+type PendingChatConfirmation = {
+  id: string
+  action: ChatToUiAction
+  summary: string
+  title: string
+}
+
+function buildPendingChatConfirmationTitle(action: ChatToUiAction) {
+  switch (action.action_type) {
+    case 'select_genre':
+      return 'Apply genre change'
+    case 'select_tone':
+      return 'Apply tone change'
+    case 'regenerate_pitches':
+      return 'Generate a new pitch batch'
+    case 'refine_pitch':
+      return 'Refine this pitch'
+    case 'select_pitch':
+      return 'Select this pitch'
+    default:
+      return 'Apply chat change'
+  }
+}
+
+function canApplyChatAction(action: ChatToUiAction) {
+  return (
+    action.action_type === 'navigate_to_stage' ||
+    action.action_type === 'select_genre' ||
+    action.action_type === 'select_tone' ||
+    action.action_type === 'update_story_brief' ||
+    action.action_type === 'regenerate_pitches' ||
+    action.action_type === 'refine_pitch' ||
+    action.action_type === 'select_pitch' ||
+    action.action_type === 'open_finalize_view'
   )
 }
 
@@ -525,13 +562,15 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const hydrationQuery = useCurrentSessionHydrationQuery()
   const runtimeSnapshot = useSessionCurrentSnapshot()
   const chatMessages = useSessionChatMessages()
-  const pendingActions = useSessionPendingActions()
   const eventStream = useSessionEventStream()
   const runtimeStore = useSessionRuntimeActions()
   const snapshot = runtimeSnapshot ?? hydrationQuery.data?.snapshot
   const [stageNoteDraft, setStageNoteDraft] = useState('')
   const [stageNoteError, setStageNoteError] = useState<string | null>(null)
   const [isSavingStageNote, setIsSavingStageNote] = useState(false)
+  const [pendingChatConfirmations, setPendingChatConfirmations] = useState<
+    PendingChatConfirmation[]
+  >([])
 
   useEffect(() => {
     if (hydrationQuery.data == null || hydrationQuery.isError) {
@@ -540,6 +579,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
 
     runtimeStore.hydrateSessionSnapshot(hydrationQuery.data.snapshot)
   }, [hydrationQuery.data, hydrationQuery.isError, runtimeStore])
+
+  useEffect(() => {
+    setPendingChatConfirmations([])
+  }, [sessionId])
 
   useEffect(() => {
     if (
@@ -632,7 +675,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   )
   const chatActivityState = buildChatActivityState(
     snapshot,
-    pendingActions.length,
+    pendingChatConfirmations.length,
   )
   const workspaceConnectionBanner = getWorkspaceConnectionBanner(
     eventStream.connectionState,
@@ -853,6 +896,30 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     return result
   }
 
+  async function applyPitchRefinement(options: {
+    generationKey?: string | null
+    instructions: string
+    origin: string
+    pitchId?: string | null
+    pitchIndex?: number | null
+    title?: string | null
+  }) {
+    const result = await refineSessionPitch(sessionId, {
+      pitch_id: options.pitchId ?? null,
+      generation_key: options.generationKey ?? null,
+      pitch_index: options.pitchIndex ?? null,
+      title: options.title ?? null,
+      instructions: options.instructions,
+      origin: options.origin,
+    })
+
+    runtimeStore.hydrateSessionSnapshot(result.snapshot)
+    appendHistoryEventToChat(result.event)
+    setPreviewStage(result.snapshot.current_stage)
+
+    return result
+  }
+
   async function applySupportedChatAction(action: ChatToUiAction) {
     if (action.action_type === 'navigate_to_stage') {
       setPreviewStage(action.target_stage)
@@ -911,6 +978,18 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         guidance: action.extracted_values.guidance ?? null,
         preserveSelectedPitch:
           action.extracted_values.preserve_selected_pitch ?? false,
+        origin: 'chat',
+      })
+      return
+    }
+
+    if (action.action_type === 'refine_pitch') {
+      await applyPitchRefinement({
+        pitchId: action.extracted_values.pitch_id ?? null,
+        generationKey: action.extracted_values.generation_key ?? null,
+        pitchIndex: action.extracted_values.pitch_index ?? null,
+        title: action.extracted_values.title ?? null,
+        instructions: action.extracted_values.instructions,
         origin: 'chat',
       })
       return
@@ -982,31 +1061,54 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       parsedIntent.policy_evaluation?.evaluated_actions ?? []
 
     for (const evaluatedAction of evaluatedActions) {
-      if (
-        evaluatedAction.decision !== 'accepted' &&
-        evaluatedAction.decision !== 'accepted_with_side_effects'
-      ) {
-        continue
-      }
-
       const action =
         parsedIntent.proposed_actions.actions[evaluatedAction.action_index]
 
-      if (
-        action == null ||
-        (action.action_type !== 'navigate_to_stage' &&
-          action.action_type !== 'select_genre' &&
-          action.action_type !== 'select_tone' &&
-          action.action_type !== 'update_story_brief' &&
-          action.action_type !== 'regenerate_pitches' &&
-          action.action_type !== 'select_pitch' &&
-          action.action_type !== 'open_finalize_view')
-      ) {
+      if (action == null || !canApplyChatAction(action)) {
         continue
       }
 
-      await applySupportedChatAction(action).catch(() => {})
+      if (
+        evaluatedAction.decision === 'accepted' ||
+        evaluatedAction.decision === 'accepted_with_side_effects'
+      ) {
+        await applySupportedChatAction(action).catch(() => {})
+        continue
+      }
+
+      if (evaluatedAction.decision === 'requires_confirmation') {
+        setPendingChatConfirmations((current) => [
+          ...current,
+          {
+            id: `pending-chat-action-${submittedAt}-${evaluatedAction.action_index}`,
+            action,
+            summary: evaluatedAction.summary,
+            title: buildPendingChatConfirmationTitle(action),
+          },
+        ])
+      }
     }
+  }
+
+  async function confirmPendingChatAction(actionId: string) {
+    const pendingAction = pendingChatConfirmations.find(
+      (entry) => entry.id === actionId,
+    )
+
+    if (pendingAction == null) {
+      return
+    }
+
+    await applySupportedChatAction(pendingAction.action)
+    setPendingChatConfirmations((current) =>
+      current.filter((entry) => entry.id !== actionId),
+    )
+  }
+
+  function dismissPendingChatAction(actionId: string) {
+    setPendingChatConfirmations((current) =>
+      current.filter((entry) => entry.id !== actionId),
+    )
   }
 
   async function saveStageNote() {
@@ -1121,6 +1223,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             disabledReason={chatActivityState.disabledReason}
             isBusy={chatActivityState.isBusy}
             messages={chatMessages}
+            onConfirmPendingAction={confirmPendingChatAction}
+            onDismissPendingAction={dismissPendingChatAction}
             onQuickAction={async (commandId) => {
               const submission = buildSessionChatQuickActionSubmission({
                 commandId,
@@ -1149,6 +1253,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 explicitCommand: commandSubmission?.explicitCommand ?? null,
               })
             }}
+            pendingConfirmations={pendingChatConfirmations}
             quickActions={chatQuickActions}
             slashCommandHint={slashCommandHint}
           />
@@ -1296,6 +1401,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                 <PitchSelectionStage
                   onGeneratePitches={applyPitchGeneration}
                   onPreviewStage={setPreviewStage}
+                  onRefinePitch={applyPitchRefinement}
                   onSelectPitch={applyPitchSelection}
                   selectedStage={selectedStage}
                   snapshot={snapshot}

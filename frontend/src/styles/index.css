@@ -1842,6 +1842,40 @@ h4 {
   white-space: pre-wrap;
 }
 
+.workspace-chat-pending {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: rgba(246, 248, 255, 0.9);
+  border: 1px solid rgba(60, 92, 141, 0.14);
+}
+
+.workspace-chat-pending__header p,
+.workspace-chat-pending__copy p {
+  margin: 0;
+  color: var(--color-ink-muted);
+}
+
+.workspace-chat-pending__list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.workspace-chat-pending__item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(39, 69, 99, 0.08);
+}
+
+.workspace-chat-pending__copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .workspace-chat-composer {
   display: grid;
   gap: var(--space-4);

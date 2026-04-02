@@ -19,6 +19,7 @@ from app.models import (
     ParsedChatIntentResponse,
     RecentSessionSummary,
     RecordSessionUIActionRequest,
+    RefineSessionPitchRequest,
     SaveSessionStoryBriefRequest,
     SelectSessionGenreRequest,
     SelectSessionPitchRequest,
@@ -299,6 +300,51 @@ def generate_session_pitches(
             detail=str(exc),
         ) from exc
     except SessionPitchGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/pitches/refine",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate and select a refined pitch for a story session",
+)
+def refine_session_pitch(
+    session_id: str,
+    payload: RefineSessionPitchRequest,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    pitch_generation_adapter: Annotated[
+        PitchGenerationAdapter,
+        Depends(get_pitch_generation_adapter),
+    ],
+) -> SessionSelectionResponse:
+    try:
+        return SessionService(db_session).refine_pitch(
+            session_id,
+            pitch_id=payload.pitch_id,
+            generation_key=payload.generation_key,
+            pitch_index=payload.pitch_index,
+            title=payload.title,
+            instructions=payload.instructions,
+            origin=payload.origin,
+            pitch_generation_service=PitchGenerationService(
+                adapter=pitch_generation_adapter,
+            ),
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InvalidStageTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (SessionPitchSelectionError, SessionPitchGenerationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

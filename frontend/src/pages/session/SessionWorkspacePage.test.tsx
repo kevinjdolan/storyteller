@@ -1,10 +1,16 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type {
+  SessionHydration,
+  SessionHistory,
+  SessionPitchGenerationResponse,
+  SessionSnapshot,
+} from '../../api/sessions.ts'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { SessionWorkspacePage } from './SessionWorkspacePage.tsx'
 
-const sampleSnapshot = {
+const sampleSnapshot: SessionSnapshot = {
   id: 'moonlit-harbor',
   display_title: 'Lanterns Over Juniper Lake',
   working_title: 'Lanterns Over Juniper Lake',
@@ -221,9 +227,9 @@ const sampleSnapshot = {
   active_audio_job: null,
   latest_story_asset: null,
   latest_audio_asset: null,
-} as const
+}
 
-const sampleHistory = {
+const sampleHistory: SessionHistory = {
   session_id: 'moonlit-harbor',
   latest_sequence_number: 4,
   events: [
@@ -306,9 +312,9 @@ const sampleHistory = {
       created_at: '2026-04-01T03:03:00Z',
     },
   ],
-} as const
+}
 
-const sampleHydration = {
+const sampleHydration: SessionHydration = {
   snapshot: sampleSnapshot,
   recent_history: sampleHistory,
   hydration: {
@@ -320,7 +326,7 @@ const sampleHydration = {
     history_event_count: 4,
     history_window_truncated: false,
   },
-} as const
+}
 
 const sampleGenreCatalog = [
   {
@@ -956,7 +962,9 @@ function buildStoryBriefSaveResponse(body: Record<string, unknown>) {
   }
 }
 
-function buildPitchGenerationResponse(body: Record<string, unknown>) {
+function buildPitchGenerationResponse(
+  body: Record<string, unknown>,
+): SessionPitchGenerationResponse {
   const candidateCount =
     typeof body.candidate_count === 'number' ? body.candidate_count : 4
   const guidance =
@@ -982,6 +990,11 @@ function buildPitchGenerationResponse(body: Record<string, unknown>) {
         id: `pitch-generated-${pitchNumber}`,
         generation_key: generationKey,
         pitch_index: pitchNumber,
+        generation_kind: 'alternatives',
+        source_pitch_id: null,
+        source_pitch_title: null,
+        refinement_instructions: null,
+        selection_rationale: null,
         title,
         hook: `Pitch ${pitchNumber} follows the lantern trail through the harbor with a distinct bedtime-story engine.`,
         central_conflict: `Pitch ${pitchNumber} asks the child and otter to resolve a different soft nighttime problem before the harbor can settle.`,
@@ -1017,6 +1030,12 @@ function buildPitchGenerationResponse(body: Record<string, unknown>) {
         {
           generation_key: generationKey,
           candidate_count: candidateCount,
+          generation_kind: 'alternatives',
+          guidance,
+          source_pitch_id: null,
+          source_pitch_title: null,
+          source_generation_key: null,
+          refinement_instructions: null,
           created_at: generatedAt,
           pitches: generatedPitches,
         },
@@ -1084,7 +1103,9 @@ function buildPitchGenerationResponse(body: Record<string, unknown>) {
   }
 }
 
-function buildPitchSelectionResponse(body: Record<string, unknown>) {
+function buildPitchSelectionResponse(
+  body: Record<string, unknown>,
+): SessionPitchGenerationResponse {
   const selectedPitchId =
     typeof body.pitch_id === 'string' ? body.pitch_id : 'pitch-generated-1'
   const baseGeneration = buildPitchGenerationResponse({
@@ -1165,6 +1186,143 @@ function buildPitchSelectionResponse(body: Record<string, unknown>) {
         source: body.origin ?? 'workspace',
       },
       created_at: '2026-04-01T05:20:00Z',
+    },
+  }
+}
+
+function buildPitchRefinementResponse(
+  body: Record<string, unknown>,
+): SessionPitchGenerationResponse {
+  const instructions =
+    typeof body.instructions === 'string' && body.instructions.trim().length > 0
+      ? body.instructions.trim()
+      : 'Make it gentler while keeping the harbor bedtime feel.'
+  const baseGeneration = buildPitchGenerationResponse({
+    candidate_count: 4,
+    preserve_selected_pitch: true,
+  })
+  const fallbackPitches =
+    sampleSnapshot.selected_pitch != null ? [sampleSnapshot.selected_pitch] : []
+  const allPitches =
+    baseGeneration.snapshot.pitch_batches?.flatMap((batch) => batch.pitches ?? []) ??
+    fallbackPitches
+  const sourcePitchId =
+    typeof body.pitch_id === 'string'
+      ? body.pitch_id
+      : (sampleSnapshot.selected_pitch?.id ?? allPitches[0]?.id)
+  const sourcePitch =
+    allPitches.find((pitch) => pitch.id === sourcePitchId) ??
+    sampleSnapshot.selected_pitch ??
+    allPitches[0]
+  const refinedAt = '2026-04-01T05:21:00Z'
+  const refinedPitch = {
+    id: 'pitch-refined-1',
+    generation_key: 'batch-refined-1',
+    pitch_index: 1,
+    generation_kind: 'refinement',
+    source_pitch_id: sourcePitch?.id ?? null,
+    source_pitch_title: sourcePitch?.title ?? null,
+    refinement_instructions: instructions,
+    selection_rationale: `Refined from ${sourcePitch?.title ?? 'the selected pitch'}. ${instructions}`,
+    title: `${sourcePitch?.title ?? 'Lantern Harbor Promise'}: Siblings`,
+    hook: `${
+      sourcePitch?.hook ??
+      'A child follows lanterns across the harbor before bed.'
+    } This revision keeps the same harbor lane while making the story about siblings who help each other settle down.`,
+    central_conflict:
+      'Two siblings must guide the last lanterns home while helping each other calm a final bedtime worry.',
+    why_it_fits: `This refinement preserves the bedtime-safe harbor mystery while applying the request: ${instructions}.`,
+    logline: `${
+      sourcePitch?.hook ??
+      'A child follows lanterns across the harbor before bed.'
+    } This revision keeps the same harbor lane while making the story about siblings who help each other settle down.`,
+    summary:
+      'Two siblings must guide the last lanterns home while helping each other calm a final bedtime worry.',
+    bedtime_notes: `This refinement preserves the bedtime-safe harbor mystery while applying the request: ${instructions}.`,
+    is_selected: true,
+    accepted_at: refinedAt,
+    created_at: refinedAt,
+    updated_at: refinedAt,
+  }
+
+  return {
+    snapshot: {
+      ...baseGeneration.snapshot,
+      current_stage: 'characters',
+      resume_stage: 'characters',
+      furthest_completed_stage: 'pitches',
+      updated_at: refinedAt,
+      selected_pitch: refinedPitch,
+      pitch_batches: [
+        {
+          generation_key: refinedPitch.generation_key,
+          candidate_count: 1,
+          generation_kind: 'refinement',
+          guidance: instructions,
+          source_pitch_id: sourcePitch?.id ?? null,
+          source_pitch_title: sourcePitch?.title ?? null,
+          source_generation_key: sourcePitch?.generation_key ?? null,
+          refinement_instructions: instructions,
+          created_at: refinedAt,
+          pitches: [refinedPitch],
+        },
+        ...(baseGeneration.snapshot.pitch_batches ?? []),
+      ],
+      progress: {
+        total_stages: 10,
+        completed_stages: 4,
+        in_progress_stages: 0,
+        needs_regeneration_stages: 0,
+      },
+      stage_states: baseGeneration.snapshot.stage_states.map(
+        (stageState, index) => {
+          if (index === 3) {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: `Selected pitch: ${refinedPitch.title}. ${refinedPitch.selection_rationale}`,
+              last_event_summary: `Selected pitch: ${refinedPitch.title}.`,
+              last_event_type: 'selection.recorded',
+              last_event_at: refinedAt,
+            }
+          }
+
+          if (index === 4) {
+            return {
+              ...stageState,
+              status: 'draft',
+              detail: null,
+              last_event_summary: null,
+              last_event_type: null,
+              last_event_at: null,
+            }
+          }
+
+          return stageState
+        },
+      ),
+    },
+    event: {
+      id: 'pitch-refinement-event',
+      session_id: 'moonlit-harbor',
+      sequence_number: 15,
+      actor: {
+        actor_type: 'user',
+        actor_id: 'local-user',
+      },
+      event_type: 'selection.recorded',
+      stage: 'pitches',
+      summary: `Selected pitch: ${refinedPitch.title}.`,
+      payload: {
+        schema_version: 1,
+        selection_kind: 'pitch',
+        selection_id: refinedPitch.id,
+        label: refinedPitch.title,
+        accepted: true,
+        source: body.origin ?? 'workspace',
+        rationale: refinedPitch.selection_rationale,
+      },
+      created_at: refinedAt,
     },
   }
 }
@@ -1254,6 +1412,9 @@ function mockWorkspaceApi(options?: {
   pitchSelectionResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
+  pitchRefinementResponse?:
+    | unknown
+    | ((requestBody: Record<string, unknown>) => unknown)
   storyBriefSaveResponse?:
     | unknown
     | ((requestBody: Record<string, unknown>) => unknown)
@@ -1283,6 +1444,7 @@ function mockWorkspaceApi(options?: {
   const chatIntentRequests: Record<string, unknown>[] = []
   const genreSelectionRequests: Record<string, unknown>[] = []
   const pitchGenerationRequests: Record<string, unknown>[] = []
+  const pitchRefinementRequests: Record<string, unknown>[] = []
   const pitchSelectionRequests: Record<string, unknown>[] = []
   const storyBriefSaveRequests: Record<string, unknown>[] = []
   const toneSelectionRequests: Record<string, unknown>[] = []
@@ -1292,6 +1454,8 @@ function mockWorkspaceApi(options?: {
     options?.pitchGenerationResponse ?? buildPitchGenerationResponse
   const pitchSelectionResponse =
     options?.pitchSelectionResponse ?? buildPitchSelectionResponse
+  const pitchRefinementResponse =
+    options?.pitchRefinementResponse ?? buildPitchRefinementResponse
   const storyBriefSaveResponse =
     options?.storyBriefSaveResponse ?? buildStoryBriefSaveResponse
   const toneSelectionResponse =
@@ -1477,6 +1641,25 @@ function mockWorkspaceApi(options?: {
       }
 
       if (
+        pathname === '/api/v1/sessions/moonlit-harbor/pitches/refine' &&
+        init?.method === 'POST'
+      ) {
+        const requestBody =
+          typeof init.body === 'string'
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : {}
+        pitchRefinementRequests.push(requestBody)
+        const resolvedPitchRefinementResponse =
+          typeof pitchRefinementResponse === 'function'
+            ? pitchRefinementResponse(requestBody)
+            : pitchRefinementResponse
+
+        return Promise.resolve(
+          buildJsonResponse(200, resolvedPitchRefinementResponse),
+        )
+      }
+
+      if (
         pathname === '/api/v1/sessions/moonlit-harbor/selections/pitch' &&
         init?.method === 'POST'
       ) {
@@ -1522,6 +1705,7 @@ function mockWorkspaceApi(options?: {
     chatIntentRequests,
     genreSelectionRequests,
     pitchGenerationRequests,
+    pitchRefinementRequests,
     pitchSelectionRequests,
     storyBriefSaveRequests,
     toneSelectionRequests,
@@ -2135,6 +2319,193 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
     expect(
       await screen.findByText('Selected pitch: The Juniper Lake Promise'),
+    ).toBeInTheDocument()
+  })
+
+  it('refines a saved pitch from the workspace without overwriting earlier batches', async () => {
+    const generatedPitchSnapshot = buildPitchGenerationResponse({
+      candidate_count: 4,
+    }).snapshot
+    const generatedPitchHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 5,
+      events: sampleHistory.events,
+    } as const
+
+    const { pitchRefinementRequests } = mockWorkspaceApi({
+      history: generatedPitchHistory,
+      hydration: {
+        snapshot: generatedPitchSnapshot,
+        recent_history: generatedPitchHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 5,
+          history_event_count: 5,
+          materialized_through_sequence_number: 5,
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Review and select story pitches',
+    })
+
+    fireEvent.change(screen.getByLabelText('Pitch to refine'), {
+      target: { value: 'pitch-generated-2' },
+    })
+    fireEvent.change(screen.getByLabelText('Refinement instructions'), {
+      target: {
+        value: 'Make it about siblings who help each other settle down.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Refine pitch' }))
+
+    expect(pitchRefinementRequests).toEqual([
+      {
+        pitch_id: 'pitch-generated-2',
+        generation_key: 'batch-2',
+        pitch_index: 2,
+        title: 'The Last Lantern Question',
+        instructions: 'Make it about siblings who help each other settle down.',
+        origin: 'workspace',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Shape the character sheet',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('The Last Lantern Question: Siblings'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Refined from The Last Lantern Question. Make it about siblings who help each other settle down./i,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('queues confirm-first pitch refinements from chat and applies them on confirmation', async () => {
+    const generatedPitchSnapshot = buildPitchGenerationResponse({
+      candidate_count: 4,
+    }).snapshot
+    const generatedPitchHistory = {
+      session_id: 'moonlit-harbor',
+      latest_sequence_number: 5,
+      events: sampleHistory.events,
+    } as const
+
+    const { pitchRefinementRequests } = mockWorkspaceApi({
+      history: generatedPitchHistory,
+      hydration: {
+        snapshot: generatedPitchSnapshot,
+        recent_history: generatedPitchHistory,
+        hydration: {
+          ...sampleHydration.hydration,
+          latest_sequence_number: 5,
+          history_event_count: 5,
+          materialized_through_sequence_number: 5,
+        },
+      },
+      chatIntentResponse: {
+        schema_version: 1,
+        status: 'parsed',
+        needs_clarification: false,
+        assistant_response:
+          'I can refine pitch two into a sibling story once you confirm the change.',
+        clarification_reason: null,
+        proposed_actions: {
+          schema_version: 1,
+          actions: [
+            {
+              schema_version: 1,
+              action_type: 'refine_pitch',
+              target_stage: 'pitches',
+              confidence: 0.94,
+              rationale:
+                'The user asked to keep pitch two but turn it into a sibling story.',
+              requires_confirmation: true,
+              extracted_values: {
+                pitch_id: 'pitch-generated-2',
+                generation_key: 'batch-2',
+                pitch_index: 2,
+                title: 'The Last Lantern Question',
+                instructions:
+                  'Make it about siblings who help each other settle down.',
+              },
+            },
+          ],
+        },
+        policy_evaluation: {
+          schema_version: 1,
+          session_id: 'moonlit-harbor',
+          evaluated_actions: [
+            {
+              action_index: 0,
+              action_type: 'refine_pitch',
+              target_stage: 'pitches',
+              decision: 'requires_confirmation',
+              summary:
+                'Generate a targeted revision from The Last Lantern Question.',
+              reasons: [],
+              side_effects: [],
+              prerequisite_action_types: [],
+            },
+          ],
+        },
+      },
+    })
+
+    renderWorkspaceRoute()
+
+    const composer = await screen.findByLabelText('Message composer')
+
+    fireEvent.change(composer, {
+      target: {
+        value: 'Take pitch two but make it about siblings.',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    expect(
+      await screen.findByText(
+        'I can refine pitch two into a sibling story once you confirm the change.',
+      ),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Pending confirmations')).toBeInTheDocument()
+    expect(screen.getByText('Refine this pitch')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Generate a targeted revision from The Last Lantern Question.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(pitchRefinementRequests).toEqual([
+      {
+        pitch_id: 'pitch-generated-2',
+        generation_key: 'batch-2',
+        pitch_index: 2,
+        title: 'The Last Lantern Question',
+        instructions: 'Make it about siblings who help each other settle down.',
+        origin: 'chat',
+      },
+    ])
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'Shape the character sheet',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        /Selected pitch: The Last Lantern Question: Siblings\./i,
+      ),
     ).toBeInTheDocument()
   })
 

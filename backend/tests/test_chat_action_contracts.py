@@ -9,6 +9,7 @@ from app.models import (
     ChatToUIActionDefaultPolicy,
     ChatToUIActionType,
     RefineBeatSheetAction,
+    RefinePitchAction,
     SelectGenreAction,
     UpdateAudioSettingsAction,
     get_chat_to_ui_action_default_policy,
@@ -49,6 +50,18 @@ def test_chat_to_ui_action_contract_supports_stage_specific_actions() -> None:
                 },
                 {
                     "schema_version": 1,
+                    "action_type": "refine_pitch",
+                    "target_stage": "pitches",
+                    "confidence": 0.9,
+                    "rationale": "The user wants pitch two to become a sibling story.",
+                    "requires_confirmation": True,
+                    "extracted_values": {
+                        "pitch_index": 2,
+                        "instructions": "Make it about siblings.",
+                    },
+                },
+                {
+                    "schema_version": 1,
                     "action_type": "update_audio_settings",
                     "target_stage": "audio",
                     "confidence": 0.71,
@@ -63,11 +76,13 @@ def test_chat_to_ui_action_contract_supports_stage_specific_actions() -> None:
         }
     )
 
-    assert len(batch.actions) == 3
+    assert len(batch.actions) == 4
     assert isinstance(batch.actions[0], SelectGenreAction)
     assert isinstance(batch.actions[1], RefineBeatSheetAction)
-    assert isinstance(batch.actions[2], UpdateAudioSettingsAction)
-    assert batch.actions[2].extracted_values.playback_speed == 0.9
+    assert isinstance(batch.actions[2], RefinePitchAction)
+    assert isinstance(batch.actions[3], UpdateAudioSettingsAction)
+    assert batch.actions[2].extracted_values.instructions == "Make it about siblings."
+    assert batch.actions[3].extracted_values.playback_speed == 0.9
 
 
 def test_chat_to_ui_action_contract_rejects_confirm_first_actions_without_confirmation() -> None:

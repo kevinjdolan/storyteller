@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   SessionHistoryEvent,
   SessionPitchGenerationResponse,
@@ -23,6 +23,17 @@ type PitchSelectionStageProps = {
     preserveSelectedPitch?: boolean
   }) => Promise<SessionPitchGenerationResponse>
   onPreviewStage: (stageId: 'brief' | 'characters') => void
+  onRefinePitch: (selection: {
+    generationKey?: string | null
+    instructions: string
+    origin: string
+    pitchId?: string | null
+    pitchIndex?: number | null
+    title?: string | null
+  }) => Promise<{
+    event: SessionHistoryEvent
+    snapshot: SessionSnapshot
+  }>
   onSelectPitch: (selection: {
     generationKey?: string | null
     origin: string
@@ -73,6 +84,35 @@ function readPitchFitNote(pitch: {
   )
 }
 
+function readPitchSelectionCopy(pitch: {
+  hook?: string | null
+  logline?: string | null
+  selection_rationale?: string | null
+}) {
+  return pitch.selection_rationale ?? readPitchHook(pitch)
+}
+
+function buildBatchSummary(
+  batch: NonNullable<SessionSnapshot['pitch_batches']>[number],
+) {
+  if (
+    batch.generation_kind === 'refinement' &&
+    batch.source_pitch_title != null &&
+    batch.refinement_instructions != null
+  ) {
+    return `Refined from ${batch.source_pitch_title}. ${batch.refinement_instructions}`
+  }
+
+  if (
+    batch.generation_kind === 'refinement' &&
+    batch.source_pitch_title != null
+  ) {
+    return `Refined from ${batch.source_pitch_title}.`
+  }
+
+  return formatBatchTimestamp(batch.created_at)
+}
+
 function buildRevisionHelp(
   selectedStage: SessionWorkspaceStageView,
   snapshot: SessionSnapshot,
@@ -115,11 +155,15 @@ function formatBatchTimestamp(value: string) {
 export function PitchSelectionStage({
   onGeneratePitches,
   onPreviewStage,
+  onRefinePitch,
   onSelectPitch,
   selectedStage,
   snapshot,
 }: PitchSelectionStageProps) {
-  const pitchBatches = snapshot.pitch_batches ?? []
+  const pitchBatches = useMemo(
+    () => snapshot.pitch_batches ?? [],
+    [snapshot.pitch_batches],
+  )
   const latestBatch = pitchBatches[0] ?? null
   const selectedPitchId = snapshot.selected_pitch?.id ?? null
   const revisionHelp = buildRevisionHelp(selectedStage, snapshot)
@@ -128,14 +172,37 @@ export function PitchSelectionStage({
   )
   const [guidance, setGuidance] = useState('')
   const [generationError, setGenerationError] = useState<string | null>(null)
+  const [refinementInstructions, setRefinementInstructions] = useState('')
+  const [refinementError, setRefinementError] = useState<string | null>(null)
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isRefining, setIsRefining] = useState(false)
   const [pendingPitchId, setPendingPitchId] = useState<string | null>(null)
+  const [refinementBasePitchId, setRefinementBasePitchId] = useState<
+    string | null
+  >(selectedPitchId)
 
   const latestBatchPitches = useMemo(
     () => latestBatch?.pitches ?? [],
     [latestBatch],
   )
+  const allPitches = useMemo(
+    () => pitchBatches.flatMap((batch) => batch.pitches ?? []),
+    [pitchBatches],
+  )
+  const refinementBasePitch =
+    allPitches.find((pitch) => pitch.id === refinementBasePitchId) ?? null
+
+  useEffect(() => {
+    if (
+      refinementBasePitchId != null &&
+      allPitches.some((pitch) => pitch.id === refinementBasePitchId)
+    ) {
+      return
+    }
+
+    setRefinementBasePitchId(selectedPitchId ?? allPitches[0]?.id ?? null)
+  }, [allPitches, refinementBasePitchId, selectedPitchId])
 
   async function handleGeneratePitches() {
     if (selectedStage.availability === 'locked' || isGenerating) {
@@ -191,6 +258,40 @@ export function PitchSelectionStage({
     }
   }
 
+  async function handlePitchRefinement() {
+    if (
+      selectedStage.availability === 'locked' ||
+      isRefining ||
+      refinementBasePitch == null ||
+      refinementInstructions.trim().length === 0
+    ) {
+      return
+    }
+
+    setRefinementError(null)
+    setIsRefining(true)
+
+    try {
+      await onRefinePitch({
+        pitchId: refinementBasePitch.id,
+        generationKey: refinementBasePitch.generation_key,
+        pitchIndex: refinementBasePitch.pitch_index,
+        title: refinementBasePitch.title,
+        instructions: refinementInstructions.trim(),
+        origin: 'workspace',
+      })
+      setRefinementInstructions('')
+    } catch (error) {
+      setRefinementError(
+        error instanceof Error
+          ? error.message
+          : 'The pitch refinement could not be saved right now.',
+      )
+    } finally {
+      setIsRefining(false)
+    }
+  }
+
   return (
     <section
       aria-label="Pitch selection stage"
@@ -200,7 +301,7 @@ export function PitchSelectionStage({
         <SummaryPanel
           description={
             snapshot.selected_pitch != null
-              ? readPitchHook(snapshot.selected_pitch)
+              ? readPitchSelectionCopy(snapshot.selected_pitch)
               : 'No pitch is accepted yet. Generate a batch and choose one story lane before characters.'
           }
           label="Current selection"
@@ -211,19 +312,24 @@ export function PitchSelectionStage({
         <SummaryPanel
           description={
             latestBatch != null
-              ? formatBatchTimestamp(latestBatch.created_at)
+              ? buildBatchSummary(latestBatch)
               : 'The newest durable batch will appear here once pitch generation runs.'
           }
           label="Latest batch"
           title={
             latestBatch != null
-              ? `${latestBatch.candidate_count} pitch cards ready`
+              ? latestBatch.generation_kind === 'refinement'
+                ? 'Refined pitch ready'
+                : `${latestBatch.candidate_count} pitch cards ready`
               : 'No pitch batch yet'
           }
         >
           {latestBatch != null ? (
             <div className="workspace-stage-detail__badges">
               <Badge tone="brand">{latestBatch.generation_key}</Badge>
+              {latestBatch.generation_kind === 'refinement' ? (
+                <Badge tone="accent">Refinement</Badge>
+              ) : null}
             </div>
           ) : null}
         </SummaryPanel>
@@ -271,6 +377,12 @@ export function PitchSelectionStage({
       {selectionError != null ? (
         <InlineHelp title="Pitch selection failed" tone="warning">
           {selectionError}
+        </InlineHelp>
+      ) : null}
+
+      {refinementError != null ? (
+        <InlineHelp title="Pitch refinement failed" tone="warning">
+          {refinementError}
         </InlineHelp>
       ) : null}
 
@@ -340,6 +452,70 @@ export function PitchSelectionStage({
         </div>
       </section>
 
+      <section className="workspace-stage-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Refine a saved pitch</h3>
+            <p>
+              Target one existing pitch, describe the change, and save the
+              refined result as a new durable option without losing earlier
+              batches.
+            </p>
+          </div>
+          <Badge tone={refinementBasePitch != null ? 'brand' : 'warning'}>
+            {refinementBasePitch != null
+              ? 'Ready to refine'
+              : 'Select a base pitch'}
+          </Badge>
+        </div>
+
+        <CardGrid className="pitch-stage__controls" columns={2}>
+          <SelectField
+            disabled={selectedStage.availability === 'locked' || isRefining}
+            label="Pitch to refine"
+            onChange={(event) => {
+              setRefinementBasePitchId(event.currentTarget.value)
+            }}
+            options={allPitches.map((pitch) => ({
+              label: `Pitch ${String(pitch.pitch_index).padStart(2, '0')} · ${pitch.title}`,
+              value: pitch.id,
+            }))}
+            value={refinementBasePitchId ?? ''}
+          />
+
+          <TextArea
+            description="Describe the specific change to keep or alter. For example: make it about siblings, soften the mystery, or move the setting to a lake."
+            disabled={selectedStage.availability === 'locked' || isRefining}
+            label="Refinement instructions"
+            onChange={(event) => {
+              setRefinementInstructions(event.currentTarget.value)
+            }}
+            rows={4}
+            value={refinementInstructions}
+          />
+        </CardGrid>
+
+        <div className="cta-row">
+          <Button
+            disabled={
+              selectedStage.availability === 'locked' ||
+              isRefining ||
+              refinementBasePitch == null ||
+              refinementInstructions.trim().length === 0
+            }
+            onClick={() => {
+              void handlePitchRefinement()
+            }}
+            tone="primary"
+          >
+            {isRefining ? 'Refining pitch...' : 'Refine pitch'}
+          </Button>
+          {refinementBasePitch != null ? (
+            <Badge tone="neutral">{refinementBasePitch.title}</Badge>
+          ) : null}
+        </div>
+      </section>
+
       {latestBatch == null ? (
         <EmptyStateBlock
           action={
@@ -404,6 +580,9 @@ export function PitchSelectionStage({
                   meta={
                     <div className="workspace-stage-detail__badges">
                       <Badge tone="neutral">{pitch.generation_key}</Badge>
+                      {pitch.refinement_instructions != null ? (
+                        <Badge tone="accent">Refined</Badge>
+                      ) : null}
                       {selected ? <Badge tone="success">Selected</Badge> : null}
                     </div>
                   }
@@ -446,9 +625,13 @@ export function PitchSelectionStage({
             {pitchBatches.slice(1).map((batch) => (
               <SummaryPanel
                 key={batch.generation_key}
-                description={formatBatchTimestamp(batch.created_at)}
+                description={buildBatchSummary(batch)}
                 label="Earlier batch"
-                title={`${batch.candidate_count} saved options`}
+                title={
+                  batch.generation_kind === 'refinement'
+                    ? '1 refined option'
+                    : `${batch.candidate_count} saved options`
+                }
               >
                 <div className="pitch-stage__history-titles">
                   {batch.pitches.map((pitch) => (

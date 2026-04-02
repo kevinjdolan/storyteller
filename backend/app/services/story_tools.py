@@ -206,7 +206,7 @@ def get_story_workflow_tool_registry() -> StoryWorkflowToolRegistry:
                         writes_to=["workflow_stage_states"],
                     ),
                 ),
-                related_chat_actions=(ChatToUIActionType.REGENERATE_PITCHES,),
+                related_chat_actions=(ChatToUIActionType.REFINE_PITCH,),
                 executor_name="_refine_pitch",
             ),
             StoryWorkflowToolDefinition(
@@ -469,6 +469,13 @@ class StoryWorkflowActionRouter:
                 arguments=arguments,
                 action_type=action.action_type,
             )
+        if action.action_type == ChatToUIActionType.REFINE_PITCH:
+            return self._build_call(
+                session_id=session_id,
+                tool_name=StoryWorkflowToolName.REFINE_PITCH,
+                arguments=arguments,
+                action_type=action.action_type,
+            )
         if action.action_type == ChatToUIActionType.REFINE_CHARACTER_SHEET:
             return self._build_call(
                 session_id=session_id,
@@ -666,23 +673,23 @@ class StoryWorkflowToolService:
         request: RefinePitchToolInput,
         actor: SessionEventActor | None = None,
     ) -> StageOperationToolResult:
-        self._require_pitch(session_id, request)
-        detail = _join_detail_parts(
-            [
-                "Refining the current pitch direction.",
-                _optional_detail("Instructions", request.instructions),
-            ]
-        )
-        snapshot = self._transition_stage_to_in_progress(
+        response = self._sessions.refine_pitch(
             session_id,
-            stage=WorkflowStage.PITCHES,
-            detail=detail,
+            pitch_id=request.pitch_id,
+            generation_key=request.generation_key,
+            pitch_index=request.pitch_index,
+            title=request.title,
+            instructions=request.instructions,
+            origin="story_tool",
             actor=actor,
+            pitch_generation_service=self._pitch_generation,
         )
+        snapshot = response.snapshot
+        detail = snapshot.stage_states[WORKFLOW_STAGE_SEQUENCE.index(WorkflowStage.PITCHES)].detail
         return StageOperationToolResult(
             tool_name=StoryWorkflowToolName.REFINE_PITCH,
             stage=WorkflowStage.PITCHES,
-            summary="Prepared a pitch refinement pass.",
+            summary="Generated and selected a refined pitch.",
             stage_status=_stage_status(snapshot, WorkflowStage.PITCHES),
             detail=detail,
         )

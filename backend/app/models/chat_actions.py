@@ -16,6 +16,7 @@ class ChatToUIActionType(str, Enum):
     SELECT_TONE = "select_tone"
     UPDATE_STORY_BRIEF = "update_story_brief"
     REGENERATE_PITCHES = "regenerate_pitches"
+    REFINE_PITCH = "refine_pitch"
     SELECT_PITCH = "select_pitch"
     SELECT_CHARACTER_SHEET = "select_character_sheet"
     REFINE_CHARACTER_SHEET = "refine_character_sheet"
@@ -72,6 +73,7 @@ DEFAULT_CHAT_TO_UI_ACTION_POLICIES: dict[ChatToUIActionType, ChatToUIActionDefau
     ChatToUIActionType.SELECT_TONE: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
     ChatToUIActionType.UPDATE_STORY_BRIEF: ChatToUIActionDefaultPolicy.AUTO_APPLY_CANDIDATE,
     ChatToUIActionType.REGENERATE_PITCHES: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
+    ChatToUIActionType.REFINE_PITCH: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
     ChatToUIActionType.SELECT_PITCH: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
     ChatToUIActionType.SELECT_CHARACTER_SHEET: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
     ChatToUIActionType.REFINE_CHARACTER_SHEET: ChatToUIActionDefaultPolicy.CONFIRM_FIRST,
@@ -210,6 +212,27 @@ class SelectPitchValues(ChatToUIExtractedValues):
             self.title,
             error_message=(
                 "select_pitch requires a pitch_id, generation_key, pitch_index, or title"
+            ),
+        )
+        return self
+
+
+class RefinePitchValues(ChatToUIExtractedValues):
+    pitch_id: str | None = Field(default=None, min_length=1)
+    generation_key: str | None = Field(default=None, min_length=1)
+    pitch_index: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
+    instructions: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_identifier(self) -> RefinePitchValues:
+        _require_any_identifier(
+            self.pitch_id,
+            self.generation_key,
+            self.pitch_index,
+            self.title,
+            error_message=(
+                "refine_pitch requires a pitch_id, generation_key, pitch_index, or title"
             ),
         )
         return self
@@ -413,6 +436,12 @@ class SelectPitchAction(ChatToUIActionBase):
     extracted_values: SelectPitchValues
 
 
+class RefinePitchAction(ChatToUIActionBase):
+    action_type: Literal[ChatToUIActionType.REFINE_PITCH] = ChatToUIActionType.REFINE_PITCH
+    target_stage: Literal[WorkflowStage.PITCHES] = WorkflowStage.PITCHES
+    extracted_values: RefinePitchValues
+
+
 class SelectCharacterSheetAction(ChatToUIActionBase):
     action_type: Literal[ChatToUIActionType.SELECT_CHARACTER_SHEET] = (
         ChatToUIActionType.SELECT_CHARACTER_SHEET
@@ -559,6 +588,7 @@ ChatToUIAction: TypeAlias = Annotated[
     | SelectToneAction
     | UpdateStoryBriefAction
     | RegeneratePitchesAction
+    | RefinePitchAction
     | SelectPitchAction
     | SelectCharacterSheetAction
     | RefineCharacterSheetAction

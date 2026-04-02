@@ -45,6 +45,11 @@ def build_session_agent_context_summary(
     if snapshot.selected_pitch is not None:
         lines.append(f"Selected pitch: {snapshot.selected_pitch.title}")
         lines.append(f"Pitch logline: {_truncate(snapshot.selected_pitch.logline)}")
+        if snapshot.selected_pitch.selection_rationale:
+            lines.append(
+                "Pitch refinement note: "
+                + _truncate(snapshot.selected_pitch.selection_rationale)
+            )
 
     if snapshot.selected_character_sheet is not None:
         character_summary = snapshot.selected_character_sheet.title or "Character sheet selected"

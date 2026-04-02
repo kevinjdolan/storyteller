@@ -39,6 +39,7 @@ from app.models.chat_actions import (
     OpenFinalizeViewAction,
     PauseJobAction,
     RedirectCompositionAction,
+    RefinePitchAction,
     RegenerateBeatSheetAction,
     RegenerateCharacterSheetAction,
     RegeneratePitchesAction,
@@ -261,6 +262,13 @@ class SessionActionPolicyService:
             )
         if action.action_type == ChatToUIActionType.REGENERATE_PITCHES:
             return self._evaluate_regenerate_pitches(
+                action,
+                state,
+                confirmation_granted=confirmation_granted,
+            )
+        if action.action_type == ChatToUIActionType.REFINE_PITCH:
+            return self._evaluate_refine_pitch(
+                session_id,
                 action,
                 state,
                 confirmation_granted=confirmation_granted,
@@ -568,6 +576,58 @@ class SessionActionPolicyService:
                 resolution=_ResolvedAction(pitch=pitch),
             )
 
+        side_effects = self._build_stage_edit_side_effects(state, WorkflowStage.PITCHES)
+        return self._finalize_change_action(
+            action,
+            side_effects=side_effects,
+            confirmation_granted=confirmation_granted,
+            resolution=_ResolvedAction(pitch=pitch),
+        )
+
+    def _evaluate_refine_pitch(
+        self,
+        session_id: str,
+        action: RefinePitchAction,
+        state: _PolicyState,
+        *,
+        confirmation_granted: bool,
+    ) -> _ComputedDecision:
+        blocked = _blocked_prerequisite_stages(state, WorkflowStage.PITCHES)
+        if blocked:
+            return _reject_for_blocked_stages(blocked, target_stage=WorkflowStage.PITCHES)
+        if not state.story_brief_present:
+            return _reject(
+                SessionActionReasonCode.PREREQUISITE_SELECTION_MISSING,
+                "Create or accept a story brief before refining a pitch.",
+                stage=WorkflowStage.PITCHES,
+                prerequisite_action_types=[ChatToUIActionType.UPDATE_STORY_BRIEF],
+            )
+        if state.stage_statuses.get(WorkflowStage.PITCHES) == WorkflowStageState.NEEDS_REGENERATION:
+            return _reject(
+                SessionActionReasonCode.TARGET_STAGE_STALE,
+                (
+                    "Generate fresh pitches before refining one because the current "
+                    "pitch set is stale."
+                ),
+                stage=WorkflowStage.PITCHES,
+                prerequisite_action_types=[ChatToUIActionType.REGENERATE_PITCHES],
+            )
+
+        pitches = self._find_pitches(session_id, action)
+        if len(pitches) > 1:
+            return _reject(
+                SessionActionReasonCode.SESSION_RESOURCE_AMBIGUOUS,
+                "More than one pitch matched that refinement request in this session.",
+                stage=WorkflowStage.PITCHES,
+            )
+        if not pitches:
+            return _reject(
+                SessionActionReasonCode.SESSION_RESOURCE_NOT_FOUND,
+                "No pitch matched that refinement request in this session.",
+                stage=WorkflowStage.PITCHES,
+            )
+
+        pitch = pitches[0]
         side_effects = self._build_stage_edit_side_effects(state, WorkflowStage.PITCHES)
         return self._finalize_change_action(
             action,
@@ -1362,6 +1422,13 @@ class SessionActionPolicyService:
             self._invalidate_downstream_stages(state, WorkflowStage.PITCHES)
             return
 
+        if action.action_type == ChatToUIActionType.REFINE_PITCH:
+            if resolution.pitch is not None:
+                state.selected_pitch_id = resolution.pitch.id
+            self._mark_stage_completed(state, WorkflowStage.PITCHES)
+            self._invalidate_downstream_stages(state, WorkflowStage.PITCHES)
+            return
+
         if action.action_type == ChatToUIActionType.SELECT_PITCH:
             if resolution.pitch is not None:
                 state.selected_pitch_id = resolution.pitch.id
@@ -1524,7 +1591,11 @@ class SessionActionPolicyService:
             stmt = stmt.where(func.lower(ToneProfile.label) == values.tone_profile_label.lower())
         return list(self._session.execute(stmt.limit(2)).scalars().all())
 
-    def _find_pitches(self, session_id: str, action: SelectPitchAction) -> list[Pitch]:
+    def _find_pitches(
+        self,
+        session_id: str,
+        action: SelectPitchAction | RefinePitchAction,
+    ) -> list[Pitch]:
         values = action.extracted_values
         stmt: Select[tuple[Pitch]] = select(Pitch).where(Pitch.session_id == session_id)
         if values.pitch_id is not None:

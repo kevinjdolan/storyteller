@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.ai.pitch_generation import PitchGenerationTransportError
 from app.models import (
+    ExistingSelectedPitchContext,
     GeneratedPitchCandidate,
     PitchGenerationInvocation,
     PitchGenerationInvocationResult,
@@ -199,5 +200,28 @@ def test_eval_pitch_model_output_preserves_provider_context_and_criteria() -> No
 
     assert model_output["generation_source"] == "gemini"
     assert model_output["model_id"] == "gemini-3.1-pro"
-    assert model_output["prompt_version"] == "pitch_generation.v1"
+    assert model_output["prompt_version"] == "pitch_generation.v2"
     assert model_output["evaluation"]["passed"] is True
+
+
+def test_eval_refinement_fallback_keeps_the_source_pitch_and_guidance_visible() -> None:
+    result = PitchGenerationService(adapter=FailingPitchGenerationAdapter()).generate_pitches(
+        candidate_count=1,
+        generation_goal="refinement",
+        raw_brief="A child follows lanterns through a harbor before bed.",
+        genre_label="Quest Fantasy",
+        tone_label="Hushed Wonder",
+        guidance="Make it about siblings who help each other settle down.",
+        selected_pitch=ExistingSelectedPitchContext(
+            title="The Juniper Lake Promise",
+            hook="A child and an otter guardian carry drifting lanterns across the harbor.",
+            central_conflict="They must return each lantern before the bedtime calm slips away.",
+            why_it_fits="It keeps the harbor imagery gentle and luminous.",
+        ),
+    )
+
+    assert result.source == "heuristic"
+    assert len(result.pitches) == 1
+    assert result.pitches[0].title.startswith("Juniper Lake Promise:")
+    assert "Make it about siblings" in result.pitches[0].hook
+    assert "The Juniper Lake Promise" in result.pitches[0].why_it_fits

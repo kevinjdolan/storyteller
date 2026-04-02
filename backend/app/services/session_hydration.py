@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -733,6 +734,9 @@ def build_pitch_view(row) -> PitchView | None:
     if row is None:
         return None
 
+    batch_metadata = _read_pitch_batch_metadata(row)
+    refinement_metadata = _read_pitch_refinement_metadata(row)
+
     return PitchView(
         id=row.id,
         generation_key=row.generation_key,
@@ -744,6 +748,11 @@ def build_pitch_view(row) -> PitchView | None:
         logline=row.logline,
         summary=row.summary,
         bedtime_notes=row.bedtime_notes,
+        generation_kind=batch_metadata.get("generation_kind", "generated"),
+        source_pitch_id=refinement_metadata.get("source_pitch_id"),
+        source_pitch_title=refinement_metadata.get("source_pitch_title"),
+        refinement_instructions=refinement_metadata.get("refinement_instructions"),
+        selection_rationale=refinement_metadata.get("selection_rationale"),
         is_selected=row.is_selected,
         accepted_at=row.accepted_at,
         created_at=row.created_at,
@@ -757,15 +766,16 @@ def build_pitch_batch_views(rows) -> list[PitchBatchView]:
 
     for row in rows or []:
         batches.setdefault(row.generation_key, []).append(row)
-        batch_created_at[row.generation_key] = min(
-            batch_created_at.get(row.generation_key, row.created_at),
-            row.created_at,
-        )
+        existing_created_at = batch_created_at.get(row.generation_key)
+        if existing_created_at is None or normalize_sortable_datetime(
+            row.created_at
+        ) < normalize_sortable_datetime(existing_created_at):
+            batch_created_at[row.generation_key] = row.created_at
 
     ordered_keys = sorted(
         batches,
         key=lambda generation_key: (
-            batch_created_at[generation_key],
+            normalize_sortable_datetime(batch_created_at[generation_key]),
             generation_key,
         ),
         reverse=True,
@@ -776,6 +786,23 @@ def build_pitch_batch_views(rows) -> list[PitchBatchView]:
             generation_key=generation_key,
             candidate_count=len(batches[generation_key]),
             created_at=batch_created_at[generation_key],
+            generation_kind=_read_pitch_batch_metadata(batches[generation_key][0]).get(
+                "generation_kind",
+                "generated",
+            ),
+            guidance=_read_pitch_batch_metadata(batches[generation_key][0]).get("guidance"),
+            source_pitch_id=_read_pitch_refinement_metadata(batches[generation_key][0]).get(
+                "source_pitch_id"
+            ),
+            source_pitch_title=_read_pitch_refinement_metadata(
+                batches[generation_key][0]
+            ).get("source_pitch_title"),
+            source_generation_key=_read_pitch_refinement_metadata(
+                batches[generation_key][0]
+            ).get("source_generation_key"),
+            refinement_instructions=_read_pitch_refinement_metadata(
+                batches[generation_key][0]
+            ).get("refinement_instructions"),
             pitches=[
                 build_pitch_view(row)
                 for row in sorted(
@@ -786,6 +813,22 @@ def build_pitch_batch_views(rows) -> list[PitchBatchView]:
         )
         for generation_key in ordered_keys
     ]
+
+
+def _read_pitch_batch_metadata(row) -> dict[str, Any]:
+    if not isinstance(getattr(row, "model_output", None), Mapping):
+        return {}
+
+    batch_metadata = row.model_output.get("batch_metadata")
+    return dict(batch_metadata) if isinstance(batch_metadata, Mapping) else {}
+
+
+def _read_pitch_refinement_metadata(row) -> dict[str, Any]:
+    if not isinstance(getattr(row, "model_output", None), Mapping):
+        return {}
+
+    refinement_metadata = row.model_output.get("refinement")
+    return dict(refinement_metadata) if isinstance(refinement_metadata, Mapping) else {}
 
 
 def build_character_sheet_view(row) -> CharacterSheetView | None:

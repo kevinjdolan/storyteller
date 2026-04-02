@@ -99,6 +99,7 @@ class SelectionRecordedEventPayload(EventPayload):
     selection_id: str | None = None
     slug: str | None = None
     label: str | None = None
+    rationale: str | None = None
     previous_selection_id: str | None = None
     source: str = "unknown"
     accepted: bool = True

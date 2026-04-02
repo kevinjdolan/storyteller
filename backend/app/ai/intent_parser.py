@@ -82,6 +82,18 @@ _ACTION_CATALOG = (
         "common_fields": ["candidate_count", "guidance", "preserve_selected_pitch"],
     },
     {
+        "action_type": "refine_pitch",
+        "stage": "pitches",
+        "description": "Create a refined pitch from an existing candidate and select it.",
+        "common_fields": [
+            "pitch_id",
+            "generation_key",
+            "pitch_index",
+            "title",
+            "instructions",
+        ],
+    },
+    {
         "action_type": "select_pitch",
         "stage": "pitches",
         "description": "Select a pitch by id, generation key, index, or title.",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -174,6 +175,9 @@ def _build_story_decisions(aggregate: SessionAggregate) -> list[str]:
     if aggregate.selected_pitch is not None:
         decisions.append(f"Selected pitch: {aggregate.selected_pitch.title}")
         decisions.append(f"Pitch logline: {_truncate(aggregate.selected_pitch.logline)}")
+        pitch_rationale = _read_selected_pitch_rationale(aggregate.selected_pitch)
+        if pitch_rationale is not None:
+            decisions.append(f"Pitch refinement note: {_truncate(pitch_rationale)}")
 
     if aggregate.selected_character_sheet is not None:
         character_line = (
@@ -228,6 +232,18 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
         preferences.append("Narration settings: " + ", ".join(audio_preferences))
 
     return preferences
+
+
+def _read_selected_pitch_rationale(pitch) -> str | None:
+    if not isinstance(getattr(pitch, "model_output", None), Mapping):
+        return None
+
+    refinement = pitch.model_output.get("refinement")
+    if not isinstance(refinement, Mapping):
+        return None
+
+    rationale = refinement.get("selection_rationale")
+    return rationale if isinstance(rationale, str) and rationale else None
 
 
 def _build_brief_preference_lines(raw_preferences) -> list[str]:

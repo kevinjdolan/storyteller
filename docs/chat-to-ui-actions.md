@@ -33,7 +33,7 @@ Every action carries the same envelope fields:
 | `genre`       | `select_genre`                                                                   | Accepts genre identifiers by id, slug, or label.                                                      |
 | `tone`        | `select_tone`                                                                    | Accepts tone-profile identifiers by id, slug, or label.                                               |
 | `brief`       | `update_story_brief`                                                             | Supports `replace`, `append`, or `merge` edits for raw brief, normalized summary, and planning notes. |
-| `pitches`     | `regenerate_pitches`, `select_pitch`                                             | Covers “give me more options” and “pick this pitch” flows.                                            |
+| `pitches`     | `regenerate_pitches`, `refine_pitch`, `select_pitch`                              | Covers “give me more options,” “revise that pitch,” and “pick this pitch” flows.                      |
 | `characters`  | `select_character_sheet`, `refine_character_sheet`, `regenerate_character_sheet` | Separates picking a sheet from refinement instructions or a full regenerate request.                  |
 | `beats`       | `accept_beat_sheet`, `refine_beat_sheet`, `regenerate_beat_sheet`                | Keeps Save-the-Cat acceptance distinct from edit requests.                                            |
 | `story_setup` | `update_story_setup`                                                             | Captures soft targets like word count, runtime, chapters, and guidance notes.                         |
@@ -58,8 +58,9 @@ Default `auto_apply_candidate` actions:
 
 Default `confirm_first` actions:
 
-- All selection actions such as `select_genre`, `select_tone`, `select_pitch`,
-  `select_character_sheet`, and `accept_beat_sheet`
+- All acceptance or refinement actions such as `select_genre`, `select_tone`,
+  `select_pitch`, `refine_pitch`, `select_character_sheet`, and
+  `accept_beat_sheet`
 - All regenerate actions
 - All composition and audio job control actions
 - `redirect_composition`

@@ -777,6 +777,62 @@ def test_save_story_brief_rejects_skipping_tone_prerequisite(db_session) -> None
         )
 
 
+def test_refine_pitch_creates_a_linked_selected_revision_without_overwriting_history(
+    db_session,
+) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(
+        db_session,
+        brief_normalization_service=StubBriefNormalizationService(),
+    )
+    snapshot = service.create_session(working_title="Pitch Refinement")
+    service.select_genre(snapshot.id, genre_slug="quest-fantasy")
+    service.select_tone(snapshot.id, tone_profile_slug="hushed-wonder")
+    service.save_story_brief(
+        snapshot.id,
+        story_idea=(
+            "A child and an otter guardian follow floating lanterns across a harbor "
+            "before bed."
+        ),
+    )
+    generated = service.generate_pitches(
+        snapshot.id,
+        candidate_count=3,
+        guidance="Keep the harbor mystery very gentle.",
+    )
+    source_pitch = generated.snapshot.pitch_batches[0].pitches[1]
+
+    result = service.refine_pitch(
+        snapshot.id,
+        pitch_id=source_pitch.id,
+        instructions="Make it about siblings who help each other settle down.",
+    )
+
+    assert result.snapshot.current_stage == WorkflowStage.CHARACTERS
+    assert result.snapshot.resume_stage == WorkflowStage.CHARACTERS
+    assert result.snapshot.selected_pitch is not None
+    assert result.snapshot.selected_pitch.id != source_pitch.id
+    assert result.snapshot.selected_pitch.generation_kind == "refinement"
+    assert result.snapshot.selected_pitch.source_pitch_id == source_pitch.id
+    assert result.snapshot.selected_pitch.source_pitch_title == source_pitch.title
+    assert (
+        result.snapshot.selected_pitch.refinement_instructions
+        == "Make it about siblings who help each other settle down."
+    )
+    assert "Refined from" in (result.snapshot.selected_pitch.selection_rationale or "")
+    assert result.snapshot.pitch_batches[0].generation_kind == "refinement"
+    assert result.snapshot.pitch_batches[0].candidate_count == 1
+    assert result.snapshot.pitch_batches[0].source_pitch_title == source_pitch.title
+    assert len(result.snapshot.pitch_batches) == 2
+    assert result.event.payload is not None
+    assert result.event.payload.rationale is not None
+    assert source_pitch.title in result.event.payload.rationale
+
+    history = service.load_session_history(snapshot.id)
+    assert history.events[-2].event_type == "ai.output.recorded"
+    assert history.events[-1].event_type == "selection.recorded"
+
+
 def test_update_stage_state_records_event_history_and_stage_last_event(db_session) -> None:
     service = SessionService(db_session)
     snapshot = service.create_session(working_title="Timeline Check")

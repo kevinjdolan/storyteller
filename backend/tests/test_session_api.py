@@ -676,6 +676,73 @@ def test_select_session_pitch_endpoint_marks_choice_and_advances_to_characters(
     assert payload["snapshot"]["stage_states"][3]["status"] == "completed"
 
 
+def test_refine_session_pitch_endpoint_creates_a_selected_refined_pitch(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Pitch Refinement API"},
+    ).json()
+
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/genre",
+            json={"genre_slug": "quest-fantasy", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/selections/tone",
+            json={"tone_profile_slug": "hushed-wonder", "origin": "workspace"},
+        ).status_code
+        == 200
+    )
+    assert (
+        session_api_client.post(
+            f"/api/v1/sessions/{created['id']}/story-brief",
+            json={
+                "story_idea": (
+                    "A child follows floating lanterns through a harbor and helps a shy otter "
+                    "guardian guide each light back to bed."
+                ),
+                "origin": "workspace",
+            },
+        ).status_code
+        == 200
+    )
+    generated = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/generate",
+        json={"candidate_count": 3, "origin": "workspace"},
+    ).json()
+    source_pitch = generated["snapshot"]["pitch_batches"][0]["pitches"][1]
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/pitches/refine",
+        json={
+            "pitch_id": source_pitch["id"],
+            "instructions": "Make it about siblings who help each other settle down.",
+            "origin": "chat",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["event"]["event_type"] == "selection.recorded"
+    assert payload["event"]["payload"]["selection_kind"] == "pitch"
+    assert "Refined from" in payload["event"]["payload"]["rationale"]
+    assert payload["snapshot"]["current_stage"] == "characters"
+    assert payload["snapshot"]["selected_pitch"]["generation_kind"] == "refinement"
+    assert payload["snapshot"]["selected_pitch"]["source_pitch_id"] == source_pitch["id"]
+    assert payload["snapshot"]["selected_pitch"]["refinement_instructions"] == (
+        "Make it about siblings who help each other settle down."
+    )
+    assert payload["snapshot"]["pitch_batches"][0]["generation_kind"] == "refinement"
+    assert payload["snapshot"]["pitch_batches"][0]["source_pitch_title"] == source_pitch["title"]
+
+
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
     session_api_client: TestClient,
 ) -> None:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.brief_normalization import NormalizedBriefPreferences
 
 PITCH_GENERATION_SCHEMA_VERSION = 1
-PITCH_GENERATION_PROMPT_VERSION = "pitch_generation.v1"
+PITCH_GENERATION_PROMPT_VERSION = "pitch_generation.v2"
 
 
 def normalize_optional_pitch_text(value: str | None) -> str | None:
@@ -54,7 +54,8 @@ class GeneratedPitchCandidate(BaseModel):
 class PitchGenerationPromptContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    candidate_count: int = Field(default=3, ge=2, le=6)
+    candidate_count: int = Field(default=3, ge=1, le=6)
+    generation_goal: Literal["alternatives", "refinement"] = "alternatives"
     guidance: str | None = None
     genre_label: str | None = None
     genre_description: str | None = None
@@ -98,6 +99,14 @@ class PitchGenerationPromptContext(BaseModel):
         if value is None:
             return None
         return normalize_optional_pitch_text(str(value))
+
+    @model_validator(mode="after")
+    def validate_candidate_count(self) -> PitchGenerationPromptContext:
+        if self.generation_goal == "refinement" and self.candidate_count < 1:
+            raise ValueError("pitch refinements require at least one candidate")
+        if self.generation_goal != "refinement" and self.candidate_count < 2:
+            raise ValueError("pitch batches require at least two candidates")
+        return self
 
 
 class PitchGenerationStructuredOutput(BaseModel):

@@ -210,6 +210,55 @@ def test_policy_escalates_story_setup_edits_when_an_active_composition_job_would
     assert applied_item.decision == SessionActionDecision.ACCEPTED_WITH_SIDE_EFFECTS
 
 
+def test_policy_requires_confirmation_for_pitch_refinement_and_resolves_source_pitch(
+    db_session,
+) -> None:
+    catalog = _seed_catalog(db_session)
+    seeded = _create_story_setup_session(db_session, catalog)
+    request = SessionActionPolicyEvaluationRequest.model_validate(
+        {
+            "actions": [
+                {
+                    "action": {
+                        "schema_version": 1,
+                        "action_type": "refine_pitch",
+                        "target_stage": "pitches",
+                        "confidence": 0.9,
+                        "rationale": "The user asked to turn the pitch into a sibling story.",
+                        "requires_confirmation": True,
+                        "extracted_values": {
+                            "pitch_index": 1,
+                            "instructions": "Make it about siblings.",
+                        },
+                    }
+                }
+            ]
+        }
+    )
+
+    preview = SessionActionPolicyService(db_session).evaluate_request(
+        seeded["session_id"],
+        request=request,
+    )
+    confirmed = SessionActionPolicyEvaluationRequest.model_validate(
+        {
+            "actions": [
+                {
+                    **request.model_dump(mode="json")["actions"][0],
+                    "confirmation_granted": True,
+                }
+            ]
+        }
+    )
+    applied = SessionActionPolicyService(db_session).evaluate_request(
+        seeded["session_id"],
+        request=confirmed,
+    )
+
+    assert preview.evaluated_actions[0].decision == SessionActionDecision.REQUIRES_CONFIRMATION
+    assert applied.evaluated_actions[0].decision == SessionActionDecision.ACCEPTED_WITH_SIDE_EFFECTS
+
+
 def test_policy_rejects_audio_generation_when_story_text_is_not_ready(db_session) -> None:
     catalog = _seed_catalog(db_session)
     seeded = _create_story_setup_session(

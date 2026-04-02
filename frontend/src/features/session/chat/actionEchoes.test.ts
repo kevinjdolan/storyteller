@@ -217,4 +217,47 @@ describe('actionEchoes', () => {
       }),
     )
   })
+
+  it('includes pitch refinement rationale in selection echoes when present', () => {
+    const messages = buildSessionChatMessagesFromHistory(
+      {
+        session_id: 'session-123',
+        latest_sequence_number: 1,
+        events: [
+          {
+            id: 'event-1',
+            session_id: 'session-123',
+            sequence_number: 1,
+            actor: {
+              actor_type: 'user',
+              actor_id: 'local-user',
+            },
+            event_type: 'selection.recorded',
+            stage: 'pitches',
+            summary: 'Selected pitch: Lanterns Over Juniper Lake: Siblings.',
+            payload: {
+              schema_version: 1,
+              selection_kind: 'pitch',
+              label: 'Lanterns Over Juniper Lake: Siblings',
+              accepted: true,
+              source: 'chat',
+              rationale:
+                'Refined from Lanterns Over Juniper Lake. Make it about siblings who help each other settle down.',
+            },
+            created_at: '2026-04-01T08:14:00Z',
+          },
+        ],
+      },
+      {
+        resume_stage: 'pitches',
+      } as never,
+    )
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: 'action_echo',
+        body: 'Selected pitch: Lanterns Over Juniper Lake: Siblings. Refined from Lanterns Over Juniper Lake. Make it about siblings who help each other settle down.',
+      }),
+    )
+  })
 })

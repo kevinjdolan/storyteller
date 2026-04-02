@@ -21,10 +21,17 @@ type SessionChatPaneProps = {
   disabledReason?: string | null
   isBusy?: boolean
   messages: ReadonlyArray<SessionChatMessage>
+  onConfirmPendingAction?: (actionId: string) => Promise<void> | void
+  onDismissPendingAction?: (actionId: string) => void
   onQuickAction?: (
     commandId: SessionChatQuickAction['commandId'],
   ) => Promise<void> | void
   onSubmit: (message: string) => Promise<void> | void
+  pendingConfirmations?: ReadonlyArray<{
+    id: string
+    title: string
+    summary: string
+  }>
   quickActions?: ReadonlyArray<SessionChatQuickAction>
   slashCommandHint?: string | null
 }
@@ -101,8 +108,11 @@ export function SessionChatPane({
   disabledReason = null,
   isBusy = false,
   messages,
+  onConfirmPendingAction,
+  onDismissPendingAction,
   onQuickAction,
   onSubmit,
+  pendingConfirmations = [],
   quickActions = [],
   slashCommandHint = null,
 }: SessionChatPaneProps) {
@@ -200,6 +210,32 @@ export function SessionChatPane({
     }
   }
 
+  async function runPendingConfirmation(actionId: string) {
+    if (
+      isSubmitting ||
+      disabledReason != null ||
+      onConfirmPendingAction == null
+    ) {
+      return
+    }
+
+    setSubmissionError(null)
+    setIsSubmitting(true)
+
+    try {
+      await onConfirmPendingAction(actionId)
+      shouldStickToBottomRef.current = true
+    } catch (error) {
+      setSubmissionError(
+        error instanceof Error
+          ? error.message
+          : 'The chat-requested change could not be confirmed right now.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const composerHint = getComposerHint({
     disabledReason,
     isBusy,
@@ -253,6 +289,50 @@ export function SessionChatPane({
           )
         })}
       </ol>
+
+      {pendingConfirmations.length > 0 ? (
+        <section className="workspace-chat-pending">
+          <div className="workspace-chat-pending__header">
+            <strong>Pending confirmations</strong>
+            <p>
+              Apply the chat-requested change once the summary looks correct.
+            </p>
+          </div>
+          <div className="workspace-chat-pending__list">
+            {pendingConfirmations.map((confirmation) => (
+              <article
+                key={confirmation.id}
+                className="workspace-chat-pending__item"
+              >
+                <div className="workspace-chat-pending__copy">
+                  <strong>{confirmation.title}</strong>
+                  <p>{confirmation.summary}</p>
+                </div>
+                <div className="cta-row">
+                  <Button
+                    disabled={composerIsDisabled}
+                    onClick={() => {
+                      void runPendingConfirmation(confirmation.id)
+                    }}
+                    tone="primary"
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    disabled={composerIsDisabled}
+                    onClick={() => {
+                      onDismissPendingAction?.(confirmation.id)
+                    }}
+                    tone="ghost"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <form className="workspace-chat-composer" onSubmit={handleSubmit}>
         <div className="workspace-chat-composer__header">

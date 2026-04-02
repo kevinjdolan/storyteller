@@ -16,7 +16,7 @@ from app.models.chat_actions import (
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 INTENT_PARSER_SCHEMA_VERSION = 1
-INTENT_PARSER_PROMPT_VERSION = "intent_parser.v1"
+INTENT_PARSER_PROMPT_VERSION = "intent_parser.v2"
 EXPLICIT_CHAT_COMMAND_PROMPT_VERSION = "explicit_command.v1"
 EXPLICIT_CHAT_COMMAND_MODEL_ID = "deterministic-command-map"
 

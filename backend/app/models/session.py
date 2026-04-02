@@ -64,6 +64,11 @@ class PitchView(BaseModel):
     logline: str
     summary: str | None = None
     bedtime_notes: str | None = None
+    generation_kind: str = "generated"
+    source_pitch_id: str | None = None
+    source_pitch_title: str | None = None
+    refinement_instructions: str | None = None
+    selection_rationale: str | None = None
     is_selected: bool = False
     accepted_at: datetime | None = None
     created_at: datetime
@@ -74,6 +79,12 @@ class PitchBatchView(BaseModel):
     generation_key: str
     candidate_count: int
     created_at: datetime
+    generation_kind: str = "generated"
+    guidance: str | None = None
+    source_pitch_id: str | None = None
+    source_pitch_title: str | None = None
+    source_generation_key: str | None = None
+    refinement_instructions: str | None = None
     pitches: list[PitchView] = Field(default_factory=list)
 
 
@@ -259,6 +270,29 @@ class SelectSessionPitchRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_selector(self) -> "SelectSessionPitchRequest":
+        selectors = [
+            self.pitch_id,
+            self.generation_key,
+            self.pitch_index,
+            self.title,
+        ]
+        selected_count = sum(value is not None for value in selectors)
+        if selected_count == 0:
+            raise ValueError("one of pitch_id, generation_key, pitch_index, or title is required")
+
+        return self
+
+
+class RefineSessionPitchRequest(BaseModel):
+    pitch_id: str | None = Field(default=None, min_length=1)
+    generation_key: str | None = Field(default=None, min_length=1)
+    pitch_index: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1)
+    instructions: str = Field(min_length=1)
+    origin: str = Field(default="workspace", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "RefineSessionPitchRequest":
         selectors = [
             self.pitch_id,
             self.generation_key,

@@ -83,6 +83,11 @@ export type PitchView = {
   logline: string
   summary?: string | null
   bedtime_notes?: string | null
+  generation_kind?: string
+  source_pitch_id?: string | null
+  source_pitch_title?: string | null
+  refinement_instructions?: string | null
+  selection_rationale?: string | null
   is_selected?: boolean
   accepted_at?: string | null
   created_at?: string
@@ -93,6 +98,12 @@ export type PitchBatchView = {
   generation_key: string
   candidate_count: number
   created_at: string
+  generation_kind?: string
+  guidance?: string | null
+  source_pitch_id?: string | null
+  source_pitch_title?: string | null
+  source_generation_key?: string | null
+  refinement_instructions?: string | null
   pitches: PitchView[]
 }
 
@@ -352,6 +363,15 @@ export type SelectSessionPitchRequest = {
   origin?: string
 }
 
+export type RefineSessionPitchRequest = {
+  pitch_id?: string | null
+  generation_key?: string | null
+  pitch_index?: number | null
+  title?: string | null
+  instructions: string
+  origin?: string
+}
+
 export type SessionPitchGenerationResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
@@ -421,6 +441,16 @@ export function selectSessionPitch(
 ) {
   return postJson<SessionPitchGenerationResponse>(
     `/api/v1/sessions/${sessionId}/selections/pitch`,
+    body,
+  )
+}
+
+export function refineSessionPitch(
+  sessionId: string,
+  body: RefineSessionPitchRequest,
+) {
+  return postJson<SessionPitchGenerationResponse>(
+    `/api/v1/sessions/${sessionId}/pitches/refine`,
     body,
   )
 }

@@ -138,7 +138,10 @@ export function buildInitialSessionChatMessages(
       createSessionChatMessage({
         id: 'accepted-pitch',
         role: 'assistant',
-        body: `Accepted pitch: ${snapshot.selected_pitch.title}. ${snapshot.selected_pitch.logline}`,
+        body:
+          snapshot.selected_pitch.selection_rationale != null
+            ? `Accepted pitch: ${snapshot.selected_pitch.title}. ${snapshot.selected_pitch.selection_rationale}`
+            : `Accepted pitch: ${snapshot.selected_pitch.title}. ${snapshot.selected_pitch.logline}`,
         createdAt: getStageTimestamp(snapshot, 'pitches'),
       }),
     )

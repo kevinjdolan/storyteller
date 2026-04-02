@@ -36,6 +36,19 @@ describe('chatToUiActions', () => {
         },
         {
           schema_version: 1,
+          action_type: 'refine_pitch',
+          target_stage: 'pitches',
+          confidence: 0.88,
+          rationale:
+            'The user wants pitch two to become a calmer sibling story.',
+          requires_confirmation: true,
+          extracted_values: {
+            pitch_index: 2,
+            instructions: 'Make pitch two about siblings who help each other.',
+          },
+        },
+        {
+          schema_version: 1,
           action_type: 'update_audio_settings',
           target_stage: 'audio',
           confidence: 0.69,
@@ -50,7 +63,7 @@ describe('chatToUiActions', () => {
     })
 
     expect(batch).not.toBeNull()
-    expect(batch?.actions).toHaveLength(3)
+    expect(batch?.actions).toHaveLength(4)
     expect(batch?.actions[0]).toMatchObject({
       action_type: 'select_genre',
       target_stage: 'genre',
@@ -59,6 +72,13 @@ describe('chatToUiActions', () => {
       },
     })
     expect(batch?.actions[2]).toMatchObject({
+      action_type: 'refine_pitch',
+      extracted_values: {
+        pitch_index: 2,
+        instructions: 'Make pitch two about siblings who help each other.',
+      },
+    })
+    expect(batch?.actions[3]).toMatchObject({
       action_type: 'update_audio_settings',
       extracted_values: {
         playback_speed: 0.9,

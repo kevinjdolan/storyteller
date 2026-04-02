@@ -95,6 +95,7 @@ function buildSelectionEcho(event: SessionHistoryEvent) {
     readString(event.payload, 'slug') ??
     readString(event.payload, 'selection_id') ??
     'selection'
+  const rationale = readString(event.payload, 'rationale')
   const accepted = readBoolean(event.payload, 'accepted') ?? true
 
   if (!accepted) {
@@ -110,7 +111,9 @@ function buildSelectionEcho(event: SessionHistoryEvent) {
   }
 
   if (selectionKind === 'pitch') {
-    return `Selected pitch: ${label}`
+    return rationale != null
+      ? `Selected pitch: ${label}. ${rationale}`
+      : `Selected pitch: ${label}`
   }
 
   if (selectionKind === 'character_sheet') {
@@ -219,6 +222,8 @@ function describeActionIntent(action: ChatToUiAction) {
       return 'update the story brief'
     case 'regenerate_pitches':
       return 'refresh the pitch options'
+    case 'refine_pitch':
+      return 'refine the selected pitch'
     case 'select_pitch':
       return 'change the selected pitch'
     case 'select_character_sheet':

@@ -8,6 +8,7 @@ export const chatToUiActionTypes = [
   'select_tone',
   'update_story_brief',
   'regenerate_pitches',
+  'refine_pitch',
   'select_pitch',
   'select_character_sheet',
   'refine_character_sheet',
@@ -34,6 +35,7 @@ export const chatToUiActionDefaultPolicies = {
   select_tone: 'confirm_first',
   update_story_brief: 'auto_apply_candidate',
   regenerate_pitches: 'confirm_first',
+  refine_pitch: 'confirm_first',
   select_pitch: 'confirm_first',
   select_character_sheet: 'confirm_first',
   refine_character_sheet: 'confirm_first',
@@ -95,6 +97,14 @@ export type RegeneratePitchesValues = {
   candidate_count?: number | null
   guidance?: string | null
   preserve_selected_pitch: boolean
+}
+
+export type RefinePitchValues = {
+  pitch_id?: string | null
+  generation_key?: string | null
+  pitch_index?: number | null
+  title?: string | null
+  instructions: string
 }
 
 export type SelectPitchValues = {
@@ -229,6 +239,13 @@ export type RegeneratePitchesAction = ChatToUiActionBase<
   target_stage: 'pitches'
 }
 
+export type RefinePitchAction = ChatToUiActionBase<
+  'refine_pitch',
+  RefinePitchValues
+> & {
+  target_stage: 'pitches'
+}
+
 export type SelectPitchAction = ChatToUiActionBase<
   'select_pitch',
   SelectPitchValues
@@ -347,6 +364,7 @@ export type ChatToUiAction =
   | SelectToneAction
   | UpdateStoryBriefAction
   | RegeneratePitchesAction
+  | RefinePitchAction
   | SelectPitchAction
   | SelectCharacterSheetAction
   | RefineCharacterSheetAction
@@ -657,6 +675,33 @@ function parseChatToUiAction(record: JsonRecord): ChatToUiAction | null {
             false,
         },
       }
+    }
+
+    case 'refine_pitch': {
+      if (base.target_stage !== 'pitches') {
+        return null
+      }
+
+      const instructions = readRequiredString(extractedValues, 'instructions')
+      const values: Omit<RefinePitchValues, 'instructions'> = {
+        pitch_id: readOptionalString(extractedValues, 'pitch_id'),
+        generation_key: readOptionalString(extractedValues, 'generation_key'),
+        pitch_index: readOptionalInteger(extractedValues, 'pitch_index'),
+        title: readOptionalString(extractedValues, 'title'),
+      }
+
+      return instructions != null && hasAnyDefined(Object.values(values))
+        ? {
+            ...base,
+            schema_version: CHAT_TO_UI_ACTION_SCHEMA_VERSION,
+            action_type: 'refine_pitch',
+            target_stage: 'pitches',
+            extracted_values: {
+              ...values,
+              instructions,
+            },
+          }
+        : null
     }
 
     case 'select_pitch': {

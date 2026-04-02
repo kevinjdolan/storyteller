@@ -138,6 +138,7 @@ class PitchGenerationService:
         self,
         *,
         candidate_count: int,
+        generation_goal: str = "alternatives",
         raw_brief: str,
         genre_label: str | None = None,
         genre_description: str | None = None,
@@ -158,6 +159,7 @@ class PitchGenerationService:
     ) -> PitchGenerationResult:
         context = PitchGenerationPromptContext(
             candidate_count=candidate_count,
+            generation_goal=generation_goal,
             guidance=guidance,
             genre_label=genre_label,
             genre_description=genre_description,
@@ -326,6 +328,9 @@ def _build_heuristic_result(
 def _build_heuristic_pitches(
     context: PitchGenerationPromptContext,
 ) -> list[GeneratedPitchCandidate]:
+    if context.generation_goal == "refinement" and context.selected_pitch is not None:
+        return _build_heuristic_refined_pitches(context)
+
     protagonist = (
         context.normalized_preferences.protagonist_type
         or context.story_idea
@@ -384,6 +389,57 @@ def _build_heuristic_pitches(
     return candidates
 
 
+def _build_heuristic_refined_pitches(
+    context: PitchGenerationPromptContext,
+) -> list[GeneratedPitchCandidate]:
+    assert context.selected_pitch is not None
+
+    source_pitch = context.selected_pitch
+    guidance = context.guidance or "Keep the pitch bedtime-safe while preserving its core premise."
+    protagonist = (
+        context.normalized_preferences.protagonist_type
+        or context.story_idea
+        or _extract_subject_phrase(context.raw_brief)
+        or "A gentle bedtime hero"
+    )
+    setting = (
+        context.normalized_preferences.setting
+        or _extract_setting_phrase(context.raw_brief)
+        or "a calm night landscape"
+    )
+    source_title_core = re.sub(r"^The\s+", "", source_pitch.title).strip()
+    title_suffix = _extract_candidate_phrases(guidance)[:1]
+    title = (
+        f"{source_title_core}: {_title_case_phrase(title_suffix[0])}"
+        if title_suffix
+        else f"{source_title_core}: Softened"
+    )
+    hook = (
+        f"{source_pitch.hook} This refinement keeps the same bedtime lane while applying: "
+        f"{guidance}."
+    )
+    conflict = (
+        source_pitch.central_conflict
+        or (
+            f"{protagonist} must solve one gentle nighttime problem in "
+            f"{setting} before rest can return."
+        )
+    )
+    fit = (
+        f"This refinement preserves the core appeal of {source_pitch.title} while applying the "
+        f"requested change: {guidance}."
+    )
+
+    return [
+        GeneratedPitchCandidate(
+            title=title,
+            hook=hook,
+            central_conflict=conflict,
+            why_it_fits=fit,
+        )
+    ]
+
+
 def _build_validation_failure_reason(evaluation: PitchBatchEvaluation) -> str:
     failed = [criterion.name for criterion in evaluation.criteria if not criterion.passed]
     return "generated pitches failed validation: " + ", ".join(failed)
@@ -400,6 +456,13 @@ def _build_title(motif: str, suffix: str) -> str:
     ]
     title_core = " ".join(title_words[:3]) or "Quiet Light"
     return f"The {title_core} {suffix}"
+
+
+def _title_case_phrase(value: str) -> str:
+    words = [word for word in re.split(r"\s+", value.strip()) if word]
+    if not words:
+        return "Softened"
+    return " ".join(word.capitalize() for word in words[:4])
 
 
 def _collect_motifs(context: PitchGenerationPromptContext) -> list[str]:
