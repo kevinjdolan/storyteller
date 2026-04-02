@@ -7,7 +7,13 @@ from app.ai import IntentParserTransportError
 from app.db import (
     Base,
     CharacterSheet,
+    CompositionInterruptionKind,
+    CompositionInterruptionRequest,
+    CompositionInterruptionState,
+    CompositionJob,
+    CompositionJobKind,
     Genre,
+    JobStatus,
     Pitch,
     StoryBrief,
     StorySession,
@@ -16,6 +22,7 @@ from app.db import (
 )
 from app.models import (
     ChatToUIActionType,
+    ExplicitChatCommandRequest,
     IntentParserStatus,
     IntentParserStructuredOutput,
     SessionActionDecision,
@@ -282,6 +289,57 @@ def test_intent_parser_service_includes_latest_character_options_in_prompt_summa
     assert "Rev 2: Lantern Keeper Cast" in adapter.invocations[0].rendered_prompt
 
 
+def test_explicit_plan_summary_includes_pending_composition_interruption(
+    db_session,
+) -> None:
+    session_id = _create_beats_session(db_session)
+    composition_job = CompositionJob(
+        session_id=session_id,
+        job_kind=CompositionJobKind.DRAFT,
+        status=JobStatus.IN_PROGRESS,
+        progress_percent=42,
+        current_segment_index=2,
+        metadata_json={"total_segments": 3},
+        started_at=datetime.now(timezone.utc),
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+    db_session.add(
+        CompositionInterruptionRequest(
+            session_id=session_id,
+            composition_job_id=composition_job.id,
+            request_kind=CompositionInterruptionKind.REDIRECT,
+            state=CompositionInterruptionState.REQUESTED,
+            origin="workspace",
+            instructions="Introduce the otter earlier and keep the midpoint reassuring.",
+            rewrite_from_segment_index=2,
+            requested_status=JobStatus.IN_PROGRESS,
+            requested_segment_index=2,
+            requested_progress_percent=42,
+        )
+    )
+    db_session.commit()
+
+    result = SessionIntentParserService(db_session).parse_user_message(
+        session_id,
+        message="/plan",
+        explicit_command=ExplicitChatCommandRequest.model_validate(
+            {
+                "command_id": "summarize_plan",
+                "source": "slash_command",
+                "proposed_actions": {"actions": []},
+            }
+        ),
+    )
+
+    assert result.status == IntentParserStatus.PARSED
+    assert (
+        "Rewrite requested from segment 2. The current chunk will finish "
+        "saving before the redirect applies."
+        in result.assistant_response
+    )
+
+
 def _create_beats_session(db_session) -> str:
     genre = Genre(
         slug="quest-fantasy",
@@ -382,8 +440,12 @@ def _create_beats_session(db_session) -> str:
                         "candidate_index": 2,
                     },
                     "refinement": {
-                        "selection_rationale": "Refined from Harbor Listener Cast with a calmer lead voice.",
-                        "change_summary": "Keep the same harbor arc but make the comfort ritual clearer.",
+                        "selection_rationale": (
+                            "Refined from Harbor Listener Cast with a calmer lead voice."
+                        ),
+                        "change_summary": (
+                            "Keep the same harbor arc but make the comfort ritual clearer."
+                        ),
                         "change_impact": "minor",
                     },
                 },
