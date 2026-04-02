@@ -71,9 +71,10 @@
     "68-autosave-drafts-and-partials.md",
     "69-composition-loop-e2e-test.md",
     "70-audio-settings-model-and-ui.md",
-    "71-audio-length-estimation.md"
+    "71-audio-length-estimation.md",
+    "72-narration-segmentation.md"
   ],
-  "current_success_ref": "7ff1cd9528f3b0acf9ed57e2576c25b65d9eb838",
+  "current_success_ref": "9310192b04184a32e152b9038f105acc848921d6",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
