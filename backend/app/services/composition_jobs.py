@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any, Protocol
 
 from sqlalchemy import Select, select
@@ -38,6 +38,10 @@ from app.models import (
 )
 from app.services.assets import SessionAssetService
 from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
+from app.services.composition_streaming import (
+    build_accepted_story_so_far,
+    split_text_for_streaming,
+)
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.jobs import BackgroundJobService
 from app.services.model_usage import ModelUsageContext, SessionModelUsageService
@@ -441,6 +445,7 @@ class CompositionJobService:
         self,
         session: Session,
         *,
+        chunk_delay_seconds: float = 0.0,
         object_storage: ObjectStorageService | None = None,
         writer: CompositionSegmentWriter | None = None,
     ) -> None:
@@ -451,6 +456,7 @@ class CompositionJobService:
         self._plan_revisions = PlanRevisionService(session)
         self._prompt_assembly = CompositionPromptAssemblyService(session)
         self._assets = SessionAssetService(session)
+        self._chunk_delay_seconds = max(chunk_delay_seconds, 0.0)
         self._object_storage = object_storage
         self._writer = writer or HeuristicCompositionSegmentWriter()
 
@@ -492,6 +498,18 @@ class CompositionJobService:
         if plan_revision is None:
             raise CompositionJobStateError("composition requires a current plan revision")
 
+        prior_completed_segments = self._latest_completed_segments(
+            session_id,
+            before_segment_index=start_segment_index,
+        )
+        prior_story_text = build_accepted_story_so_far(
+            [row.accepted_text or row.text_content or "" for row in prior_completed_segments]
+        )
+        prior_segment_summary = (
+            _resolve_segment_summary(prior_completed_segments[-1])
+            if prior_completed_segments
+            else None
+        )
         total_segments = total_outline_segments - start_segment_index + 1
         beat_sheet_id = snapshot.selected_beat_sheet.id
         story_setup_id = snapshot.selected_story_setup.id
@@ -508,6 +526,8 @@ class CompositionJobService:
                 "orchestration_version": "composition_job.v1",
                 "start_segment_index": start_segment_index,
                 "total_segments": total_segments,
+                "accepted_story_so_far": prior_story_text,
+                "latest_segment_summary": prior_segment_summary,
                 "latest_partial_output": None,
                 "request_instructions": instructions,
             },
@@ -834,6 +854,10 @@ class CompositionJobService:
             job.session_id,
             before_segment_index=current_segment.segment_index,
         )
+        job.metadata_json = {
+            **_read_metadata(job),
+            "accepted_story_so_far": build_accepted_story_so_far(completed_segments),
+        }
         draft_started_at = perf_counter()
         draft = self._writer.compose_segment(
             segment_payload=refreshed_payload,
@@ -870,6 +894,10 @@ class CompositionJobService:
             )
             job.metadata_json = {
                 **_read_metadata(job),
+                "accepted_story_so_far": build_accepted_story_so_far(
+                    completed_segments,
+                    current_text,
+                ),
                 "latest_partial_output": current_text,
                 "current_segment_id": current_segment.id,
             }
@@ -942,6 +970,9 @@ class CompositionJobService:
                     "action": "cancelled",
                 }
 
+            if self._chunk_delay_seconds > 0 and chunk_index < chunk_count:
+                sleep(self._chunk_delay_seconds)
+
         current_segment.accepted_text = draft.accepted_text
         current_segment.text_content = draft.accepted_text
         current_segment.word_count = _count_words(draft.accepted_text)
@@ -1004,6 +1035,8 @@ class CompositionJobService:
             job.completed_at = utc_now()
             job.metadata_json = {
                 **_read_metadata(job),
+                "accepted_story_so_far": story_text,
+                "latest_segment_summary": current_segment.accepted_summary,
                 "latest_partial_output": story_text,
                 "current_segment_id": current_segment.id,
             }
@@ -1040,6 +1073,11 @@ class CompositionJobService:
         )
         job.metadata_json = {
             **_read_metadata(job),
+            "accepted_story_so_far": build_accepted_story_so_far(
+                completed_segments,
+                current_segment.accepted_text,
+            ),
+            "latest_segment_summary": current_segment.accepted_summary,
             **_read_job_prompt_metadata(_read_mapping(next_segment.payload)),
             "latest_partial_output": current_segment.accepted_text,
             "current_segment_id": next_segment.id,
@@ -1264,13 +1302,12 @@ class CompositionJobService:
 
     def _compile_story_text(self, session_id: str) -> str:
         completed_segments = self._latest_completed_segment_texts(session_id)
-        if not completed_segments:
+        compiled_text = build_accepted_story_so_far(completed_segments)
+        if compiled_text is None:
             raise CompositionJobStateError(
                 "cannot finalize a composition job without completed text"
             )
-        return "\n\n".join(
-            segment.strip() for segment in completed_segments if segment.strip()
-        ).strip()
+        return compiled_text
 
     def _replace_prior_segment_revision(self, segment: CompositionSegment) -> None:
         stmt = select(CompositionSegment).where(
@@ -1472,17 +1509,7 @@ def _completed_segment_progress_percent(
 
 
 def _split_remaining_text(prefix: str, remaining_text: str) -> list[str]:
-    if not remaining_text:
-        return []
-
-    paragraphs = [paragraph for paragraph in remaining_text.split("\n\n") if paragraph.strip()]
-    chunks: list[str] = []
-    for paragraph in paragraphs:
-        if chunks:
-            chunks.append(f"\n\n{paragraph}")
-        else:
-            chunks.append(paragraph if not prefix else paragraph)
-    return chunks
+    return split_text_for_streaming(prefix, remaining_text)
 
 
 def _extract_last_sentence(text: str) -> str | None:

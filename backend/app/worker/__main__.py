@@ -51,7 +51,10 @@ def main() -> None:
     try:
         worker = JobWorker(
             session_factory=get_session_factory(),
-            registry=build_default_job_handler_registry(object_storage=object_storage),
+            registry=build_default_job_handler_registry(
+                composition_chunk_delay_seconds=0.12,
+                object_storage=object_storage,
+            ),
             worker_id=args.worker_id or f"worker-{socket.gethostname()}",
             lease_duration=timedelta(seconds=args.lease_duration_seconds),
             poll_interval_seconds=args.poll_interval_seconds,

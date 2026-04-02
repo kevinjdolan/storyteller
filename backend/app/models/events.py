@@ -136,8 +136,10 @@ class UserEditRecordedEventPayload(EventPayload):
 class ChatMessageRecordedEventPayload(EventPayload):
     message_role: ChatMessageRole
     message_id: str | None = None
+    content: str | None = None
     content_preview: str
     content_length: int
+    content_format: str = "plain_text"
     source: str = "chat"
 
 

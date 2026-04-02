@@ -51,6 +51,7 @@ from app.services import (
     get_story_workflow_tool_schema_bundle,
 )
 from app.services.composition_jobs import GeneratedCompositionSegmentDraft
+from app.services.composition_streaming import split_text_for_streaming
 from app.settings import load_settings
 from app.storage import ObjectStorageService, StorageObjectLocation, build_object_storage_service
 from app.worker import JobWorker, build_default_job_handler_registry
@@ -880,6 +881,20 @@ def test_composition_job_service_resume_does_not_duplicate_runtime_attempts(
     assert composition_job is not None
     assert composition_job.status == JobStatus.QUEUED
     assert len(pending_for_job) == 1
+
+
+def test_split_text_for_streaming_preserves_exact_story_text() -> None:
+    text = (
+        "Mira followed the bell through the harbor while the docks stayed soft and silver. "
+        "Pip kept close enough to answer every worry before it could grow.\n\n"
+        "By the time they reached the quieter cove, the water itself sounded sleepy."
+    )
+
+    chunks = split_text_for_streaming("", text)
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == text
+    assert all(chunk for chunk in chunks)
 
 
 def test_composition_job_service_carries_forward_structured_segment_summaries(

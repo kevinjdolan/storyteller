@@ -286,7 +286,9 @@ class CompositionJobView(BaseModel):
     story_outline_revision_number: int | None = None
     current_segment_id: str | None = None
     current_segment_index: int | None = None
+    accepted_story_so_far: str | None = None
     latest_partial_output: str | None = None
+    latest_segment_summary: str | None = None
     attempt_count: int
     stop_reason: str | None = None
     error_message: str | None = None

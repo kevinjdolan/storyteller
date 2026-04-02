@@ -301,8 +301,10 @@ class SessionEventLogService:
             payload=ChatMessageRecordedEventPayload(
                 message_role=message_role,
                 message_id=message_id,
+                content=normalized_content,
                 content_preview=_truncate_preview(normalized_content),
                 content_length=len(normalized_content),
+                content_format="plain_text",
                 source=source,
             ),
         )

@@ -20,6 +20,7 @@ from app.worker.runtime import JobExecutionContext
 
 def build_default_job_handler_registry(
     *,
+    composition_chunk_delay_seconds: float = 0.0,
     object_storage: ObjectStorageService | None = None,
     composition_writer: CompositionSegmentWriter | None = None,
 ) -> JobHandlerRegistry:
@@ -34,6 +35,7 @@ def build_default_job_handler_registry(
     registry.register(
         COMPOSITION_RUNTIME_JOB_TYPE,
         build_composition_runtime_handler(
+            chunk_delay_seconds=composition_chunk_delay_seconds,
             object_storage=object_storage,
             composition_writer=composition_writer,
         ),
@@ -87,6 +89,7 @@ def build_story_workflow_tool_handler(job_type: str):
 
 def build_composition_runtime_handler(
     *,
+    chunk_delay_seconds: float = 0.0,
     object_storage: ObjectStorageService | None = None,
     composition_writer: CompositionSegmentWriter | None = None,
 ):
@@ -105,6 +108,7 @@ def build_composition_runtime_handler(
             return context.with_session(
                 lambda session: CompositionJobService(
                     session,
+                    chunk_delay_seconds=chunk_delay_seconds,
                     object_storage=object_storage,
                     writer=composition_writer,
                 ).run_job(
@@ -116,6 +120,7 @@ def build_composition_runtime_handler(
             context.with_session(
                 lambda session: CompositionJobService(
                     session,
+                    chunk_delay_seconds=chunk_delay_seconds,
                     object_storage=object_storage,
                     writer=composition_writer,
                 ).mark_job_failed(

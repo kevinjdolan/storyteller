@@ -1627,7 +1627,9 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
     )
     total_segments = _read_optional_mapping_int(metadata, "total_segments")
     current_segment_id = _read_optional_mapping_text(metadata, "current_segment_id")
+    accepted_story_so_far = _read_optional_mapping_text(metadata, "accepted_story_so_far")
     latest_partial_output = _read_optional_mapping_text(metadata, "latest_partial_output")
+    latest_segment_summary = _read_optional_mapping_text(metadata, "latest_segment_summary")
 
     return CompositionJobView(
         id=row.id,
@@ -1655,7 +1657,9 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         story_outline_revision_number=story_outline_revision_number,
         current_segment_id=current_segment_id,
         current_segment_index=row.current_segment_index,
+        accepted_story_so_far=accepted_story_so_far,
         latest_partial_output=latest_partial_output,
+        latest_segment_summary=latest_segment_summary,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,
         error_message=row.error_message,

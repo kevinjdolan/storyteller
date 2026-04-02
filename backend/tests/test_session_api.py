@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from app.db import Base, StorySession
+from app.db import Base, CompositionJob, CompositionSegment, JobStatus, StorySession
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.models import (
@@ -34,9 +34,11 @@ from app.models import (
 )
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.model_usage import ModelUsageContext, SessionModelUsageService
+from app.services.session_realtime import CompositionChunkCursor, SessionRealtimeService
 from app.services.sessions import SessionService
 from app.settings import get_settings
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 
 class StubBriefNormalizationAdapter:
@@ -1936,6 +1938,178 @@ def test_redirect_composition_endpoint_queues_rewrite_job(
     assert payload["job"]["job_kind"] == "rewrite"
     assert payload["job"]["current_segment_index"] == 2
     assert payload["event"]["payload"]["job_id"] == payload["job"]["id"]
+
+
+def test_session_events_websocket_replays_composition_job_status(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+    latest_sequence_number = session_api_client.get(
+        f"/api/v1/sessions/{session_id}/history?limit=1"
+    ).json()["latest_sequence_number"]
+
+    session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/start",
+        json={"mode": "fresh", "origin": "workspace"},
+    )
+
+    with session_api_client.websocket_connect("/api/v1/sessions/events/ws") as websocket:
+        websocket.send_json(
+            {
+                "schema_version": 1,
+                "action": "subscribe",
+                "session_id": session_id,
+                "tab_id": "tab-1",
+                "last_sequence_number": latest_sequence_number,
+            }
+        )
+        ack = websocket.receive_json()
+
+        replayed_job_status = None
+        for _ in range(3):
+            message = websocket.receive_json()
+            if message["type"] == "job.status" and message["payload"]["job_kind"] == "composition":
+                replayed_job_status = message
+                break
+
+    assert ack["action"] == "subscribed"
+    assert ack["channel"] == f"session:{session_id}"
+    assert replayed_job_status is not None
+    assert replayed_job_status["delivery"] == "replay"
+    assert replayed_job_status["payload"]["status"] == "queued"
+    assert replayed_job_status["payload"]["total_segments"] == 3
+
+
+def test_session_realtime_service_streams_composition_chunk_deltas(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+    start_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/start",
+        json={"mode": "fresh", "origin": "workspace"},
+    ).json()
+    composition_job_id = start_payload["job"]["id"]
+
+    with get_session_factory()() as db_session:
+        job = db_session.get(CompositionJob, composition_job_id)
+        segment = db_session.execute(
+            select(CompositionSegment)
+            .where(CompositionSegment.composition_job_id == composition_job_id)
+            .order_by(CompositionSegment.segment_index.asc())
+            .limit(1)
+        ).scalar_one()
+
+        assert job is not None
+        job.status = JobStatus.IN_PROGRESS
+        job.progress_percent = 12
+        job.metadata_json = {
+            **(job.metadata_json if isinstance(job.metadata_json, dict) else {}),
+            "accepted_story_so_far": "",
+            "latest_partial_output": "",
+            "current_segment_id": segment.id,
+        }
+        segment.status = JobStatus.IN_PROGRESS
+        db_session.commit()
+
+        realtime = SessionRealtimeService(db_session)
+        initial_events, cursor = realtime.read_composition_chunk_events(
+            session_id,
+            cursor=CompositionChunkCursor(),
+        )
+
+        streamed_text = (
+            "Mira followed the bell toward the quieter cove while Pip kept the "
+            "water calm and readable."
+        )
+        job.metadata_json = {
+            **(job.metadata_json if isinstance(job.metadata_json, dict) else {}),
+            "accepted_story_so_far": streamed_text,
+            "latest_partial_output": streamed_text,
+            "latest_segment_summary": (
+                "Segment 1 moved Mira into the quieter cove without losing the calm tone."
+            ),
+            "current_segment_id": segment.id,
+        }
+        segment.accepted_text = streamed_text
+        segment.text_content = streamed_text
+        db_session.commit()
+
+        streamed_events, next_cursor = realtime.read_composition_chunk_events(
+            session_id,
+            cursor=cursor,
+        )
+
+    delta_events = [
+        event
+        for event in streamed_events
+        if event.payload.chunk_kind.value == "delta"
+    ]
+    summary_events = [
+        event
+        for event in streamed_events
+        if event.payload.chunk_kind.value == "segment_summary"
+    ]
+
+    assert len(initial_events) == 1
+    assert initial_events[0].payload.chunk_kind.value == "segment_start"
+    assert delta_events
+    assert "".join(event.payload.text or "" for event in delta_events) == streamed_text
+    assert summary_events[0].payload.summary.startswith("Segment 1 moved Mira")
+    assert next_cursor.story_text == streamed_text
+
+
+def test_session_realtime_service_suppresses_initial_chunk_baseline_and_keeps_snapshot_recoverable(
+    session_api_client: TestClient,
+) -> None:
+    seeded = _create_composition_ready_session_via_api(session_api_client)
+    session_id = str(seeded["session_id"])
+    start_payload = session_api_client.post(
+        f"/api/v1/sessions/{session_id}/composition/start",
+        json={"mode": "fresh", "origin": "workspace"},
+    ).json()
+    composition_job_id = start_payload["job"]["id"]
+    accepted_story = (
+        "Draft segment 1 settles the harbor.\n\nMira followed the bell toward the quieter cove."
+    )
+
+    with get_session_factory()() as db_session:
+        job = db_session.get(CompositionJob, composition_job_id)
+        segment = db_session.execute(
+            select(CompositionSegment)
+            .where(CompositionSegment.composition_job_id == composition_job_id)
+            .order_by(CompositionSegment.segment_index.asc())
+            .limit(1)
+        ).scalar_one()
+
+        assert job is not None
+        job.status = JobStatus.IN_PROGRESS
+        job.progress_percent = 38
+        job.metadata_json = {
+            **(job.metadata_json if isinstance(job.metadata_json, dict) else {}),
+            "accepted_story_so_far": accepted_story,
+            "latest_partial_output": accepted_story,
+            "latest_segment_summary": "Segment 1 settled the harbor before the cove opened.",
+            "current_segment_id": segment.id,
+        }
+        segment.status = JobStatus.IN_PROGRESS
+        segment.accepted_text = accepted_story
+        segment.text_content = accepted_story
+        db_session.commit()
+
+        snapshot = SessionService(db_session).load_session_snapshot(session_id)
+        realtime = SessionRealtimeService(db_session)
+        initial_events, cursor = realtime.read_composition_chunk_events(
+            session_id,
+            cursor=CompositionChunkCursor(),
+        )
+
+    assert snapshot.active_composition_job is not None
+    assert snapshot.active_composition_job.accepted_story_so_far == accepted_story
+    assert len(initial_events) == 1
+    assert initial_events[0].payload.chunk_kind.value == "segment_start"
+    assert cursor.story_text == accepted_story
 
 
 def test_hydrate_session_endpoint_preserves_chat_navigation_bridge_history(
