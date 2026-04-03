@@ -382,10 +382,28 @@ class SessionAssetView(BaseModel):
     checksum_sha256: str | None = None
     segment_index: int | None = None
     error_message: str | None = None
+    public_url: str | None = None
     ready_at: datetime | None = None
     failed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class NarrationSegmentView(BaseModel):
+    id: str
+    audio_job_id: str
+    segment_index: int
+    status: str
+    source_boundary_kind: str
+    source_outline_card_title: str | None = None
+    word_count: int
+    pause_after_seconds: int = 0
+    pause_hint: str
+    split_reason: str | None = None
+    text_preview: str | None = None
+    error_message: str | None = None
+    completed_at: datetime | None = None
+    preview_asset: SessionAssetView | None = None
 
 
 class ConversationMemoryWorkflow(BaseModel):
@@ -937,6 +955,7 @@ class SessionSnapshot(BaseModel):
     active_composition_job: CompositionJobView | None = None
     active_audio_job: AudioJobView | None = None
     composition_segments: list[CompositionSegmentView] = Field(default_factory=list)
+    audio_segments: list[NarrationSegmentView] = Field(default_factory=list)
     latest_story_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
     audio_settings: AudioSettingsView

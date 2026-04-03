@@ -441,6 +441,23 @@ export type AudioJobView = {
   updated_at?: string
 }
 
+export type AudioSegmentView = {
+  id: string
+  audio_job_id: string
+  segment_index: number
+  status: string
+  source_boundary_kind: string
+  source_outline_card_title?: string | null
+  word_count: number
+  pause_after_seconds: number
+  pause_hint: string
+  split_reason?: string | null
+  text_preview?: string | null
+  error_message?: string | null
+  completed_at?: string | null
+  preview_asset?: SessionAssetView | null
+}
+
 export type AudioRuntimeEstimateView = {
   estimated_word_count: number
   estimated_chapter_count: number
@@ -502,7 +519,18 @@ export type SessionAssetView = {
   id: string
   asset_kind: string
   status: string
+  storage_bucket?: string
+  object_path?: string
+  mime_type?: string
+  byte_size?: number | null
+  checksum_sha256?: string | null
+  segment_index?: number | null
+  error_message?: string | null
+  public_url?: string | null
   ready_at?: string | null
+  failed_at?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export type SessionEventActorType = 'user' | 'assistant' | 'system' | 'service'
@@ -669,6 +697,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   active_composition_job?: CompositionJobView | null
   active_audio_job?: AudioJobView | null
   composition_segments?: CompositionSegmentView[] | null
+  audio_segments?: AudioSegmentView[] | null
   latest_story_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
   audio_settings?: AudioSettingsView | null

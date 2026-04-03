@@ -93,7 +93,7 @@ const selectedStage: SessionWorkspaceStageView = {
 }
 
 describe('AudioSettingsStage', () => {
-  it('renders the saved audio plan and estimate copy', () => {
+  it('renders the saved audio plan, progress surface, and estimate copy', () => {
     renderWithAppProviders(
       <AudioSettingsStage
         onSaveAudioSettings={vi.fn()}
@@ -104,9 +104,10 @@ describe('AudioSettingsStage', () => {
 
     expect(
       screen.getByText(
-        'Shape the narration pass before the audio render starts.',
+        'Narration progress will appear here once audio generation starts.',
       ),
     ).toBeInTheDocument()
+    expect(screen.getByText('Segment status')).toBeInTheDocument()
     expect(screen.getByText('Approx. 14 min')).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -201,21 +202,89 @@ describe('AudioSettingsStage', () => {
     })
   })
 
-  it('renders active narration progress with the current durable step', () => {
+  it('renders active narration progress with segment previews and a distinct final master player', () => {
     const snapshotWithActiveAudio: SessionSnapshot = {
       ...sampleSnapshot,
       active_audio_job: {
         id: 'audio-job-7',
         status: 'in_progress',
         progress_percent: 68,
-        current_step: 'Mixing narration with the selected background bed.',
-        current_step_index: 5,
+        current_step: 'Rendering narration segment 2 of 3.',
+        current_step_index: 2,
         total_steps: 6,
-        completed_segments: 3,
+        completed_segments: 1,
         total_segments: 3,
-        current_segment_index: 3,
+        current_segment_index: 2,
         estimated_duration_seconds: 780,
         updated_at: '2026-04-02T05:18:00Z',
+      },
+      latest_audio_job: {
+        id: 'audio-job-7',
+        status: 'in_progress',
+        progress_percent: 68,
+        current_step: 'Rendering narration segment 2 of 3.',
+        current_step_index: 2,
+        total_steps: 6,
+        completed_segments: 1,
+        total_segments: 3,
+        current_segment_index: 2,
+        estimated_duration_seconds: 780,
+        updated_at: '2026-04-02T05:18:00Z',
+      },
+      audio_segments: [
+        {
+          id: 'segment-1',
+          audio_job_id: 'audio-job-7',
+          segment_index: 1,
+          status: 'completed',
+          source_boundary_kind: 'chapter',
+          source_outline_card_title: 'Lantern launch',
+          word_count: 212,
+          pause_after_seconds: 3,
+          pause_hint: 'chapter_break',
+          split_reason: 'paragraph_boundary',
+          text_preview:
+            'Mira set the first lantern down on the still water and waited for the harbor to answer in a hush.',
+          preview_asset: {
+            id: 'preview-1',
+            asset_kind: 'audio_segment',
+            status: 'ready',
+            public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/segments/0001.wav?alt=media',
+          },
+        },
+        {
+          id: 'segment-2',
+          audio_job_id: 'audio-job-7',
+          segment_index: 2,
+          status: 'queued',
+          source_boundary_kind: 'chapter',
+          source_outline_card_title: 'Silver bell crossing',
+          word_count: 248,
+          pause_after_seconds: 0,
+          pause_hint: 'none',
+          split_reason: 'sentence_boundary',
+          text_preview:
+            'Otis stayed close while the silver bell called from the cove, never letting the mystery sharpen.',
+        },
+        {
+          id: 'segment-3',
+          audio_job_id: 'audio-job-7',
+          segment_index: 3,
+          status: 'queued',
+          source_boundary_kind: 'chapter',
+          source_outline_card_title: 'Harbor homecoming',
+          word_count: 231,
+          pause_after_seconds: 0,
+          pause_hint: 'none',
+          split_reason: 'paragraph_boundary',
+        },
+      ],
+      latest_audio_asset: {
+        id: 'final-audio',
+        asset_kind: 'final_audio',
+        status: 'ready',
+        public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/final/story.wav?alt=media',
+        ready_at: '2026-04-02T05:22:00Z',
       },
     }
 
@@ -227,15 +296,19 @@ describe('AudioSettingsStage', () => {
       />,
     )
 
-    expect(screen.getByText('68% rendered')).toBeInTheDocument()
+    expect(screen.getByText('68%')).toBeInTheDocument()
+    expect(screen.getAllByText('Generating').length).toBeGreaterThan(0)
+    expect(screen.getByText('Ready for preview')).toBeInTheDocument()
+    expect(screen.getByText('Generating now')).toBeInTheDocument()
+    expect(screen.getByText('Compiled narration')).toBeInTheDocument()
+    expect(screen.getByText('Checkpoint preview clip')).toBeInTheDocument()
+    expect(screen.getByText('Final audio')).toBeInTheDocument()
     expect(
-      screen.getByText('Mixing narration with the selected background bed.'),
+      screen.getByLabelText('Segment 1 preview audio'),
     ).toBeInTheDocument()
     expect(
-      screen.getAllByText(
-        'Step 5 of 6. 3 of 3 narration segments are durable already. Estimated listening length 13 min.',
-      ),
-    ).toHaveLength(2)
+      screen.getByLabelText('Compiled narration preview'),
+    ).toBeInTheDocument()
   })
 
   it('renders backend-provided music catalog guidance when music is enabled', () => {

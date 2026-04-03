@@ -32,6 +32,33 @@ export function SessionWorkspaceProvider({
         })
         .catch(() => {})
     }
+
+    if (
+      event.type === 'job.progress' &&
+      event.payload.job_kind === 'audio' &&
+      event.payload.latest_asset_kind === 'audio_segment' &&
+      event.payload.latest_asset_id != null
+    ) {
+      void fetchSessionSnapshot(sessionId)
+        .then((snapshot) => {
+          runtimeStore.hydrateSessionSnapshot(snapshot)
+        })
+        .catch(() => {})
+    }
+
+    if (
+      event.type === 'job.status' &&
+      event.payload.job_kind === 'audio' &&
+      (event.payload.status === 'completed' ||
+        event.payload.status === 'cancelled' ||
+        event.payload.status === 'failed')
+    ) {
+      void fetchSessionSnapshot(sessionId)
+        .then((snapshot) => {
+          runtimeStore.hydrateSessionSnapshot(snapshot)
+        })
+        .catch(() => {})
+    }
   })
   const handleSubscribed = useEffectEvent((ack: SessionSubscriptionAck) => {
     const snapshot = runtimeStore.getState().sessionSnapshot

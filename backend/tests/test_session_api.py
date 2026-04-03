@@ -15,6 +15,9 @@ from app.db import (
     CompositionSegment,
     CompositionSegmentAcceptanceState,
     JobStatus,
+    NarrationPauseHint,
+    NarrationSegment,
+    NarrationSourceBoundaryKind,
     SessionAsset,
     StorySession,
     StorySetup,
@@ -753,6 +756,111 @@ def test_hydrate_session_endpoint_returns_snapshot_history_and_metadata(
     assert payload["hydration"]["strategy"] == "materialized_only"
     assert payload["hydration"]["latest_sequence_number"] == 1
     assert payload["hydration"]["history_event_count"] == 1
+
+
+def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    )
+    created = create_response.json()
+
+    db_session = get_session_factory()()
+    try:
+        audio_job = AudioJob(
+            session_id=created["id"],
+            status=JobStatus.IN_PROGRESS,
+            voice_key="moonbeam",
+            playback_speed=0.95,
+            include_background_music=False,
+            music_profile="lullaby_piano",
+            estimated_duration_seconds=780,
+            current_segment_index=2,
+            config_json={
+                "total_segments": 2,
+                "completed_segments": 1,
+                "progress_percent": 54.0,
+                "current_step": "Rendering narration segment 2 of 2.",
+                "current_step_index": 2,
+                "total_steps": 4,
+            },
+        )
+        db_session.add(audio_job)
+        db_session.flush()
+
+        db_session.add_all(
+            [
+                NarrationSegment(
+                    session_id=created["id"],
+                    audio_job_id=audio_job.id,
+                    segment_index=1,
+                    status=JobStatus.COMPLETED,
+                    source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
+                    source_outline_card_title="Lantern launch",
+                    text_content=(
+                        "Mira set the first lantern on the water and waited for the harbor to answer."
+                    ),
+                    word_count=14,
+                    text_start_offset=0,
+                    text_end_offset=76,
+                    pause_after_seconds=3,
+                    pause_hint=NarrationPauseHint.CHAPTER_BREAK,
+                    metadata_json={"split_reason": "paragraph_boundary"},
+                ),
+                NarrationSegment(
+                    session_id=created["id"],
+                    audio_job_id=audio_job.id,
+                    segment_index=2,
+                    status=JobStatus.QUEUED,
+                    source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
+                    source_outline_card_title="Silver bell crossing",
+                    text_content=(
+                        "Otis stayed close while the silver bell called from the cove."
+                    ),
+                    word_count=11,
+                    text_start_offset=78,
+                    text_end_offset=140,
+                    pause_after_seconds=0,
+                    pause_hint=NarrationPauseHint.NONE,
+                    metadata_json={"split_reason": "sentence_boundary"},
+                ),
+            ]
+        )
+        db_session.flush()
+
+        db_session.add(
+            SessionAsset(
+                session_id=created["id"],
+                audio_job_id=audio_job.id,
+                asset_kind=AssetKind.AUDIO_SEGMENT,
+                status=AssetStatus.READY,
+                storage_bucket="storyteller-audio",
+                object_path=(
+                    f"sessions/{created['id']}/audio/jobs/{audio_job.id}/segments/0001.wav"
+                ),
+                mime_type="audio/wav",
+                segment_index=1,
+            )
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}/hydrate")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert len(payload["snapshot"]["audio_segments"]) == 2
+    assert payload["snapshot"]["audio_segments"][0]["source_outline_card_title"] == (
+        "Lantern launch"
+    )
+    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["public_url"].endswith(
+        "?alt=media"
+    )
+    assert payload["snapshot"]["audio_segments"][1]["split_reason"] == "sentence_boundary"
 
 
 def test_get_session_history_endpoint_returns_durable_timeline(

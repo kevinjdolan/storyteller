@@ -15,6 +15,7 @@ from app.db import (
     CompositionSegment,
     ContinuityBible,
     JobStatus,
+    NarrationSegment,
     Pitch,
     PlanRevision,
     SessionAsset,
@@ -57,6 +58,8 @@ class SessionAggregate:
     active_composition_job: CompositionJob | None
     active_audio_job: AudioJob | None
     composition_segments: list[CompositionSegment]
+    audio_segments: list[NarrationSegment]
+    audio_segment_assets: list[SessionAsset]
     latest_draft_snapshot_asset: SessionAsset | None
     latest_story_asset: SessionAsset | None
     latest_audio_asset: SessionAsset | None
@@ -104,6 +107,12 @@ class StorySessionRepository:
         if story_session is None:
             return None
 
+        latest_composition_job = self._get_latest_composition_job(session_id)
+        latest_audio_job = self._get_latest_audio_job(session_id)
+        active_composition_job = self._get_active_composition_job(session_id)
+        active_audio_job = self._get_active_audio_job(session_id)
+        visible_audio_job = active_audio_job or latest_audio_job
+
         return SessionAggregate(
             session=story_session,
             active_story_brief=self._get_active_story_brief(session_id),
@@ -118,11 +127,17 @@ class StorySessionRepository:
             selected_story_outline=self._get_selected_story_outline(session_id),
             plan_revisions=self._list_plan_revisions(session_id),
             current_plan_revision=self._get_current_plan_revision(session_id),
-            latest_composition_job=self._get_latest_composition_job(session_id),
-            latest_audio_job=self._get_latest_audio_job(session_id),
-            active_composition_job=self._get_active_composition_job(session_id),
-            active_audio_job=self._get_active_audio_job(session_id),
+            latest_composition_job=latest_composition_job,
+            latest_audio_job=latest_audio_job,
+            active_composition_job=active_composition_job,
+            active_audio_job=active_audio_job,
             composition_segments=self._list_composition_segments(session_id),
+            audio_segments=self._list_audio_segments(
+                visible_audio_job.id if visible_audio_job is not None else None
+            ),
+            audio_segment_assets=self._list_audio_segment_assets(
+                visible_audio_job.id if visible_audio_job is not None else None
+            ),
             latest_draft_snapshot_asset=self._get_latest_draft_snapshot_asset(session_id),
             latest_story_asset=self._get_latest_story_asset(session_id),
             latest_audio_asset=self._get_latest_audio_asset(session_id),
@@ -374,6 +389,39 @@ class StorySessionRepository:
                 CompositionSegment.segment_index.asc(),
                 CompositionSegment.revision_number.desc(),
                 CompositionSegment.created_at.desc(),
+            )
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def _list_audio_segments(self, audio_job_id: str | None) -> list[NarrationSegment]:
+        if audio_job_id is None:
+            return []
+
+        stmt: Select[tuple[NarrationSegment]] = (
+            select(NarrationSegment)
+            .where(NarrationSegment.audio_job_id == audio_job_id)
+            .order_by(
+                NarrationSegment.segment_index.asc(),
+                NarrationSegment.created_at.asc(),
+            )
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def _list_audio_segment_assets(self, audio_job_id: str | None) -> list[SessionAsset]:
+        if audio_job_id is None:
+            return []
+
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
+            .where(
+                SessionAsset.audio_job_id == audio_job_id,
+                SessionAsset.asset_kind == AssetKind.AUDIO_SEGMENT,
+                SessionAsset.status == AssetStatus.READY,
+            )
+            .order_by(
+                SessionAsset.segment_index.asc(),
+                SessionAsset.ready_at.desc(),
+                SessionAsset.created_at.desc(),
             )
         )
         return list(self._session.execute(stmt).scalars().all())

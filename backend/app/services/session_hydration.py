@@ -3,16 +3,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.db import (
+    AssetStatus,
     AudioJob,
     CompositionInterruptionRequest,
     CompositionInterruptionState,
     CompositionJob,
     JobStatus,
+    NarrationSegment,
     SessionAsset,
 )
 from app.models import (
@@ -37,6 +40,7 @@ from app.models import (
     ContinuityFact,
     ConversationMemorySnapshotView,
     NormalizedBriefPreferences,
+    NarrationSegmentView,
     PitchBatchView,
     PitchView,
     PlanArtifactRefView,
@@ -323,6 +327,10 @@ def build_session_snapshot(
         active_composition_job=build_composition_job_view(aggregate.active_composition_job),
         active_audio_job=build_audio_job_view(aggregate.active_audio_job),
         composition_segments=build_composition_segment_views(aggregate.composition_segments),
+        audio_segments=build_narration_segment_views(
+            aggregate.audio_segments,
+            aggregate.audio_segment_assets,
+        ),
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
         audio_settings=build_audio_settings_view(
@@ -1125,6 +1133,10 @@ def _read_mapping(value: object) -> Mapping[str, Any]:
     return {}
 
 
+def _enum_value(value: Any) -> str:
+    return getattr(value, "value", value)
+
+
 def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: str) -> str | None:
     value = data.get(key)
     return value if isinstance(value, str) else None
@@ -1158,6 +1170,32 @@ def _read_string_list(value: Any) -> list[str]:
         return []
 
     return [entry for entry in value if isinstance(entry, str)]
+
+
+def _build_text_preview(value: str | None, *, limit: int = 132) -> str | None:
+    if value is None:
+        return None
+
+    normalized = " ".join(value.split())
+    if not normalized:
+        return None
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3].rstrip()}..."
+
+
+def _build_public_asset_url(row: SessionAsset) -> str | None:
+    if row.status != AssetStatus.READY:
+        return None
+
+    public_base_url = get_settings().gcs_public_url.rstrip("/")
+    if not public_base_url:
+        return None
+
+    return (
+        f"{public_base_url}/storage/v1/b/{quote(row.storage_bucket, safe='')}"
+        f"/o/{quote(row.object_path, safe='')}?alt=media"
+    )
 
 
 def _read_beat_sheet_payload(row) -> dict[str, Any]:
@@ -2054,6 +2092,50 @@ def build_composition_segment_version_view(row) -> CompositionSegmentVersionView
     )
 
 
+def build_narration_segment_views(
+    rows: list[NarrationSegment],
+    preview_assets: list[SessionAsset],
+) -> list[NarrationSegmentView]:
+    latest_preview_asset_by_segment: dict[int, SessionAsset] = {}
+    for asset in preview_assets:
+        if asset.segment_index is None or asset.segment_index in latest_preview_asset_by_segment:
+            continue
+        latest_preview_asset_by_segment[asset.segment_index] = asset
+
+    return [
+        build_narration_segment_view(
+            row,
+            preview_asset=latest_preview_asset_by_segment.get(row.segment_index),
+        )
+        for row in rows
+    ]
+
+
+def build_narration_segment_view(
+    row: NarrationSegment,
+    *,
+    preview_asset: SessionAsset | None = None,
+) -> NarrationSegmentView:
+    metadata = _read_mapping(row.metadata_json)
+
+    return NarrationSegmentView(
+        id=row.id,
+        audio_job_id=row.audio_job_id,
+        segment_index=row.segment_index,
+        status=row.status,
+        source_boundary_kind=_enum_value(row.source_boundary_kind),
+        source_outline_card_title=row.source_outline_card_title,
+        word_count=row.word_count,
+        pause_after_seconds=row.pause_after_seconds,
+        pause_hint=_enum_value(row.pause_hint),
+        split_reason=_read_optional_mapping_text(metadata, "split_reason"),
+        text_preview=_build_text_preview(row.text_content),
+        error_message=row.error_message,
+        completed_at=row.completed_at,
+        preview_asset=build_session_asset_view(preview_asset),
+    )
+
+
 def humanize_joined_tokens(values: list[str]) -> str:
     labels = [value.replace("_", " ") for value in values]
 
@@ -2111,6 +2193,7 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         checksum_sha256=row.checksum_sha256,
         segment_index=row.segment_index,
         error_message=row.error_message,
+        public_url=_build_public_asset_url(row),
         ready_at=row.ready_at,
         failed_at=row.failed_at,
         created_at=row.created_at,

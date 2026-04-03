@@ -6,11 +6,15 @@ import pytest
 from app.db import (
     AssetKind,
     AssetStatus,
+    AudioJob,
     Base,
     CompositionJob,
     CompositionJobKind,
     ContinuityBible,
     JobStatus,
+    NarrationPauseHint,
+    NarrationSegment,
+    NarrationSourceBoundaryKind,
     SessionAsset,
     make_engine,
 )
@@ -214,6 +218,106 @@ def test_hydrate_session_includes_selected_continuity_bible(db_session) -> None:
     assert "Continuity: Mira anchors the harbor story" in (
         hydrated.snapshot.agent_context_summary or ""
     )
+
+
+def test_hydrate_session_includes_audio_segments_with_preview_assets(db_session) -> None:
+    session_service = SessionService(db_session)
+    snapshot = session_service.create_session(working_title="Hydration Audio Segments")
+
+    audio_job = AudioJob(
+        session_id=snapshot.id,
+        status=JobStatus.IN_PROGRESS,
+        voice_key="moonbeam",
+        playback_speed=0.95,
+        include_background_music=False,
+        music_profile="lullaby_piano",
+        estimated_duration_seconds=780,
+        current_segment_index=2,
+        config_json={
+            "total_segments": 2,
+            "completed_segments": 1,
+            "progress_percent": 54.0,
+            "current_step": "Rendering narration segment 2 of 2.",
+            "current_step_index": 2,
+            "total_steps": 4,
+            "latest_asset_kind": AssetKind.AUDIO_SEGMENT.value,
+        },
+    )
+    db_session.add(audio_job)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            NarrationSegment(
+                session_id=snapshot.id,
+                audio_job_id=audio_job.id,
+                segment_index=1,
+                status=JobStatus.COMPLETED,
+                source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
+                source_outline_card_title="Lantern launch",
+                text_content=(
+                    "Mira set the first lantern on the water and waited for the harbor to answer."
+                ),
+                word_count=14,
+                text_start_offset=0,
+                text_end_offset=76,
+                pause_after_seconds=3,
+                pause_hint=NarrationPauseHint.CHAPTER_BREAK,
+                completed_at=datetime.now(timezone.utc),
+                metadata_json={"split_reason": "paragraph_boundary"},
+            ),
+            NarrationSegment(
+                session_id=snapshot.id,
+                audio_job_id=audio_job.id,
+                segment_index=2,
+                status=JobStatus.QUEUED,
+                source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
+                source_outline_card_title="Silver bell crossing",
+                text_content=(
+                    "Otis stayed close while the silver bell called from the cove."
+                ),
+                word_count=11,
+                text_start_offset=78,
+                text_end_offset=140,
+                pause_after_seconds=0,
+                pause_hint=NarrationPauseHint.NONE,
+                metadata_json={"split_reason": "sentence_boundary"},
+            ),
+        ]
+    )
+    db_session.flush()
+
+    db_session.add(
+        SessionAsset(
+            session_id=snapshot.id,
+            audio_job_id=audio_job.id,
+            asset_kind=AssetKind.AUDIO_SEGMENT,
+            status=AssetStatus.READY,
+            storage_bucket="storyteller-audio",
+            object_path=(
+                f"sessions/{snapshot.id}/audio/jobs/{audio_job.id}/segments/0001.wav"
+            ),
+            mime_type="audio/wav",
+            segment_index=1,
+            ready_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    hydrated = SessionHydrationService(db_session).hydrate_session(snapshot.id)
+
+    assert len(hydrated.snapshot.audio_segments) == 2
+    assert hydrated.snapshot.audio_segments[0].source_outline_card_title == "Lantern launch"
+    assert hydrated.snapshot.audio_segments[0].status == JobStatus.COMPLETED.value
+    assert hydrated.snapshot.audio_segments[0].preview_asset is not None
+    assert hydrated.snapshot.audio_segments[0].preview_asset.public_url is not None
+    assert hydrated.snapshot.audio_segments[0].preview_asset.public_url.endswith(
+        "?alt=media"
+    )
+    assert hydrated.snapshot.audio_segments[1].split_reason == "sentence_boundary"
+    assert hydrated.snapshot.audio_segments[1].preview_asset is None
+    assert hydrated.snapshot.active_audio_job is not None
+    assert hydrated.snapshot.active_audio_job.current_segment_index == 2
 
 
 def test_hydrate_session_limits_recent_history_window(db_session) -> None:
