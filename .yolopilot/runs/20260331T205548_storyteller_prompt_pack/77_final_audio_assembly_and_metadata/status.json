@@ -1,0 +1,188 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'rg -n \"def build_wav_bytes|def read_wav_bytes|def _wav_duration_seconds|def build_silence_pcm|_resolve_audio_mixer|_supersede_final_audio_assets|_build_narration_master_wav\" backend/app/services/audio_jobs.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm test -- --run frontend/src/features/session/AudioSettingsStage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"pytest backend/tests/test_asset_service.py backend/tests/test_story_tools.py -k 'audio or supersede'\"",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/app/services/audio_jobs.py backend/app/services/assets.py backend/app/services/final_audio_assembly.py backend/app/services/audio_wave.py backend/app/services/session_hydration.py backend/app/models/session.py backend/tests/test_asset_service.py backend/tests/test_story_tools.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml up -d --build'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'which chromium || which chromium-browser || which google-chrome || which chrome'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"STORYTELLER_SECRETS_FILE='' STORYTELLER_DATABASE_URL='sqlite+pysqlite:////Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt77.db' python - <<'PY'\nfrom pathlib import Path\nfrom sqlalchemy.orm import sessionmaker\n\nfrom app.db import AssetKind, AssetStatus, AudioJob, Base, JobStatus, StorySession, make_engine\nfrom app.db.base import utc_now\nfrom app.models import WorkflowStage, WorkflowStageState\nfrom app.services.sessions import SessionService\nfrom app.db.models import SessionAsset\n\nDB_URL = 'sqlite+pysqlite:////Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt77.db'\nPath('/Users/kevin/code/storyteller/.artifacts/webapp-qa').mkdir(parents=True, exist_ok=True)\nengine = make_engine(DB_URL)\nBase.metadata.drop_all(engine)\nBase.metadata.create_all(engine)\nSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)\n\nwith SessionLocal() as session:\n    service = SessionService(session)\n    snapshot = service.create_session(working_title='QA Final Audio Assembly')\n    for stage in (\n        WorkflowStage.GENRE,\n        WorkflowStage.TONE,\n        WorkflowStage.BRIEF,\n        WorkflowStage.PITCHES,\n        WorkflowStage.CHARACTERS,\n        WorkflowStage.BEATS,\n        WorkflowStage.STORY_SETUP,\n        WorkflowStage.COMPOSITION,\n    ):\n        service.update_stage_state(\n            snapshot.id,\n            stage=stage,\n            status=WorkflowStageState.COMPLETED,\n            detail=f'Completed {stage.value}.',\n        )\n    service.update_stage_state(\n        snapshot.id,\n        stage=WorkflowStage.AUDIO,\n        status=WorkflowStageState.IN_PROGRESS,\n        detail='Rendering replacement narration while the prior master stays available.',\n    )\n    service.update_stage_state(\n        snapshot.id,\n        stage=WorkflowStage.FINALIZE,\n        status=WorkflowStageState.NEEDS_REGENERATION,\n        detail='Waiting for the replacement narration master.',\n    )\n\n    story_session = session.get(StorySession, snapshot.id)\n    assert story_session is not None\n    story_session.audio_voice_key = 'hearthside'\n    story_session.audio_narration_style = 'warm'\n    story_session.audio_playback_speed = 0.9\n    story_session.audio_include_background_music = False\n    story_session.audio_music_profile = 'lullaby_piano'\n    story_session.audio_narration_volume = 88\n    story_session.audio_music_volume = 18\n\n    prior_job = AudioJob(\n        session_id=snapshot.id,\n        status=JobStatus.COMPLETED,\n        voice_key='moonbeam',\n        playback_speed=0.95,\n        include_background_music=False,\n        music_profile='lullaby_piano',\n        completed_at=utc_now(),\n        config_json={\n            'progress_percent': 100.0,\n            'current_step': 'Narration finished and the final audio asset is ready.',\n            'latest_asset_kind': AssetKind.FINAL_AUDIO.value,\n        },\n    )\n    active_job = AudioJob(\n        session_id=snapshot.id,\n        status=JobStatus.IN_PROGRESS,\n        voice_key='hearthside',\n        playback_speed=0.9,\n        include_background_music=False,\n        music_profile='lullaby_piano',\n        estimated_duration_seconds=780,\n        current_segment_index=2,\n        config_json={\n            'progress_percent': 68.0,\n            'current_step': 'Rendering narration segment 2 of 3.',\n            'current_step_index': 2,\n            'total_steps': 6,\n            'completed_segments': 1,\n            'total_segments': 3,\n            'latest_asset_kind': AssetKind.AUDIO_SEGMENT.value,\n        },\n    )\n    session.add_all([prior_job, active_job])\n    session.flush()\n\n    prior_asset = SessionAsset(\n        session_id=snapshot.id,\n        audio_job_id=prior_job.id,\n        asset_kind=AssetKind.FINAL_AUDIO,\n        status=AssetStatus.READY,\n        storage_bucket='storyteller-audio',\n        object_path=f'sessions/{snapshot.id}/audio/jobs/{prior_job.id}/final/story.wav',\n        mime_type='audio/wav',\n        byte_size=2048,\n        metadata_json={\n            'duration_seconds': 812.0,\n            'generation': {'voice_key': 'moonbeam'},\n            'mix': {'applied': False},\n        },\n        ready_at=utc_now(),\n    )\n    session.add(prior_asset)\n    session.commit()\n    print(snapshot.id)\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run check -- --spec /Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'curl -I -s http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run check -- --spec /Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'curl -sf http://127.0.0.1:8566 >/tmp/prompt77_frontend.html && echo FRONTEND_OK && curl -sf http://127.0.0.1:8565/api/health && echo && echo BACKEND_OK'",
+        "exit_code": 22,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"node - <<'JS'\nconst puppeteer = require('./tools/webapp-qa/node_modules/puppeteer');\n(async () => {\n  const browser = await puppeteer.launch({headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});\n  try {\n    const page = await browser.newPage();\n    await page.setViewport({width: 1440, height: 1100});\n    page.on('console', (message) => console.log(\"'`[browser:${message.type()}] ${message.text()}`));\n    page.on('\"'pageerror', (error) => console.error(\"'`[browser:pageerror] ${error.message}`));\n    await page.goto('\"'http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio', {waitUntil: 'domcontentloaded', timeout: 20000});\n    await new Promise((resolve) => setTimeout(resolve, 3000));\n    await page.screenshot({path: '/Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.png', fullPage: true});\n    const bodyText = await page.evaluate(() => document.body?.innerText || '');\n    console.log(bodyText.slice(0, 1200));\n    console.log('screenshot-saved');\n  } finally {\n    await browser.close();\n  }\n})();\nJS\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"node --input-type=module <<'EOF'\nimport puppeteer from 'puppeteer';\nconst url = 'http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio';\nconst outputPath = '/Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.png';\nconst browser = await puppeteer.launch({headless: true, args: ['--no-sandbox','--disable-setuid-sandbox']});\nconst page = await browser.newPage();\npage.on('console', (message) => console.log(\"'`[browser:${message.type()}] ${message.text()}`));\npage.on('\"'pageerror', (error) => console.error(\"'`[browser:pageerror] ${error.message}`));\npage.on('\"'requestfailed', (request) => console.error(\"'`[browser:requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText || '\"''}\"'`));\nawait page.setViewport({ width: 1440, height: 1100 });\npage.setDefaultTimeout(15000);\nconsole.log('\"'goto:start');\nawait page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });\nconsole.log('goto:done');\nawait page.waitForFunction(() => document.body?.innerText.includes('Compiled narration'), { timeout: 15000 });\nawait page.waitForFunction(() => document.body?.innerText.includes('Download narration'), { timeout: 15000 });\nconst text = await page.evaluate(() => document.body?.innerText || '');\nconsole.log('page:text:begin');\nconsole.log(text.slice(0, 2000));\nconsole.log('page:text:end');\nawait page.screenshot({ path: outputPath, fullPage: true });\nconsole.log(\"'`saved:${outputPath}`);\nawait browser.close();\nEOF'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run check -- --spec /Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.spec.json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"node - <<'JS'\nconst puppeteer = require('./tools/webapp-qa/node_modules/puppeteer');\nconst delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\n(async () => {\n  const browser = await puppeteer.launch({headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});\n  try {\n    const page = await browser.newPage();\n    await page.setViewport({width: 1440, height: 1100});\n    page.on('console', (message) => console.log(\"'`[browser:${message.type()}] ${message.text()}`));\n    page.on('\"'pageerror', (error) => console.error(\"'`[browser:pageerror] ${error.message}`));\n    const url = '\"'http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio';\n    await Promise.race([\n      page.goto(url, {waitUntil: 'domcontentloaded', timeout: 30000}),\n      delay(5000),\n    ]);\n    await delay(3000);\n    await page.screenshot({path: '/Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.png', fullPage: true});\n    const bodyText = await page.evaluate(() => document.body?.innerText || '');\n    console.log(bodyText.slice(0, 2000));\n    console.log('screenshot-saved');\n  } finally {\n    await browser.close();\n  }\n})();\nJS\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd tools/webapp-qa && node --input-type=module <<'EOF'\nimport puppeteer from 'puppeteer';\nconst url = 'http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio';\nconst outputPath = '/Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage.png';\nconst browser = await puppeteer.launch({headless: true, args: ['--no-sandbox','--disable-setuid-sandbox']});\ntry {\n  const page = await browser.newPage();\n  page.on('console', (message) => console.log(\"'`[browser:${message.type()}] ${message.text()}`));\n  page.on('\"'pageerror', (error) => console.error(\"'`[browser:pageerror] ${error.message}`));\n  page.on('\"'requestfailed', (request) => console.error(\"'`[browser:requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText || '\"''}\"'`));\n  await page.setViewport({ width: 1440, height: 1100 });\n  page.setDefaultTimeout(15000);\n  console.log('\"'goto:start');\n  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });\n  console.log('goto:done');\n  await page.waitForFunction(() => document.body?.innerText.includes('Compiled narration'), { timeout: 15000 });\n  await page.waitForFunction(() => document.body?.innerText.includes('Download narration'), { timeout: 15000 });\n  const text = await page.evaluate(() => document.body?.innerText || '');\n  console.log('page:text:begin');\n  console.log(text.slice(0, 2000));\n  console.log('page:text:end');\n  await page.screenshot({ path: outputPath, fullPage: true });\n  console.log(\"'`saved:${outputPath}`);\n} finally {\n  await browser.close();\n}\nEOF'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"VITE_DEV_PROXY_TARGET='http://127.0.0.1:8565' npm run dev -- --host 127.0.0.1 --port 8566\"",
+        "exit_code": 143,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd tools/webapp-qa && node --input-type=module <<'EOF'\nimport puppeteer from 'puppeteer';\nconst url = 'http://127.0.0.1:8566/sessions/96474c5c-d84f-4157-8a01-ba97fa241742?stage=audio';\nconst outputPath = '/Users/kevin/code/storyteller/.artifacts/webapp-qa/prompt-77-audio-stage-diagnostic.png';\nconst browser = await puppeteer.launch({headless: true, args: ['--no-sandbox','--disable-setuid-sandbox']});\ntry {\n  const page = await browser.newPage();\n  page.on('console', (message) => console.log(\"'`[browser:${message.type()}] ${message.text()}`));\n  page.on('\"'pageerror', (error) => console.error(\"'`[browser:pageerror] ${error.message}`));\n  page.on('\"'requestfailed', (request) => console.error(\"'`[browser:requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText || '\"''}\"'`));\n  await page.setViewport({ width: 1440, height: 1100 });\n  await page.goto(url, { waitUntil: '\"'domcontentloaded', timeout: 15000 });\n  await new Promise((resolve) => setTimeout(resolve, 5000));\n  const text = await page.evaluate(() => document.body?.innerText || '');\n  console.log('page:text:begin');\n  console.log(text.slice(0, 4000));\n  console.log('page:text:end');\n  await page.screenshot({ path: outputPath, fullPage: true });\n  console.log(\"'`saved:${outputPath}`);\n} finally {\n  await browser.close();\n}\nEOF'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-03T02:00:40.449869Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 435,
+    "file_paths": [
+      "backend/app/models/session.py",
+      "backend/app/services/assets.py",
+      "backend/app/services/audio_wave.py",
+      "backend/app/services/final_audio_assembly.py",
+      "backend/app/services/audio_jobs.py",
+      "backend/app/services/__init__.py",
+      "backend/app/services/session_hydration.py",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/AudioSettingsStage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/AudioSettingsStage.test.tsx",
+      "backend/tests/test_asset_service.py",
+      "backend/tests/test_story_tools.py",
+      ".artifacts/webapp-qa/prompt-77-audio-stage.spec.json",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/77_final_audio_assembly_and_metadata/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d50fe-44af-7823-ae2d-184fa8c7e486",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 19646720,
+      "input_tokens": 20718687,
+      "output_tokens": 70663,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "agent": {
+      "model_high": "gemini-3-flash-preview",
+      "model_low": "gemini-3-flash-preview",
+      "model_medium": "gemini-3-flash-preview",
+      "model_provider": "gemini"
+    },
+    "cached_input_cost_per_1m": null,
+    "codex": {
+      "model": "gpt-5.4",
+      "reasoning_effort": "xhigh"
+    },
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "output_cost_per_1m": null,
+    "sandbox": "danger-full-access",
+    "version": 1.0
+  },
+  "failure_messages": [
+    "2026-04-03T02:00:40.449869Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open"
+  ],
+  "head_commit": "9c84106160bfca8452d9ce56db602d2ce64541cd",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "77-final-audio-assembly.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_77_final_audio_assembly_and_metadata",
+  "task_name_human": "77 final audio assembly and metadata",
+  "task_name_system": "77_final_audio_assembly_and_metadata",
+  "timing": {
+    "duration_seconds": 1931.0,
+    "finished_at": "2026-04-02T19:11:02-07:00",
+    "started_at": "2026-04-02T18:38:51-07:00"
+  }
+}

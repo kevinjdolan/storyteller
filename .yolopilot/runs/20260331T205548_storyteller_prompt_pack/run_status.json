@@ -76,9 +76,10 @@
     "73-gemini-tts-integration.md",
     "74-background-music-mixing.md",
     "75-audio-job-orchestration.md",
-    "76-audio-preview-and-segment-status-ui.md"
+    "76-audio-preview-and-segment-status-ui.md",
+    "77-final-audio-assembly.md"
   ],
-  "current_success_ref": "f0adf9f1d71744976bbe0398de5fa115eb904971",
+  "current_success_ref": "9c84106160bfca8452d9ce56db602d2ce64541cd",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
