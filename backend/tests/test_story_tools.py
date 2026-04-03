@@ -59,6 +59,7 @@ from app.services import (
     AUDIO_RUNTIME_JOB_TYPE,
     COMPOSITION_RUNTIME_JOB_TYPE,
     AudioJobService,
+    AudioJobStateError,
     BackgroundJobService,
     CompositionJobService,
     SessionService,
@@ -88,6 +89,7 @@ from app.storage import ObjectStorageService, StorageObjectLocation, build_objec
 from app.worker import JobWorker, build_default_job_handler_registry
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from tests.support.audio_pipeline import SequenceTextToSpeechAdapter, build_synthesis_result
 
 
 def _enable_sqlite_foreign_keys(engine) -> None:
@@ -961,6 +963,7 @@ def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: P
                     SessionAsset.status == AssetStatus.READY,
                 )
             ).scalar_one()
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
 
         assert audio_job is not None
         assert audio_job.status == JobStatus.COMPLETED
@@ -976,6 +979,118 @@ def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: P
         assert final_audio_asset.metadata_json["debug"]["narration_master_object_path"] is not None
         assert "sidechaincompress" in (
             final_audio_asset.metadata_json["debug"]["ffmpeg_command"] or ""
+        )
+        audio_progress_payloads = [
+            event.payload
+            for event in history.events
+            if event.event_type == "audio.progress.recorded"
+        ]
+        assert any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Mixing narration with night ambience."
+            and getattr(payload, "current_step_index", None) == 4
+            and getattr(payload, "total_steps", None) == 5
+            and getattr(payload, "progress_percent", None) == 96.0
+            for payload in audio_progress_payloads
+        )
+        assert any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Publishing the final audio asset."
+            and getattr(payload, "current_step_index", None) == 5
+            and getattr(payload, "total_steps", None) == 5
+            and getattr(payload, "progress_percent", None) == 99.0
+            for payload in audio_progress_payloads
+        )
+        assert audio_progress_payloads[-1].current_step == (
+            "Narration finished and the final mixed audio asset is ready."
+        )
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_audio_job_service_marks_assembly_failures_after_rendering_segments(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+    adapter = SequenceTextToSpeechAdapter(
+        [
+            build_synthesis_result(sample_value=1, sample_rate_hz=24_000),
+            build_synthesis_result(sample_value=2, sample_rate_hz=22_050),
+        ]
+    )
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[220, 180],
+            )
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with pytest.raises(AudioJobStateError, match="single sample rate"):
+            with session_factory() as session:
+                AudioJobService(
+                    session,
+                    object_storage=object_storage,
+                    tts_adapter=adapter,
+                ).run_job(result.audio_job_id)
+
+        with session_factory() as session:
+            audio_job = session.get(AudioJob, result.audio_job_id)
+            audio_segment_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.audio_job_id == result.audio_job_id,
+                        SessionAsset.asset_kind == AssetKind.AUDIO_SEGMENT,
+                        SessionAsset.status == AssetStatus.READY,
+                    )
+                ).scalars()
+            )
+            final_audio_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.audio_job_id == result.audio_job_id,
+                        SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                        SessionAsset.status == AssetStatus.READY,
+                    )
+                ).scalars()
+            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+
+        assert audio_job is not None
+        assert audio_job.status == JobStatus.FAILED
+        assert "single sample rate" in (audio_job.error_message or "")
+        assert len(audio_segment_assets) == 2
+        assert final_audio_assets == []
+        assert snapshot.latest_audio_job is not None
+        assert snapshot.latest_audio_job.status == JobStatus.FAILED.value
+        assert _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.NEEDS_REGENERATION
+        audio_progress_payloads = [
+            event.payload
+            for event in history.events
+            if event.event_type == "audio.progress.recorded"
+        ]
+        assert any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Assembling the narration master from 2 rendered segments."
+            for payload in audio_progress_payloads
+        )
+        assert not any(
+            payload is not None
+            and getattr(payload, "current_step", None)
+            == "Publishing the final audio asset."
+            for payload in audio_progress_payloads
         )
     finally:
         object_storage.close()
