@@ -1,0 +1,157 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"api_v1_prefix|gcs_public_url\\\" backend/app/settings.py backend/app/settings -g '\"'!**/node_modules/**'\"'\"",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && ruff check app/api/dependencies.py app/api/v1/routes/sessions.py app/models/session.py app/models/__init__.py app/services/asset_access.py app/services/session_hydration.py app/services/story_exports.py tests/test_session_api.py tests/test_session_hydration_service.py tests/test_story_export_service.py tests/support/in_memory_storage.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npm test -- --runInBand src/features/session/FinalizeStage.test.tsx src/features/session/AudioSettingsStage.test.tsx src/features/session/sessionArtifacts.test.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd frontend && npm run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && ruff check --fix app/api/dependencies.py app/api/v1/routes/sessions.py app/models/session.py app/models/__init__.py app/services/asset_access.py app/services/session_hydration.py app/services/story_exports.py tests/test_session_api.py tests/test_session_hydration_service.py tests/test_story_export_service.py tests/support/in_memory_storage.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml ps'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker info >/tmp/storyteller-docker-info.txt 2>&1; status=$?; cat /tmp/storyteller-docker-info.txt; exit $status'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker info >/tmp/storyteller-docker-info.txt 2>&1; rc=$?; cat /tmp/storyteller-docker-info.txt; exit $rc'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'sleep 10 && docker info >/tmp/storyteller-docker-info.txt 2>&1; rc=$?; cat /tmp/storyteller-docker-info.txt; exit $rc'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-03T02:19:54.568563Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:",
+      "2026-04-03T02:23:02.762850Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/api/v1/routes/sessions.py:",
+      "2026-04-03T02:24:27.024097Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/AudioSettingsStage.tsx:",
+      "2026-04-03T02:24:52.694281Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/AudioSettingsStage.tsx:",
+      "2026-04-03T02:29:36.399397Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_session_api.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 375,
+    "file_paths": [
+      "backend/app/models/session.py",
+      "backend/app/models/__init__.py",
+      "backend/app/services/story_exports.py",
+      "backend/app/services/asset_access.py",
+      "backend/app/services/__init__.py",
+      "backend/app/api/dependencies.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/api/v1/routes/sessions.py",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/sessionArtifacts.ts",
+      "frontend/src/features/session/AudioSettingsStage.tsx",
+      "frontend/src/features/session/FinalizeStage.tsx",
+      "frontend/src/features/session/FinalizeStage.test.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "backend/tests/support/in_memory_storage.py",
+      "backend/tests/test_session_api.py",
+      "backend/tests/test_session_hydration_service.py",
+      "frontend/src/features/session/sessionArtifacts.test.ts",
+      "backend/tests/test_story_export_service.py",
+      "backend/requirements.txt",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/78_download_endpoints_and_object_access/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d511b-c04e-7362-8925-3ecfc6c88515",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 16540672,
+      "input_tokens": 17288391,
+      "output_tokens": 60773,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "agent": {
+      "model_high": "gemini-3-flash-preview",
+      "model_low": "gemini-3-flash-preview",
+      "model_medium": "gemini-3-flash-preview",
+      "model_provider": "gemini"
+    },
+    "cached_input_cost_per_1m": null,
+    "codex": {
+      "model": "gpt-5.4",
+      "reasoning_effort": "xhigh"
+    },
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "output_cost_per_1m": null,
+    "sandbox": "danger-full-access",
+    "version": 1.0
+  },
+  "failure_messages": [
+    "2026-04-03T02:19:54.568563Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/__init__.py:",
+    "2026-04-03T02:23:02.762850Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/api/v1/routes/sessions.py:",
+    "2026-04-03T02:24:27.024097Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/AudioSettingsStage.tsx:",
+    "2026-04-03T02:24:52.694281Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/AudioSettingsStage.tsx:",
+    "2026-04-03T02:29:36.399397Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_session_api.py:"
+  ],
+  "head_commit": "2979a6b913b25a66bab3ebd762295e96f81c0572",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "78-download-endpoints-and-object-access.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_78_download_endpoints_and_object_access",
+  "task_name_human": "78 download endpoints and object access",
+  "task_name_system": "78_download_endpoints_and_object_access",
+  "timing": {
+    "duration_seconds": 1620.0,
+    "finished_at": "2026-04-02T19:38:04-07:00",
+    "started_at": "2026-04-02T19:11:04-07:00"
+  }
+}
