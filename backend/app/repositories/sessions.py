@@ -32,10 +32,8 @@ ACTIVE_JOB_STATUSES = (
     JobStatus.IN_PROGRESS,
     JobStatus.PAUSED,
 )
-STORY_ASSET_KINDS = (
-    AssetKind.STORY_TEXT,
-    AssetKind.STORY_DOCX,
-)
+STORY_MANUSCRIPT_ASSET_KINDS = (AssetKind.STORY_TEXT,)
+STORY_EXPORT_ASSET_KINDS = (AssetKind.STORY_DOCX,)
 
 
 @dataclass(frozen=True)
@@ -62,6 +60,7 @@ class SessionAggregate:
     audio_segment_assets: list[SessionAsset]
     latest_draft_snapshot_asset: SessionAsset | None
     latest_story_asset: SessionAsset | None
+    latest_story_export_asset: SessionAsset | None
     latest_audio_asset: SessionAsset | None
     selected_continuity_bible: ContinuityBible | None
 
@@ -140,6 +139,7 @@ class StorySessionRepository:
             ),
             latest_draft_snapshot_asset=self._get_latest_draft_snapshot_asset(session_id),
             latest_story_asset=self._get_latest_story_asset(session_id),
+            latest_story_export_asset=self._get_latest_story_export_asset(session_id),
             latest_audio_asset=self._get_latest_audio_asset(session_id),
             selected_continuity_bible=self._get_selected_continuity_bible(session_id),
         )
@@ -359,7 +359,20 @@ class StorySessionRepository:
             select(SessionAsset)
             .where(
                 SessionAsset.session_id == session_id,
-                SessionAsset.asset_kind.in_(STORY_ASSET_KINDS),
+                SessionAsset.asset_kind.in_(STORY_MANUSCRIPT_ASSET_KINDS),
+                SessionAsset.status == AssetStatus.READY,
+            )
+            .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())
+            .limit(1)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def _get_latest_story_export_asset(self, session_id: str) -> SessionAsset | None:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
+            .where(
+                SessionAsset.session_id == session_id,
+                SessionAsset.asset_kind.in_(STORY_EXPORT_ASSET_KINDS),
                 SessionAsset.status == AssetStatus.READY,
             )
             .order_by(SessionAsset.ready_at.desc(), SessionAsset.created_at.desc())

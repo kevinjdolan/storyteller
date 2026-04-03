@@ -1263,7 +1263,7 @@ class SessionActionPolicyService:
                 stage=WorkflowStage.FINALIZE,
             )
         if action.extracted_values.asset_kind == DownloadAssetKind.STORY_DOCX:
-            if AssetKind.STORY_DOCX not in state.ready_story_asset_kinds:
+            if AssetKind.STORY_TEXT not in state.ready_story_asset_kinds:
                 return _reject(
                     SessionActionReasonCode.ASSET_NOT_READY,
                     "The Word document export is not ready yet.",

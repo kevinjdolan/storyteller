@@ -150,6 +150,15 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
 
     story_asset = SessionAsset(
         session_id=snapshot.id,
+        asset_kind=AssetKind.STORY_TEXT,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-exports",
+        object_path="sessions/hydration-complete/story.md",
+        mime_type="text/markdown",
+        ready_at=now,
+    )
+    story_export_asset = SessionAsset(
+        session_id=snapshot.id,
         asset_kind=AssetKind.STORY_DOCX,
         status=AssetStatus.READY,
         storage_bucket="storyteller-exports",
@@ -166,7 +175,7 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
         mime_type="audio/mpeg",
         ready_at=now,
     )
-    db_session.add_all([story_asset, audio_asset])
+    db_session.add_all([story_asset, story_export_asset, audio_asset])
     db_session.commit()
 
     hydrated = SessionHydrationService(db_session).hydrate_session(snapshot.id)
@@ -174,12 +183,18 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
     assert hydrated.snapshot.overall_status == WorkflowStageState.COMPLETED
     assert hydrated.snapshot.resume_stage == WorkflowStage.FINALIZE
     assert hydrated.snapshot.latest_story_asset is not None
+    assert hydrated.snapshot.latest_story_export_asset is not None
     assert hydrated.snapshot.latest_audio_asset is not None
-    assert hydrated.snapshot.latest_story_asset.object_path.endswith("story.docx")
+    assert hydrated.snapshot.latest_story_asset.object_path.endswith("story.md")
+    assert hydrated.snapshot.latest_story_export_asset.object_path.endswith("story.docx")
     assert hydrated.snapshot.latest_audio_asset.object_path.endswith("story.mp3")
     assert hydrated.snapshot.latest_story_asset.access is not None
     assert hydrated.snapshot.latest_story_asset.access.download_path.endswith(
         f"/api/v1/sessions/{snapshot.id}/assets/{story_asset.id}/content?disposition=attachment"
+    )
+    assert hydrated.snapshot.latest_story_export_asset.access is not None
+    assert hydrated.snapshot.latest_story_export_asset.access.download_path.endswith(
+        f"/api/v1/sessions/{snapshot.id}/assets/{story_export_asset.id}/content?disposition=attachment"
     )
     assert hydrated.snapshot.latest_audio_asset.access is not None
     assert hydrated.snapshot.latest_audio_asset.access.stream_path.endswith(

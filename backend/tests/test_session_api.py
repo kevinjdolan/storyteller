@@ -998,6 +998,68 @@ def test_get_named_story_docx_artifact_generates_export_from_story_text(
         db_session.close()
 
 
+def test_post_story_docx_artifact_generates_export_metadata(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Lantern Harbor"},
+    )
+    created = create_response.json()
+    fake_storage = session_api_client.app.state.object_storage
+    assert isinstance(fake_storage, InMemoryObjectStorage)
+
+    story_location = fake_storage.paths.export_asset(
+        session_id=created["id"],
+        export_kind="story",
+        export_id="accepted-manuscript",
+        extension="md",
+    )
+    fake_storage.upload_text(
+        story_location,
+        "# Chapter 1\n\nMira carried the lantern home.",
+        content_type="text/markdown; charset=utf-8",
+    )
+
+    db_session = get_session_factory()()
+    try:
+        db_session.add(
+            SessionAsset(
+                session_id=created["id"],
+                asset_kind=AssetKind.STORY_TEXT,
+                status=AssetStatus.READY,
+                storage_bucket=story_location.bucket,
+                object_path=story_location.key,
+                mime_type="text/markdown",
+            )
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.post(
+        f"/api/v1/sessions/{created['id']}/artifacts/story-docx",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["asset_kind"] == "story_docx"
+    assert payload["status"] == "ready"
+    assert payload["access"]["filename"] == "Lantern-Harbor.docx"
+    assert payload["access"]["download_path"].endswith(
+        f"/api/v1/sessions/{created['id']}/assets/{payload['id']}/content?disposition=attachment"
+    )
+
+    db_session = get_session_factory()()
+    try:
+        exported_asset = db_session.get(SessionAsset, payload["id"])
+        assert exported_asset is not None
+        assert exported_asset.asset_kind == AssetKind.STORY_DOCX
+        assert exported_asset.status == AssetStatus.READY
+    finally:
+        db_session.close()
+
+
 def test_get_session_history_endpoint_returns_durable_timeline(
     session_api_client: TestClient,
 ) -> None:

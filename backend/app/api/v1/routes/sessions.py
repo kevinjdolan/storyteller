@@ -28,6 +28,7 @@ from app.models import (
     AcceptRewriteSessionCompositionRequest,
     CreateSessionRequest,
     EditSessionBeatSheetRequest,
+    ExportAssetView,
     GenerateSessionBeatSheetRequest,
     GenerateSessionCharacterSheetsRequest,
     GenerateSessionPitchesRequest,
@@ -95,6 +96,7 @@ from app.services.session_hydration import (
     SessionHydrationNotFoundError,
     SessionHydrationService,
     build_composition_job_view,
+    build_session_asset_view,
 )
 from app.services.sessions import (
     InvalidStageTransitionError,
@@ -245,6 +247,41 @@ def get_named_session_artifact(
         disposition=disposition,
         byte_range=byte_range,
     )
+
+
+@router.post(
+    "/{session_id}/artifacts/story-docx",
+    response_model=ExportAssetView,
+    summary="Generate or refresh the current Word manuscript export",
+)
+def generate_story_docx_artifact(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    object_storage: Annotated[ObjectStorageService, Depends(get_object_storage_service)],
+) -> ExportAssetView:
+    service = SessionArtifactAccessService(
+        db_session,
+        object_storage=object_storage,
+    )
+    try:
+        asset = service.load_named_artifact(session_id, SessionArtifactHandle.STORY_DOCX)
+    except SessionArtifactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (
+        SessionArtifactUnavailableError,
+        StoryExportUnavailableError,
+        ObjectNotFoundError,
+        StorageError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    asset_view = build_session_asset_view(asset)
+    if asset_view is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The generated export could not be materialized.",
+        )
+    return asset_view
 
 
 @router.get(

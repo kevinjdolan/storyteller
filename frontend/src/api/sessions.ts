@@ -711,6 +711,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   composition_segments?: CompositionSegmentView[] | null
   audio_segments?: AudioSegmentView[] | null
   latest_story_asset?: SessionAssetView | null
+  latest_story_export_asset?: SessionAssetView | null
   latest_audio_asset?: SessionAssetView | null
   audio_settings?: AudioSettingsView | null
   continuity_bible?: ContinuityBibleView | null

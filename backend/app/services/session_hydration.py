@@ -331,6 +331,7 @@ def build_session_snapshot(
             aggregate.audio_segment_assets,
         ),
         latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
+        latest_story_export_asset=build_session_asset_view(aggregate.latest_story_export_asset),
         latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
         audio_settings=build_audio_settings_view(
             story_session=story_session,

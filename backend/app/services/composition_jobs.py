@@ -2868,7 +2868,7 @@ class CompositionJobService:
     def _supersede_story_assets(self, session_id: str) -> None:
         stmt = select(SessionAsset).where(
             SessionAsset.session_id == session_id,
-            SessionAsset.asset_kind == AssetKind.STORY_TEXT,
+            SessionAsset.asset_kind.in_((AssetKind.STORY_TEXT, AssetKind.STORY_DOCX)),
             SessionAsset.status == AssetStatus.READY,
         )
         for asset in self._session.execute(stmt).scalars().all():
