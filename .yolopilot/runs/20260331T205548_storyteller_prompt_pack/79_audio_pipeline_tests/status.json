@@ -1,0 +1,104 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_final_audio_assembly_service.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_narration_segmentation_service.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/tests/test_narration_segmentation_service.py backend/tests/test_final_audio_assembly_service.py backend/tests/test_story_tools.py backend/tests/support/audio_pipeline.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check tests/test_narration_segmentation_service.py tests/test_final_audio_assembly_service.py tests/test_story_tools.py tests/support/audio_pipeline.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 160,
+    "file_paths": [
+      "backend/tests/support/audio_pipeline.py",
+      "backend/tests/test_final_audio_assembly_service.py",
+      "backend/tests/test_narration_segmentation_service.py",
+      "backend/tests/test_story_tools.py",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/79_audio_pipeline_tests/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d5134-801e-72f0-bd68-2847e45b9a90",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 3864832,
+      "input_tokens": 4140079,
+      "output_tokens": 27459,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "agent": {
+      "model_high": "gemini-3-flash-preview",
+      "model_low": "gemini-3-flash-preview",
+      "model_medium": "gemini-3-flash-preview",
+      "model_provider": "gemini"
+    },
+    "cached_input_cost_per_1m": null,
+    "codex": {
+      "model": "gpt-5.4",
+      "reasoning_effort": "xhigh"
+    },
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "output_cost_per_1m": null,
+    "sandbox": "danger-full-access",
+    "version": 1.0
+  },
+  "failure_messages": [],
+  "head_commit": "0c1880bebd476762bac69328c301a22ab01d76d2",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "79-audio-pipeline-tests.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_79_audio_pipeline_tests",
+  "task_name_human": "79 audio pipeline tests",
+  "task_name_system": "79_audio_pipeline_tests",
+  "timing": {
+    "duration_seconds": 656.0,
+    "finished_at": "2026-04-02T19:49:02-07:00",
+    "started_at": "2026-04-02T19:38:06-07:00"
+  }
+}
