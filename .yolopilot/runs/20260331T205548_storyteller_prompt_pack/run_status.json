@@ -80,9 +80,10 @@
     "77-final-audio-assembly.md",
     "78-download-endpoints-and-object-access.md",
     "79-audio-pipeline-tests.md",
-    "80-finalize-screen-read-and-listen.md"
+    "80-finalize-screen-read-and-listen.md",
+    "81-docx-export-pipeline.md"
   ],
-  "current_success_ref": "17f630459fda09fd9cc074cc297ffc6ec9a5d63e",
+  "current_success_ref": "f6c0faff1861a6f9d20314d3898a4489ed9cc5e6",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
