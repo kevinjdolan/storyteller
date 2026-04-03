@@ -71,6 +71,8 @@ const snapshot = {
 describe('FinalizeStage', () => {
   it('keeps rewrite compare controls available from final review', async () => {
     const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
+    const onDownloadAudio = vi.fn()
+    const onDownloadStoryExport = vi.fn()
     const onRejectRewrite = vi.fn().mockResolvedValue(undefined)
     const onRestoreSegmentVersion = vi.fn().mockResolvedValue(undefined)
     const onReturnToComposition = vi.fn()
@@ -78,6 +80,8 @@ describe('FinalizeStage', () => {
     renderWithAppProviders(
       <FinalizeStage
         onAcceptRewrite={onAcceptRewrite}
+        onDownloadAudio={onDownloadAudio}
+        onDownloadStoryExport={onDownloadStoryExport}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={onRejectRewrite}
         onRestoreSegmentVersion={onRestoreSegmentVersion}
@@ -101,6 +105,44 @@ describe('FinalizeStage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Return to composition' }))
     expect(onReturnToComposition).toHaveBeenCalledTimes(1)
+    expect(onDownloadAudio).not.toHaveBeenCalled()
+    expect(onDownloadStoryExport).not.toHaveBeenCalled()
     expect(onRestoreSegmentVersion).not.toHaveBeenCalled()
+  })
+
+  it('exposes artifact download controls once finalized assets exist', () => {
+    const onDownloadAudio = vi.fn()
+    const onDownloadStoryExport = vi.fn()
+
+    renderWithAppProviders(
+      <FinalizeStage
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onDownloadAudio={onDownloadAudio}
+        onDownloadStoryExport={onDownloadStoryExport}
+        onKeepExploringRewrite={vi.fn()}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToComposition={vi.fn()}
+        snapshot={{
+          ...snapshot,
+          latest_story_asset: {
+            id: 'story-asset-1',
+            asset_kind: 'story_text',
+            status: 'ready',
+          },
+          latest_audio_asset: {
+            id: 'audio-asset-1',
+            asset_kind: 'final_audio',
+            status: 'ready',
+          },
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download Word document' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download narration' }))
+
+    expect(onDownloadStoryExport).toHaveBeenCalledTimes(1)
+    expect(onDownloadAudio).toHaveBeenCalledTimes(1)
   })
 })

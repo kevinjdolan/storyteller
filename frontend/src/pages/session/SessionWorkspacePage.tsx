@@ -73,6 +73,11 @@ import {
 } from '../../features/session/chat/actionEchoes.ts'
 import { SessionFeedStatusIndicator } from '../../features/session/live/SessionFeedStatusIndicator.tsx'
 import {
+  buildSessionArtifactDownloadUrl,
+  resolveSessionAssetDownloadUrl,
+  triggerArtifactDownload,
+} from '../../features/session/sessionArtifacts.ts'
+import {
   buildSessionWorkspaceStageViews,
   type SessionWorkspaceStageView,
 } from '../../features/session/sessionStageScaffold.ts'
@@ -872,6 +877,54 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     })
 
     appendHistoryEventToChat(event)
+  }
+
+  function resolveStoryExportDownloadUrl() {
+    if (snapshot == null || snapshot.latest_story_asset == null) {
+      return null
+    }
+    return buildSessionArtifactDownloadUrl(sessionId, 'story-docx')
+  }
+
+  function resolveFinalAudioDownloadUrl() {
+    if (snapshot == null || snapshot.latest_audio_asset == null) {
+      return null
+    }
+    return (
+      resolveSessionAssetDownloadUrl(snapshot.latest_audio_asset) ??
+      buildSessionArtifactDownloadUrl(sessionId, 'final-audio')
+    )
+  }
+
+  async function startArtifactDownload(options: {
+    artifactKind: 'story_docx' | 'final_audio'
+    controlId: string
+    origin: string
+  }) {
+    const downloadUrl =
+      options.artifactKind === 'story_docx'
+        ? resolveStoryExportDownloadUrl()
+        : resolveFinalAudioDownloadUrl()
+
+    if (downloadUrl == null) {
+      throw new Error(
+        options.artifactKind === 'story_docx'
+          ? 'The Word document export is not ready yet.'
+          : 'The final narration export is not ready yet.',
+      )
+    }
+
+    void persistUiAction({
+      action: 'download_asset',
+      stage: 'finalize',
+      controlId: options.controlId,
+      origin: options.origin,
+      valueSummary:
+        options.artifactKind === 'story_docx'
+          ? 'Word document'
+          : 'Final narration audio',
+    }).catch(() => {})
+    triggerArtifactDownload(downloadUrl)
   }
 
   async function applyGenreSelection(options: {
@@ -1751,6 +1804,15 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         origin: 'chat',
         valueSummary: 'Finalize',
       })
+      return
+    }
+
+    if (action.action_type === 'download_asset') {
+      await startArtifactDownload({
+        artifactKind: action.extracted_values.asset_kind,
+        controlId: 'chat-intent-download-asset',
+        origin: 'chat',
+      })
     }
   }
 
@@ -2274,16 +2336,30 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   snapshot={snapshot}
                 />
               ) : selectedStage.stage === 'finalize' ? (
-                <FinalizeStage
-                  onAcceptRewrite={async (jobId) =>
-                    applyCompositionRewriteAcceptance({
-                      jobId,
-                      previewStage: 'finalize',
-                    })
-                  }
-                  onKeepExploringRewrite={(segmentIndex) => {
-                    setPreviewStage('composition')
-                    void persistUiAction({
+              <FinalizeStage
+                onAcceptRewrite={async (jobId) =>
+                  applyCompositionRewriteAcceptance({
+                    jobId,
+                    previewStage: 'finalize',
+                  })
+                }
+                onDownloadAudio={() => {
+                  void startArtifactDownload({
+                    artifactKind: 'final_audio',
+                    controlId: 'finalize-download-audio',
+                    origin: 'workspace',
+                  })
+                }}
+                onDownloadStoryExport={() => {
+                  void startArtifactDownload({
+                    artifactKind: 'story_docx',
+                    controlId: 'finalize-download-story',
+                    origin: 'workspace',
+                  })
+                }}
+                onKeepExploringRewrite={(segmentIndex) => {
+                  setPreviewStage('composition')
+                  void persistUiAction({
                       action: 'navigate_to_stage',
                       stage: 'composition',
                       controlId: 'finalize-compare-explore-rewrite',

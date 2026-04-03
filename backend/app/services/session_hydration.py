@@ -3,13 +3,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.db import (
-    AssetStatus,
     AudioJob,
     CompositionInterruptionRequest,
     CompositionInterruptionState,
@@ -69,6 +67,7 @@ from app.models import (
 from app.models.composition_interruptions import build_composition_interruption_message
 from app.repositories import SessionAggregate, StorySessionRepository
 from app.services.agent_context import build_session_agent_context_summary
+from app.services.asset_access import build_session_asset_access_view
 from app.services.audio_settings import build_audio_settings_view
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
@@ -1184,20 +1183,6 @@ def _build_text_preview(value: str | None, *, limit: int = 132) -> str | None:
     return f"{normalized[: limit - 3].rstrip()}..."
 
 
-def _build_public_asset_url(row: SessionAsset) -> str | None:
-    if row.status != AssetStatus.READY:
-        return None
-
-    public_base_url = get_settings().gcs_public_url.rstrip("/")
-    if not public_base_url:
-        return None
-
-    return (
-        f"{public_base_url}/storage/v1/b/{quote(row.storage_bucket, safe='')}"
-        f"/o/{quote(row.object_path, safe='')}?alt=media"
-    )
-
-
 def _read_beat_sheet_payload(row) -> dict[str, Any]:
     raw = getattr(row, "beats", None)
     return dict(raw) if isinstance(raw, Mapping) else {}
@@ -2183,6 +2168,7 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         return None
 
     details = _read_mapping(row.metadata_json)
+    access = build_session_asset_access_view(row)
     return SessionAssetView(
         id=row.id,
         asset_kind=row.asset_kind,
@@ -2198,7 +2184,8 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         segment_index=row.segment_index,
         error_message=row.error_message,
         details=details or None,
-        public_url=_build_public_asset_url(row),
+        access=access,
+        public_url=access.stream_path if access is not None else None,
         ready_at=row.ready_at,
         failed_at=row.failed_at,
         superseded_at=row.superseded_at,

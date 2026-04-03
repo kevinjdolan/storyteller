@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.ai import (
@@ -18,6 +20,7 @@ from app.api.dependencies import (
     get_character_generation_adapter,
     get_db_session,
     get_intent_parser_adapter,
+    get_object_storage_service,
     get_pitch_generation_adapter,
 )
 from app.db import CompositionDownstreamMode, CompositionJob
@@ -80,7 +83,12 @@ from app.services import (
     CompositionJobStateError,
     PitchGenerationService,
     SessionActionPolicyService,
+    SessionArtifactAccessService,
+    SessionArtifactHandle,
+    SessionArtifactNotFoundError,
+    SessionArtifactUnavailableError,
     SessionIntentParserService,
+    StoryExportUnavailableError,
     StoryWorkflowToolService,
 )
 from app.services.session_hydration import (
@@ -107,6 +115,7 @@ from app.services.sessions import (
     UnsupportedSessionContextUpdateError,
 )
 from app.services.story_tools import StoryWorkflowToolServiceError
+from app.storage import ObjectNotFoundError, ObjectStorageService, StorageError
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -161,6 +170,81 @@ def hydrate_session_workspace(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+
+@router.get(
+    "/{session_id}/assets/{asset_id}/content",
+    summary="Stream or download a ready session asset through the backend",
+)
+def get_session_asset_content(
+    session_id: str,
+    asset_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    object_storage: Annotated[ObjectStorageService, Depends(get_object_storage_service)],
+    disposition: Annotated[str, Query(pattern="^(inline|attachment)$")] = "inline",
+    byte_range: Annotated[str | None, Header(alias="Range")] = None,
+) -> StreamingResponse:
+    service = SessionArtifactAccessService(
+        db_session,
+        object_storage=object_storage,
+    )
+    try:
+        asset = service.load_ready_asset(session_id, asset_id)
+        content = service.load_asset_content(asset)
+    except SessionArtifactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (
+        SessionArtifactUnavailableError,
+        ObjectNotFoundError,
+        StorageError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return _build_asset_streaming_response(
+        filename=content.filename,
+        media_type=content.asset.mime_type,
+        payload=content.payload,
+        disposition=disposition,
+        byte_range=byte_range,
+    )
+
+
+@router.get(
+    "/{session_id}/artifacts/{artifact_handle}",
+    summary="Resolve the current downloadable artifact for a session",
+)
+def get_named_session_artifact(
+    session_id: str,
+    artifact_handle: SessionArtifactHandle,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    object_storage: Annotated[ObjectStorageService, Depends(get_object_storage_service)],
+    disposition: Annotated[str, Query(pattern="^(inline|attachment)$")] = "attachment",
+    byte_range: Annotated[str | None, Header(alias="Range")] = None,
+) -> StreamingResponse:
+    service = SessionArtifactAccessService(
+        db_session,
+        object_storage=object_storage,
+    )
+    try:
+        asset = service.load_named_artifact(session_id, artifact_handle)
+        content = service.load_asset_content(asset)
+    except SessionArtifactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (
+        SessionArtifactUnavailableError,
+        StoryExportUnavailableError,
+        ObjectNotFoundError,
+        StorageError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return _build_asset_streaming_response(
+        filename=content.filename,
+        media_type=content.asset.mime_type,
+        payload=content.payload,
+        disposition=disposition,
+        byte_range=byte_range,
+    )
 
 
 @router.get(
@@ -1532,3 +1616,108 @@ def _resolve_composition_job_view(
             f"composition job {composition_job_id!r} was not found",
         )
     return job_view
+
+
+def _build_asset_streaming_response(
+    *,
+    filename: str,
+    media_type: str,
+    payload: bytes,
+    disposition: str,
+    byte_range: str | None,
+) -> StreamingResponse:
+    total_bytes = len(payload)
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": _build_content_disposition(
+            filename=filename,
+            disposition=disposition,
+        ),
+    }
+    resolved_range = _resolve_byte_range(byte_range, total_bytes)
+    if resolved_range is None:
+        headers["Content-Length"] = str(total_bytes)
+        return StreamingResponse(
+            _iter_payload_chunks(payload),
+            media_type=media_type,
+            headers=headers,
+        )
+
+    start_index, end_index = resolved_range
+    ranged_payload = payload[start_index : end_index + 1]
+    headers["Content-Length"] = str(len(ranged_payload))
+    headers["Content-Range"] = f"bytes {start_index}-{end_index}/{total_bytes}"
+    return StreamingResponse(
+        _iter_payload_chunks(ranged_payload),
+        media_type=media_type,
+        headers=headers,
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+    )
+
+
+def _resolve_byte_range(
+    range_header: str | None,
+    total_bytes: int,
+) -> tuple[int, int] | None:
+    if range_header is None or not range_header.strip():
+        return None
+    if total_bytes <= 0:
+        raise _invalid_range(total_bytes)
+
+    normalized = range_header.strip()
+    if not normalized.startswith("bytes="):
+        raise _invalid_range(total_bytes)
+
+    range_spec = normalized[6:]
+    if "," in range_spec:
+        raise _invalid_range(total_bytes)
+
+    start_text, separator, end_text = range_spec.partition("-")
+    if not separator:
+        raise _invalid_range(total_bytes)
+
+    if start_text:
+        if not start_text.isdigit():
+            raise _invalid_range(total_bytes)
+        start_index = int(start_text)
+        if start_index >= total_bytes:
+            raise _invalid_range(total_bytes)
+        end_index = total_bytes - 1
+        if end_text:
+            if not end_text.isdigit():
+                raise _invalid_range(total_bytes)
+            end_index = min(int(end_text), total_bytes - 1)
+        if end_index < start_index:
+            raise _invalid_range(total_bytes)
+        return start_index, end_index
+
+    if not end_text.isdigit():
+        raise _invalid_range(total_bytes)
+    suffix_length = int(end_text)
+    if suffix_length <= 0:
+        raise _invalid_range(total_bytes)
+    if suffix_length >= total_bytes:
+        return 0, total_bytes - 1
+    return total_bytes - suffix_length, total_bytes - 1
+
+
+def _build_content_disposition(*, filename: str, disposition: str) -> str:
+    quoted_filename = quote(filename, safe="")
+    fallback_filename = filename.replace('"', "")
+    return (
+        f'{disposition}; filename="{fallback_filename}"; '
+        f"filename*=UTF-8''{quoted_filename}"
+    )
+
+
+def _iter_payload_chunks(payload: bytes, *, chunk_size: int = 64 * 1024):
+    for start_index in range(0, len(payload), chunk_size):
+        yield payload[start_index : start_index + chunk_size]
+
+
+def _invalid_range(total_bytes: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+        detail="The requested byte range is invalid for this asset.",
+        headers={"Content-Range": f"bytes */{total_bytes}"},
+    )

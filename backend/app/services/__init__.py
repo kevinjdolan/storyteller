@@ -4,6 +4,15 @@ from app.services.action_policy import (
     SessionActionPolicyService,
     SessionActionPolicyServiceError,
 )
+from app.services.asset_access import (
+    SessionArtifactAccessError,
+    SessionArtifactAccessService,
+    SessionArtifactHandle,
+    SessionArtifactNotFoundError,
+    SessionArtifactUnavailableError,
+    build_named_session_artifact_path,
+    build_session_asset_access_view,
+)
 from app.services.assets import (
     AssetNotFoundError,
     AssetOwnershipError,
@@ -113,6 +122,12 @@ from app.services.story_tools import (
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
 )
+from app.services.story_exports import (
+    DOCX_MIME_TYPE,
+    StoryDocxExportService,
+    StoryExportError,
+    StoryExportUnavailableError,
+)
 
 __all__ = [
     "AssetNotFoundError",
@@ -156,6 +171,11 @@ __all__ = [
     "StoryOutlineGenerationServiceError",
     "SessionActionPolicyService",
     "SessionActionPolicyServiceError",
+    "SessionArtifactAccessError",
+    "SessionArtifactAccessService",
+    "SessionArtifactHandle",
+    "SessionArtifactNotFoundError",
+    "SessionArtifactUnavailableError",
     "SessionIntentParserService",
     "SessionMemoryService",
     "SessionNotFoundError",
@@ -166,6 +186,9 @@ __all__ = [
     "SessionHydrationServiceError",
     "SessionService",
     "SessionServiceError",
+    "StoryDocxExportService",
+    "StoryExportError",
+    "StoryExportUnavailableError",
     "StoryWorkflowActionRouter",
     "StoryWorkflowToolDefinition",
     "StoryWorkflowToolRegistry",
@@ -176,8 +199,10 @@ __all__ = [
     "build_beat_sheet_model_output",
     "build_brief_model_output",
     "build_audio_mix_plan",
+    "build_named_session_artifact_path",
     "build_audio_mix_preview",
     "build_silence_pcm",
+    "build_session_asset_access_view",
     "build_wav_bytes",
     "build_character_model_output",
     "build_continuity_payload",
@@ -188,6 +213,7 @@ __all__ = [
     "evaluate_beat_sheet",
     "evaluate_pitch_batch",
     "deserialize_audio_mix_plan",
+    "DOCX_MIME_TYPE",
     "FfmpegAudioMixer",
     "FinalAudioAssemblyError",
     "FinalAudioAssemblyService",

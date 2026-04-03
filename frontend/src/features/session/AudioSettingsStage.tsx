@@ -28,6 +28,10 @@ import {
   buildAudioEstimateBasisLabel,
   deriveAudioRuntimeEstimatePreview,
 } from './audioEstimation.ts'
+import {
+  resolveSessionAssetDownloadUrl,
+  resolveSessionAssetStreamUrl,
+} from './sessionArtifacts.ts'
 import type { SessionWorkspaceStageView } from './sessionStageScaffold.ts'
 
 type AudioSettingsStageProps = {
@@ -645,7 +649,7 @@ function buildSegmentPreviewCopy(
   segment: AudioSegmentView,
   displayStatus: AudioSegmentDisplayStatus,
 ) {
-  if (segment.preview_asset?.public_url != null) {
+  if (resolveSessionAssetStreamUrl(segment.preview_asset) != null) {
     return 'Checkpoint preview clip'
   }
 
@@ -820,10 +824,16 @@ export function AudioSettingsStage({
     (segment) => segment.preview_asset != null,
   ).length
   const previewPlayableCount = audioSegments.filter(
-    (segment) => segment.preview_asset?.public_url != null,
+    (segment) => resolveSessionAssetStreamUrl(segment.preview_asset) != null,
   ).length
   const finalAudioReady = snapshot.latest_audio_asset != null
   const compiledAudioMeta = buildCompiledAudioMeta(snapshot.latest_audio_asset)
+  const compiledAudioStreamUrl = resolveSessionAssetStreamUrl(
+    snapshot.latest_audio_asset,
+  )
+  const compiledAudioDownloadUrl = resolveSessionAssetDownloadUrl(
+    snapshot.latest_audio_asset,
+  )
   const showingPreviousMaster =
     activeAudioJob != null &&
     snapshot.latest_audio_asset?.audio_job_id != null &&
@@ -1014,6 +1024,9 @@ export function AudioSettingsStage({
                   segment,
                   displayStatus,
                 )
+                const previewAudioUrl = resolveSessionAssetStreamUrl(
+                  segment.preview_asset,
+                )
 
                 return (
                   <li className="audio-stage__segment-item" key={segment.id}>
@@ -1058,13 +1071,13 @@ export function AudioSettingsStage({
                         </span>
                       ) : null}
 
-                      {segment.preview_asset?.public_url != null ? (
+                      {previewAudioUrl != null ? (
                         <audio
                           aria-label={`Segment ${segment.segment_index} preview audio`}
                           className="audio-stage__player"
                           controls
                           preload="none"
-                          src={segment.preview_asset.public_url}
+                          src={previewAudioUrl}
                         />
                       ) : (
                         <p className="audio-stage__segment-preview-empty">
@@ -1182,13 +1195,13 @@ export function AudioSettingsStage({
                 <Badge tone="success">Final audio</Badge>
               </div>
 
-              {snapshot.latest_audio_asset.public_url != null ? (
+              {compiledAudioStreamUrl != null ? (
                 <audio
                   aria-label="Compiled narration preview"
                   className="audio-stage__player"
                   controls
                   preload="none"
-                  src={snapshot.latest_audio_asset.public_url}
+                  src={compiledAudioStreamUrl}
                 />
               ) : (
                 <p className="audio-stage__compiled-note">
@@ -1213,7 +1226,7 @@ export function AudioSettingsStage({
                 </div>
               ) : null}
 
-              {snapshot.latest_audio_asset.public_url != null ? (
+              {compiledAudioDownloadUrl != null ? (
                 <div className="audio-stage__compiled-actions">
                   <a
                     className={getButtonClassName({
@@ -1221,7 +1234,7 @@ export function AudioSettingsStage({
                       tone: 'secondary',
                     })}
                     download
-                    href={snapshot.latest_audio_asset.public_url}
+                    href={compiledAudioDownloadUrl}
                   >
                     Download narration
                   </a>

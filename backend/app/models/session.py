@@ -371,6 +371,12 @@ class AudioJobView(BaseModel):
     updated_at: datetime
 
 
+class SessionAssetAccessView(BaseModel):
+    download_path: str
+    filename: str
+    stream_path: str | None = None
+
+
 class SessionAssetView(BaseModel):
     id: str
     asset_kind: str
@@ -386,6 +392,7 @@ class SessionAssetView(BaseModel):
     segment_index: int | None = None
     error_message: str | None = None
     details: dict[str, Any] | None = None
+    access: SessionAssetAccessView | None = None
     public_url: str | None = None
     ready_at: datetime | None = None
     failed_at: datetime | None = None

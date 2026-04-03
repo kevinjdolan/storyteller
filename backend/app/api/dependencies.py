@@ -19,6 +19,7 @@ from app.ai import (
 )
 from app.db.session import get_session_factory
 from app.settings import AppSettings, get_settings
+from app.storage import ObjectStorageService, build_object_storage_service
 
 
 def get_db_session() -> Iterator[Session]:
@@ -35,6 +36,14 @@ def get_app_settings(request: Request) -> AppSettings:
     if settings is None:
         settings = get_settings()
     return settings
+
+
+def get_object_storage_service(request: Request) -> ObjectStorageService:
+    object_storage = getattr(request.app.state, "object_storage", None)
+    if object_storage is None:
+        object_storage = build_object_storage_service(get_app_settings(request))
+        request.app.state.object_storage = object_storage
+    return object_storage
 
 
 def get_intent_parser_adapter(request: Request) -> IntentParserAdapter:

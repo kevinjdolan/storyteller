@@ -6,6 +6,8 @@ import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
 
 type FinalizeStageProps = {
   onAcceptRewrite: (jobId: string) => Promise<unknown>
+  onDownloadAudio: () => void
+  onDownloadStoryExport: () => void
   onKeepExploringRewrite: (segmentIndex: number) => void
   onRejectRewrite: (jobId: string) => Promise<unknown>
   onRestoreSegmentVersion: (
@@ -18,6 +20,8 @@ type FinalizeStageProps = {
 
 export function FinalizeStage({
   onAcceptRewrite,
+  onDownloadAudio,
+  onDownloadStoryExport,
   onKeepExploringRewrite,
   onRejectRewrite,
   onRestoreSegmentVersion,
@@ -140,6 +144,24 @@ export function FinalizeStage({
 
         <div className="cta-row">
           <Button
+            disabled={!finalStoryReady}
+            onClick={() => {
+              onDownloadStoryExport()
+            }}
+            tone="secondary"
+          >
+            Download Word document
+          </Button>
+          <Button
+            disabled={!finalAudioReady}
+            onClick={() => {
+              onDownloadAudio()
+            }}
+            tone="secondary"
+          >
+            Download narration
+          </Button>
+          <Button
             onClick={() => {
               onReturnToComposition()
             }}
@@ -148,6 +170,14 @@ export function FinalizeStage({
             Return to composition
           </Button>
         </div>
+
+        {!finalStoryReady || !finalAudioReady ? (
+          <p className="body-copy">
+            Download controls unlock as each finalized asset reaches durable
+            storage. Story export uses the accepted manuscript, while narration
+            waits for the latest published master.
+          </p>
+        ) : null}
       </section>
 
       {compositionSegments.length > 0 ? (

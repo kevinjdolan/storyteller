@@ -530,12 +530,19 @@ export type SessionAssetView = {
   segment_index?: number | null
   error_message?: string | null
   details?: Record<string, unknown> | null
+  access?: SessionAssetAccessView | null
   public_url?: string | null
   ready_at?: string | null
   failed_at?: string | null
   superseded_at?: string | null
   created_at?: string
   updated_at?: string
+}
+
+export type SessionAssetAccessView = {
+  download_path: string
+  filename: string
+  stream_path?: string | null
 }
 
 export type SessionEventActorType = 'user' | 'assistant' | 'system' | 'service'

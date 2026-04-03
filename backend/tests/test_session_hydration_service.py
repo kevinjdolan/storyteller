@@ -177,6 +177,14 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
     assert hydrated.snapshot.latest_audio_asset is not None
     assert hydrated.snapshot.latest_story_asset.object_path.endswith("story.docx")
     assert hydrated.snapshot.latest_audio_asset.object_path.endswith("story.mp3")
+    assert hydrated.snapshot.latest_story_asset.access is not None
+    assert hydrated.snapshot.latest_story_asset.access.download_path.endswith(
+        f"/api/v1/sessions/{snapshot.id}/assets/{story_asset.id}/content?disposition=attachment"
+    )
+    assert hydrated.snapshot.latest_audio_asset.access is not None
+    assert hydrated.snapshot.latest_audio_asset.access.stream_path.endswith(
+        f"/api/v1/sessions/{snapshot.id}/assets/{audio_asset.id}/content?disposition=inline"
+    )
     assert hydrated.hydration.strategy == "materialized_only"
     assert hydrated.hydration.replayed_event_count == 0
 
@@ -310,9 +318,10 @@ def test_hydrate_session_includes_audio_segments_with_preview_assets(db_session)
     assert hydrated.snapshot.audio_segments[0].source_outline_card_title == "Lantern launch"
     assert hydrated.snapshot.audio_segments[0].status == JobStatus.COMPLETED.value
     assert hydrated.snapshot.audio_segments[0].preview_asset is not None
-    assert hydrated.snapshot.audio_segments[0].preview_asset.public_url is not None
-    assert hydrated.snapshot.audio_segments[0].preview_asset.public_url.endswith(
-        "?alt=media"
+    assert hydrated.snapshot.audio_segments[0].preview_asset.access is not None
+    assert hydrated.snapshot.audio_segments[0].preview_asset.access.stream_path.endswith(
+        f"/api/v1/sessions/{snapshot.id}/assets/"
+        f"{hydrated.snapshot.audio_segments[0].preview_asset.id}/content?disposition=inline"
     )
     assert hydrated.snapshot.audio_segments[1].split_reason == "sentence_boundary"
     assert hydrated.snapshot.audio_segments[1].preview_asset is None

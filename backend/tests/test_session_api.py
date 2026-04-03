@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Iterator
 
@@ -53,8 +54,10 @@ from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.session_realtime import CompositionChunkCursor, SessionRealtimeService
 from app.services.sessions import SessionService
 from app.settings import get_settings
+from docx import Document
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from tests.support.in_memory_storage import InMemoryObjectStorage
 
 
 class StubBriefNormalizationAdapter:
@@ -424,6 +427,9 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
     engine = get_engine()
     Base.metadata.create_all(engine)
+
+    fake_storage = InMemoryObjectStorage(get_settings())
+    monkeypatch.setattr("app.main.build_object_storage_service", lambda settings: fake_storage)
 
     app = create_app()
     app.state.beat_sheet_generation_adapter = StubBeatSheetGenerationAdapter()
@@ -800,7 +806,8 @@ def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(
                     source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
                     source_outline_card_title="Lantern launch",
                     text_content=(
-                        "Mira set the first lantern on the water and waited for the harbor to answer."
+                        "Mira set the first lantern on the water and waited for "
+                        "the harbor to answer."
                     ),
                     word_count=14,
                     text_start_offset=0,
@@ -857,10 +864,138 @@ def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(
     assert payload["snapshot"]["audio_segments"][0]["source_outline_card_title"] == (
         "Lantern launch"
     )
-    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["public_url"].endswith(
-        "?alt=media"
+    assert (
+        payload["snapshot"]["audio_segments"][0]["preview_asset"]["access"]["stream_path"]
+        == f"/api/v1/sessions/{created['id']}/assets/"
+        f"{payload['snapshot']['audio_segments'][0]['preview_asset']['id']}/content"
+        "?disposition=inline"
     )
     assert payload["snapshot"]["audio_segments"][1]["split_reason"] == "sentence_boundary"
+
+
+def test_get_session_asset_content_supports_byte_ranges_for_audio(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Audio Asset Range"},
+    )
+    created = create_response.json()
+    fake_storage = session_api_client.app.state.object_storage
+    assert isinstance(fake_storage, InMemoryObjectStorage)
+    audio_location = fake_storage.paths.final_audio(
+        session_id=created["id"],
+        job_id="audio-1",
+    )
+    audio_bytes = b"FAKEAUDIO"
+    fake_storage.upload_bytes(audio_location, audio_bytes, content_type="audio/mpeg")
+
+    db_session = get_session_factory()()
+    try:
+        audio_asset = SessionAsset(
+            session_id=created["id"],
+            asset_kind=AssetKind.FINAL_AUDIO,
+            status=AssetStatus.READY,
+            storage_bucket=audio_location.bucket,
+            object_path=audio_location.key,
+            mime_type="audio/mpeg",
+        )
+        db_session.add(audio_asset)
+        db_session.commit()
+        asset_id = audio_asset.id
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(
+        f"/api/v1/sessions/{created['id']}/assets/{asset_id}/content",
+        headers={"Range": "bytes=0-3"},
+    )
+
+    assert response.status_code == 206
+    assert response.content == b"FAKE"
+    assert response.headers["content-range"] == f"bytes 0-3/{len(audio_bytes)}"
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["content-type"] == "audio/mpeg"
+
+
+def test_get_named_story_docx_artifact_generates_export_from_story_text(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Lantern Harbor"},
+    )
+    created = create_response.json()
+    fake_storage = session_api_client.app.state.object_storage
+    assert isinstance(fake_storage, InMemoryObjectStorage)
+
+    story_location = fake_storage.paths.export_asset(
+        session_id=created["id"],
+        export_kind="story",
+        export_id="accepted-manuscript",
+        extension="md",
+    )
+    fake_storage.upload_text(
+        story_location,
+        "# Chapter 1\n\nMira carried the lantern home.",
+        content_type="text/markdown; charset=utf-8",
+    )
+
+    db_session = get_session_factory()()
+    try:
+        story_asset = SessionAsset(
+            session_id=created["id"],
+            asset_kind=AssetKind.STORY_TEXT,
+            status=AssetStatus.READY,
+            storage_bucket=story_location.bucket,
+            object_path=story_location.key,
+            mime_type="text/markdown",
+        )
+        db_session.add(story_asset)
+        db_session.commit()
+        source_story_asset_id = story_asset.id
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(
+        f"/api/v1/sessions/{created['id']}/artifacts/story-docx",
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in response.headers["content-disposition"]
+
+    document = Document(BytesIO(response.content))
+    assert document.paragraphs[0].text == "Lantern Harbor"
+    assert any(
+        paragraph.text == "Mira carried the lantern home."
+        for paragraph in document.paragraphs
+    )
+
+    db_session = get_session_factory()()
+    try:
+        exported_asset = db_session.execute(
+            select(SessionAsset).where(
+                SessionAsset.session_id == created["id"],
+                SessionAsset.asset_kind == AssetKind.STORY_DOCX,
+            )
+        ).scalar_one()
+        assert exported_asset.status == AssetStatus.READY
+        assert exported_asset.metadata_json["source_story_asset_id"] == source_story_asset_id
+        exported_bytes = fake_storage.download_bytes(
+            fake_storage.paths.export_asset(
+                session_id=created["id"],
+                export_kind="docx",
+                export_id="final-manuscript",
+                extension="docx",
+            )
+        )
+        assert exported_bytes == response.content
+    finally:
+        db_session.close()
 
 
 def test_get_session_history_endpoint_returns_durable_timeline(
