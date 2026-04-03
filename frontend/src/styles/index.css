@@ -3091,6 +3091,8 @@ h4 {
 
 .finalize-stage__experience {
   gap: var(--space-5);
+  position: relative;
+  z-index: 1;
   background:
     linear-gradient(
       145deg,
@@ -3102,6 +3104,8 @@ h4 {
 
 .finalize-stage__review-panel {
   gap: var(--space-4);
+  position: relative;
+  z-index: 0;
 }
 
 .finalize-stage__tablist {
