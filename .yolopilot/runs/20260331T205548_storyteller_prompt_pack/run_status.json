@@ -79,9 +79,10 @@
     "76-audio-preview-and-segment-status-ui.md",
     "77-final-audio-assembly.md",
     "78-download-endpoints-and-object-access.md",
-    "79-audio-pipeline-tests.md"
+    "79-audio-pipeline-tests.md",
+    "80-finalize-screen-read-and-listen.md"
   ],
-  "current_success_ref": "0c1880bebd476762bac69328c301a22ab01d76d2",
+  "current_success_ref": "17f630459fda09fd9cc074cc297ffc6ec9a5d63e",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",

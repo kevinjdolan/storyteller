@@ -1,0 +1,240 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"compile_story_text|accepted_story_so_far|text_content.*\\\\\\\\n\\\\\\\\n|join\\\\(|splitlines\\\" backend/app/services/composition_jobs.py frontend/src/features/session/CompositionStage.test.tsx frontend/src/features/session/FinalizeStage.test.tsx backend/tests/test_session_hydration_service.py backend/tests/test_composition_generation.py\"",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"type SessionUsageSummaryView|usage_summary\" frontend/src/api/sessions.ts'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx prettier --write src/features/session/FinalizeStage.tsx src/features/session/FinalizeStage.test.tsx src/features/session/sessionArtifacts.ts src/styles/index.css'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx vitest run src/features/session/FinalizeStage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"\\\\*\\\" src/features/session/FinalizeStage.tsx\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx vitest run src/features/session/FinalizeStage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx vitest run src/features/session/FinalizeStage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'odysseus --help'",
+        "exit_code": 127,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker info --format '{{json .ServerVersion}}'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker info --format '{{json .ServerVersion}}'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose -f infra/compose/docker-compose.yml ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker info --format '{{json .ServerVersion}}'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker desktop status'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker desktop logs --tail 50'",
+        "exit_code": 125,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker info --format '{{json .ServerVersion}}'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker info --format '{{json .ServerVersion}}'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"node --input-type=module <<'EOF'\nimport { chromium } from 'playwright';\n\nconst sessionId = 'session-finalize-qa';\nconst baseSnapshot = {\n  id: sessionId,\n  display_title: 'Lanterns Over Juniper Lake',\n  working_title: 'Lanterns Over Juniper Lake',\n  current_stage: 'finalize',\n  resume_stage: 'finalize',\n  furthest_completed_stage: 'audio',\n  overall_status: 'completed',\n  created_at: '2026-04-01T03:00:00Z',\n  updated_at: '2026-04-02T05:30:00Z',\n  completed_at: '2026-04-02T05:30:00Z',\n  selected_genre: {\n    id: 'genre-1',\n    slug: 'quest-fantasy',\n    label: 'Quest Fantasy',\n  },\n  selected_tone_profile: {\n    id: 'tone-1',\n    slug: 'hushed-wonder',\n    label: 'Hushed Wonder',\n  },\n  progress: {\n    total_stages: 10,\n    completed_stages: 10,\n    in_progress_stages: 0,\n    needs_regeneration_stages: 0,\n  },\n  stage_states: [\n    {\n      stage: 'finalize',\n      label: 'Finalize',\n      description: 'Read, listen, review final assets, and download exports.',\n      status: 'completed',\n      detail: 'Everything is ready for final review.',\n      completed_at: '2026-04-02T05:30:00Z',\n    },\n  ],\n  selected_story_setup: {\n    id: 'setup-1',\n    revision_number: 1,\n    target_word_count: 1800,\n    target_runtime_minutes: 12,\n    chapter_count: 3,\n    approximate_scene_count: 8,\n    chapter_style: 'short',\n    guidance_notes: 'Keep the pacing gentle enough for bedtime.',\n  },\n  latest_composition_job: {\n    id: 'composition-job-1',\n    job_kind: 'composition',\n    status: 'completed',\n    progress_percent: 100,\n    current_segment_index: 3,\n    total_segments: 3,\n    pending_review: false,\n    accepted_story_so_far: 'Chapter 1\\\\\\\\n\\\\\\\\nMira carried the lantern home.\\\\\\\\n\\\\\\\\nChapter 2\\\\\\\\n\\\\\\\\nThe harbor lights lowered themselves into the water like patient stars.',\n    latest_partial_output: 'The harbor lights lowered themselves into the water like patient stars.',\n    latest_segment_summary: 'The harbor settles into homecoming.',\n    updated_at: '2026-04-02T05:30:00Z',\n  },\n  latest_audio_job: {\n    id: 'audio-job-1',\n    status: 'completed',\n    progress_percent: 100,\n    current_step: 'Narration published',\n    completed_segments: 5,\n    total_segments: 5,\n    attempt_count: 1,\n    created_at: '2026-04-02T05:20:00Z',\n    updated_at: '2026-04-02T05:29:00Z',\n  },\n  active_composition_job: null,\n  active_audio_job: null,\n  composition_segments: [\n    {\n      segment_index: 1,\n      outline_card_title: 'Home harbor',\n      outline_card_summary: 'Mira returns to the lantern pier.',\n      current_version_id: 'segment-1-rev-1',\n      current_revision_number: 1,\n      is_stale: false,\n      versions: [\n        {\n          id: 'segment-1-rev-1',\n          composition_job_id: 'composition-job-1',\n          job_kind: 'draft',\n          segment_index: 1,\n          revision_number: 1,\n          status: 'completed',\n          acceptance_state: 'accepted',\n          is_current: true,\n          is_stale: false,\n          accepted_summary: 'Mira returns to the harbor.',\n          text_content: 'Mira carried the lantern home.',\n          word_count: 5,\n          created_at: '2026-04-02T05:00:00Z',\n          updated_at: '2026-04-02T05:05:00Z',\n          completed_at: '2026-04-02T05:05:00Z',\n        },\n      ],\n    },\n  ],\n  audio_segments: [],\n  latest_story_asset: {\n    id: 'story-asset-qa',\n    asset_kind: 'story_text',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/story.md',\n    mime_type: 'text/markdown',\n    access: {\n      download_path: \"'`/api/v1/sessions/${sessionId}/assets/story-asset-qa/content?disposition=attachment`,\n      filename: '\"'lanterns-over-juniper-lake.md',\n      stream_path: \"'`/api/v1/sessions/${sessionId}/assets/story-asset-qa/content?disposition=inline`,\n    },\n    public_url: `/api/v1/sessions/${sessionId}/assets/story-asset-qa/content?disposition=inline`,\n    ready_at: '\"'2026-04-02T05:28:00Z',\n    details: {\n      word_count: 1782,\n    },\n  },\n  latest_audio_asset: {\n    id: 'audio-asset-qa',\n    asset_kind: 'final_audio',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/audio.mp3',\n    mime_type: 'audio/mpeg',\n    access: {\n      download_path: \"'`/api/v1/sessions/${sessionId}/assets/audio-asset-qa/content?disposition=attachment`,\n      filename: '\"'lanterns-over-juniper-lake.mp3',\n      stream_path: \"'`/api/v1/sessions/${sessionId}/assets/audio-asset-qa/content?disposition=inline`,\n    },\n    public_url: `/api/v1/sessions/${sessionId}/assets/audio-asset-qa/content?disposition=inline`,\n    duration_seconds: 734,\n    ready_at: '\"'2026-04-02T05:29:00Z',\n    details: {\n      generation: {\n        voice_key: 'moonbeam',\n        voice_name: 'Moonbeam',\n      },\n      mix: {\n        applied: true,\n      },\n    },\n  },\n  audio_settings: {\n    voice_key: 'moonbeam',\n    narration_style: 'calm',\n    playback_speed: 0.95,\n    include_background_music: true,\n    music_profile: 'lullaby_piano',\n    narration_volume: 92,\n    music_volume: 24,\n    guidance_notes: 'Keep consonants soft.',\n  },\n  pitch_batches: [],\n  character_sheet_batches: [],\n  beat_sheet_revisions: [],\n  story_outline_revisions: [],\n  plan_revisions: [],\n};\n\nconst hydration = {\n  snapshot: baseSnapshot,\n  recent_history: {\n    session_id: sessionId,\n    latest_sequence_number: 3,\n    events: [\n      {\n        id: 'event-1',\n        session_id: sessionId,\n        sequence_number: 1,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'genre',\n        summary: 'Selected genre: Quest Fantasy',\n        created_at: '2026-04-02T05:00:00Z',\n      },\n      {\n        id: 'event-2',\n        session_id: sessionId,\n        sequence_number: 2,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'tone',\n        summary: 'Selected tone: Hushed Wonder',\n        created_at: '2026-04-02T05:02:00Z',\n      },\n      {\n        id: 'event-3',\n        session_id: sessionId,\n        sequence_number: 3,\n        actor: { actor_type: 'system' },\n        event_type: 'workflow_stage_changed',\n        stage: 'finalize',\n        summary: 'Finalize opened for the completed story session.',\n        created_at: '2026-04-02T05:30:00Z',\n      },\n    ],\n  },\n  hydration: {\n    strategy: 'materialized_only',\n    replayed_event_count: 0,\n    latest_sequence_number: 3,\n    history_event_count: 3,\n    history_window_truncated: false,\n  },\n};\n\nconst storyText = \"'`# Chapter 1'\"\\\\n\\\\nMira carried the lantern home. The hush of the pier softened around her, and every board underfoot remembered the shape of her small, careful steps.\\\\n\\\\n# Chapter 2\\\\n\\\\nThe harbor lights lowered themselves into the water like patient stars. By the time Mira reached her window, the room already felt ready to listen.\\\\n\\\\n# Chapter 3\\\\n\\\\nShe tucked the lantern beside the sill, watched the last shimmer settle, and let the quiet carry the story all the way to sleep.\"'`;\n\nconst browser = await chromium.launch({ headless: true });\n\nasync function capture(viewport, outputPath, showListenTab = false) {\n  const context = await browser.newContext({ viewport });\n  const page = await context.newPage();\n\n  await page.route(`**/api/v1/sessions/${sessionId}/hydrate**`, async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: '\"'application/json',\n      body: JSON.stringify(hydration),\n    });\n  });\n\n  await page.route(\"'`**/api/v1/sessions/${sessionId}/assets/story-asset-qa/content?**`, async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: '\"'text/markdown; charset=utf-8',\n      body: storyText,\n    });\n  });\n\n  await page.goto(\"'`http://127.0.0.1:8566/sessions/${sessionId}?stage=finalize`, { waitUntil: '\"'networkidle' });\n  await page.getByText('Final review').waitFor();\n  await page.getByRole('heading', { name: 'Current manuscript' }).waitFor();\n  await page.getByRole('heading', { name: 'Chapter 1' }).waitFor();\n\n  if (showListenTab) {\n    await page.getByRole('tab', { name: 'Listen back' }).click();\n    await page.getByRole('heading', { name: 'Compiled narration' }).waitFor();\n  }\n\n  await page.screenshot({ path: outputPath });\n  await context.close();\n}\n\nawait capture({ width: 1440, height: 900 }, '/tmp/storyteller-finalize-read-desktop.png', false);\nawait capture({ width: 1440, height: 900 }, '/tmp/storyteller-finalize-listen-desktop.png', true);\nawait capture({ width: 430, height: 932 }, '/tmp/storyteller-finalize-listen-mobile.png', true);\n\nawait browser.close();\nEOF\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"npx -y -p playwright node --input-type=module <<'EOF'\nimport { chromium } from 'playwright';\n\nconst sessionId = 'session-finalize-qa';\nconst storyAssetInlinePath = '/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?disposition=inline';\nconst storyAssetDownloadPath = '/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?disposition=attachment';\nconst audioAssetInlinePath = '/api/v1/sessions/' + sessionId + '/assets/audio-asset-qa/content?disposition=inline';\nconst audioAssetDownloadPath = '/api/v1/sessions/' + sessionId + '/assets/audio-asset-qa/content?disposition=attachment';\n\nconst snapshot = {\n  id: sessionId,\n  display_title: 'Lanterns Over Juniper Lake',\n  working_title: 'Lanterns Over Juniper Lake',\n  current_stage: 'finalize',\n  resume_stage: 'finalize',\n  furthest_completed_stage: 'audio',\n  overall_status: 'completed',\n  created_at: '2026-04-01T03:00:00Z',\n  updated_at: '2026-04-02T05:30:00Z',\n  completed_at: '2026-04-02T05:30:00Z',\n  selected_genre: {\n    id: 'genre-1',\n    slug: 'quest-fantasy',\n    label: 'Quest Fantasy',\n  },\n  selected_tone_profile: {\n    id: 'tone-1',\n    slug: 'hushed-wonder',\n    label: 'Hushed Wonder',\n  },\n  progress: {\n    total_stages: 10,\n    completed_stages: 10,\n    in_progress_stages: 0,\n    needs_regeneration_stages: 0,\n  },\n  stage_states: [\n    {\n      stage: 'finalize',\n      label: 'Finalize',\n      description: 'Read, listen, review final assets, and download exports.',\n      status: 'completed',\n      detail: 'Everything is ready for final review.',\n      completed_at: '2026-04-02T05:30:00Z',\n    },\n  ],\n  selected_story_setup: {\n    id: 'setup-1',\n    revision_number: 1,\n    target_word_count: 1800,\n    target_runtime_minutes: 12,\n    chapter_count: 3,\n    approximate_scene_count: 8,\n    chapter_style: 'short',\n    guidance_notes: 'Keep the pacing gentle enough for bedtime.',\n  },\n  latest_composition_job: {\n    id: 'composition-job-1',\n    job_kind: 'composition',\n    status: 'completed',\n    progress_percent: 100,\n    current_segment_index: 3,\n    total_segments: 3,\n    pending_review: false,\n    accepted_story_so_far: 'Mira carried the lantern home.\\\\n\\\\nThe harbor lights lowered themselves into the water like patient stars.',\n    latest_partial_output: 'The harbor lights lowered themselves into the water like patient stars.',\n    latest_segment_summary: 'The harbor settles into homecoming.',\n    updated_at: '2026-04-02T05:30:00Z',\n  },\n  latest_audio_job: {\n    id: 'audio-job-1',\n    status: 'completed',\n    progress_percent: 100,\n    current_step: 'Narration published',\n    completed_segments: 5,\n    total_segments: 5,\n    attempt_count: 1,\n    created_at: '2026-04-02T05:20:00Z',\n    updated_at: '2026-04-02T05:29:00Z',\n  },\n  active_composition_job: null,\n  active_audio_job: null,\n  composition_segments: [\n    {\n      segment_index: 1,\n      outline_card_title: 'Home harbor',\n      outline_card_summary: 'Mira returns to the lantern pier.',\n      current_version_id: 'segment-1-rev-1',\n      current_revision_number: 1,\n      is_stale: false,\n      versions: [\n        {\n          id: 'segment-1-rev-1',\n          composition_job_id: 'composition-job-1',\n          job_kind: 'draft',\n          segment_index: 1,\n          revision_number: 1,\n          status: 'completed',\n          acceptance_state: 'accepted',\n          is_current: true,\n          is_stale: false,\n          accepted_summary: 'Mira returns to the harbor.',\n          text_content: 'Mira carried the lantern home.',\n          word_count: 5,\n          created_at: '2026-04-02T05:00:00Z',\n          updated_at: '2026-04-02T05:05:00Z',\n          completed_at: '2026-04-02T05:05:00Z',\n        },\n      ],\n    },\n  ],\n  audio_segments: [],\n  latest_story_asset: {\n    id: 'story-asset-qa',\n    asset_kind: 'story_text',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/story.md',\n    mime_type: 'text/markdown',\n    access: {\n      download_path: storyAssetDownloadPath,\n      filename: 'lanterns-over-juniper-lake.md',\n      stream_path: storyAssetInlinePath,\n    },\n    public_url: storyAssetInlinePath,\n    ready_at: '2026-04-02T05:28:00Z',\n    details: {\n      word_count: 1782,\n    },\n  },\n  latest_audio_asset: {\n    id: 'audio-asset-qa',\n    asset_kind: 'final_audio',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/audio.mp3',\n    mime_type: 'audio/mpeg',\n    access: {\n      download_path: audioAssetDownloadPath,\n      filename: 'lanterns-over-juniper-lake.mp3',\n      stream_path: audioAssetInlinePath,\n    },\n    public_url: audioAssetInlinePath,\n    duration_seconds: 734,\n    ready_at: '2026-04-02T05:29:00Z',\n    details: {\n      generation: {\n        voice_key: 'moonbeam',\n        voice_name: 'Moonbeam',\n      },\n      mix: {\n        applied: true,\n      },\n    },\n  },\n  audio_settings: {\n    voice_key: 'moonbeam',\n    narration_style: 'calm',\n    playback_speed: 0.95,\n    include_background_music: true,\n    music_profile: 'lullaby_piano',\n    narration_volume: 92,\n    music_volume: 24,\n    guidance_notes: 'Keep consonants soft.',\n  },\n  pitch_batches: [],\n  character_sheet_batches: [],\n  beat_sheet_revisions: [],\n  story_outline_revisions: [],\n  plan_revisions: [],\n};\n\nconst hydration = {\n  snapshot,\n  recent_history: {\n    session_id: sessionId,\n    latest_sequence_number: 3,\n    events: [\n      {\n        id: 'event-1',\n        session_id: sessionId,\n        sequence_number: 1,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'genre',\n        summary: 'Selected genre: Quest Fantasy',\n        created_at: '2026-04-02T05:00:00Z',\n      },\n      {\n        id: 'event-2',\n        session_id: sessionId,\n        sequence_number: 2,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'tone',\n        summary: 'Selected tone: Hushed Wonder',\n        created_at: '2026-04-02T05:02:00Z',\n      },\n      {\n        id: 'event-3',\n        session_id: sessionId,\n        sequence_number: 3,\n        actor: { actor_type: 'system' },\n        event_type: 'workflow_stage_changed',\n        stage: 'finalize',\n        summary: 'Finalize opened for the completed story session.',\n        created_at: '2026-04-02T05:30:00Z',\n      },\n    ],\n  },\n  hydration: {\n    strategy: 'materialized_only',\n    replayed_event_count: 0,\n    latest_sequence_number: 3,\n    history_event_count: 3,\n    history_window_truncated: false,\n  },\n};\n\nconst storyText = '# Chapter 1\\\\n\\\\nMira carried the lantern home. The hush of the pier softened around her, and every board underfoot remembered the shape of her small, careful steps.\\\\n\\\\n# Chapter 2\\\\n\\\\nThe harbor lights lowered themselves into the water like patient stars. By the time Mira reached her window, the room already felt ready to listen.\\\\n\\\\n# Chapter 3\\\\n\\\\nShe tucked the lantern beside the sill, watched the last shimmer settle, and let the quiet carry the story all the way to sleep.';\n\nconst browser = await chromium.launch({ headless: true });\n\nasync function capture(viewport, outputPath, showListenTab) {\n  const context = await browser.newContext({ viewport });\n  const page = await context.newPage();\n\n  await page.route('**/api/v1/sessions/' + sessionId + '/hydrate**', async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: 'application/json',\n      body: JSON.stringify(hydration),\n    });\n  });\n\n  await page.route('**/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?**', async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: 'text/markdown; charset=utf-8',\n      body: storyText,\n    });\n  });\n\n  await page.goto('http://127.0.0.1:8566/sessions/' + sessionId + '?stage=finalize', {\n    waitUntil: 'networkidle',\n  });\n  await page.getByText('Final review').waitFor();\n  await page.getByRole('heading', { name: 'Current manuscript' }).waitFor();\n  await page.getByRole('heading', { name: 'Chapter 1' }).waitFor();\n\n  if (showListenTab) {\n    await page.getByRole('tab', { name: 'Listen back' }).click();\n    await page.getByRole('heading', { name: 'Compiled narration' }).waitFor();\n  }\n\n  await page.screenshot({ path: outputPath });\n  await context.close();\n}\n\nawait capture({ width: 1440, height: 900 }, '/tmp/storyteller-finalize-read-desktop.png', false);\nawait capture({ width: 1440, height: 900 }, '/tmp/storyteller-finalize-listen-desktop.png', true);\nawait capture({ width: 430, height: 932 }, '/tmp/storyteller-finalize-listen-mobile.png', true);\n\nawait browser.close();\nEOF\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"npm exec --yes --package=playwright -- node -e \\\"console.log(require.resolve('playwright'))\\\"\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker desktop restart'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cat > /tmp/storyteller-finalize-qa.spec.mjs <<'EOF'\nimport { test, expect } from '@playwright/test';\n\nconst sessionId = 'session-finalize-qa';\nconst storyAssetInlinePath = '/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?disposition=inline';\nconst storyAssetDownloadPath = '/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?disposition=attachment';\nconst audioAssetInlinePath = '/api/v1/sessions/' + sessionId + '/assets/audio-asset-qa/content?disposition=inline';\nconst audioAssetDownloadPath = '/api/v1/sessions/' + sessionId + '/assets/audio-asset-qa/content?disposition=attachment';\n\nconst snapshot = {\n  id: sessionId,\n  display_title: 'Lanterns Over Juniper Lake',\n  working_title: 'Lanterns Over Juniper Lake',\n  current_stage: 'finalize',\n  resume_stage: 'finalize',\n  furthest_completed_stage: 'audio',\n  overall_status: 'completed',\n  created_at: '2026-04-01T03:00:00Z',\n  updated_at: '2026-04-02T05:30:00Z',\n  completed_at: '2026-04-02T05:30:00Z',\n  selected_genre: {\n    id: 'genre-1',\n    slug: 'quest-fantasy',\n    label: 'Quest Fantasy',\n  },\n  selected_tone_profile: {\n    id: 'tone-1',\n    slug: 'hushed-wonder',\n    label: 'Hushed Wonder',\n  },\n  progress: {\n    total_stages: 10,\n    completed_stages: 10,\n    in_progress_stages: 0,\n    needs_regeneration_stages: 0,\n  },\n  stage_states: [\n    {\n      stage: 'finalize',\n      label: 'Finalize',\n      description: 'Read, listen, review final assets, and download exports.',\n      status: 'completed',\n      detail: 'Everything is ready for final review.',\n      completed_at: '2026-04-02T05:30:00Z',\n    },\n  ],\n  selected_story_setup: {\n    id: 'setup-1',\n    revision_number: 1,\n    target_word_count: 1800,\n    target_runtime_minutes: 12,\n    chapter_count: 3,\n    approximate_scene_count: 8,\n    chapter_style: 'short',\n    guidance_notes: 'Keep the pacing gentle enough for bedtime.',\n  },\n  latest_composition_job: {\n    id: 'composition-job-1',\n    job_kind: 'composition',\n    status: 'completed',\n    progress_percent: 100,\n    current_segment_index: 3,\n    total_segments: 3,\n    pending_review: false,\n    accepted_story_so_far: 'Mira carried the lantern home.\\\\n\\\\nThe harbor lights lowered themselves into the water like patient stars.',\n    latest_partial_output: 'The harbor lights lowered themselves into the water like patient stars.',\n    latest_segment_summary: 'The harbor settles into homecoming.',\n    updated_at: '2026-04-02T05:30:00Z',\n  },\n  latest_audio_job: {\n    id: 'audio-job-1',\n    status: 'completed',\n    progress_percent: 100,\n    current_step: 'Narration published',\n    completed_segments: 5,\n    total_segments: 5,\n    attempt_count: 1,\n    created_at: '2026-04-02T05:20:00Z',\n    updated_at: '2026-04-02T05:29:00Z',\n  },\n  active_composition_job: null,\n  active_audio_job: null,\n  composition_segments: [\n    {\n      segment_index: 1,\n      outline_card_title: 'Home harbor',\n      outline_card_summary: 'Mira returns to the lantern pier.',\n      current_version_id: 'segment-1-rev-1',\n      current_revision_number: 1,\n      is_stale: false,\n      versions: [\n        {\n          id: 'segment-1-rev-1',\n          composition_job_id: 'composition-job-1',\n          job_kind: 'draft',\n          segment_index: 1,\n          revision_number: 1,\n          status: 'completed',\n          acceptance_state: 'accepted',\n          is_current: true,\n          is_stale: false,\n          accepted_summary: 'Mira returns to the harbor.',\n          text_content: 'Mira carried the lantern home.',\n          word_count: 5,\n          created_at: '2026-04-02T05:00:00Z',\n          updated_at: '2026-04-02T05:05:00Z',\n          completed_at: '2026-04-02T05:05:00Z',\n        },\n      ],\n    },\n  ],\n  audio_segments: [],\n  latest_story_asset: {\n    id: 'story-asset-qa',\n    asset_kind: 'story_text',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/story.md',\n    mime_type: 'text/markdown',\n    access: {\n      download_path: storyAssetDownloadPath,\n      filename: 'lanterns-over-juniper-lake.md',\n      stream_path: storyAssetInlinePath,\n    },\n    public_url: storyAssetInlinePath,\n    ready_at: '2026-04-02T05:28:00Z',\n    details: {\n      word_count: 1782,\n    },\n  },\n  latest_audio_asset: {\n    id: 'audio-asset-qa',\n    asset_kind: 'final_audio',\n    status: 'ready',\n    storage_bucket: 'storybook',\n    object_path: 'sessions/session-finalize-qa/final/audio.mp3',\n    mime_type: 'audio/mpeg',\n    access: {\n      download_path: audioAssetDownloadPath,\n      filename: 'lanterns-over-juniper-lake.mp3',\n      stream_path: audioAssetInlinePath,\n    },\n    public_url: audioAssetInlinePath,\n    duration_seconds: 734,\n    ready_at: '2026-04-02T05:29:00Z',\n    details: {\n      generation: {\n        voice_key: 'moonbeam',\n        voice_name: 'Moonbeam',\n      },\n      mix: {\n        applied: true,\n      },\n    },\n  },\n  audio_settings: {\n    voice_key: 'moonbeam',\n    narration_style: 'calm',\n    playback_speed: 0.95,\n    include_background_music: true,\n    music_profile: 'lullaby_piano',\n    narration_volume: 92,\n    music_volume: 24,\n    guidance_notes: 'Keep consonants soft.',\n  },\n  pitch_batches: [],\n  character_sheet_batches: [],\n  beat_sheet_revisions: [],\n  story_outline_revisions: [],\n  plan_revisions: [],\n};\n\nconst hydration = {\n  snapshot,\n  recent_history: {\n    session_id: sessionId,\n    latest_sequence_number: 3,\n    events: [\n      {\n        id: 'event-1',\n        session_id: sessionId,\n        sequence_number: 1,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'genre',\n        summary: 'Selected genre: Quest Fantasy',\n        created_at: '2026-04-02T05:00:00Z',\n      },\n      {\n        id: 'event-2',\n        session_id: sessionId,\n        sequence_number: 2,\n        actor: { actor_type: 'user' },\n        event_type: 'ui_action_recorded',\n        stage: 'tone',\n        summary: 'Selected tone: Hushed Wonder',\n        created_at: '2026-04-02T05:02:00Z',\n      },\n      {\n        id: 'event-3',\n        session_id: sessionId,\n        sequence_number: 3,\n        actor: { actor_type: 'system' },\n        event_type: 'workflow_stage_changed',\n        stage: 'finalize',\n        summary: 'Finalize opened for the completed story session.',\n        created_at: '2026-04-02T05:30:00Z',\n      },\n    ],\n  },\n  hydration: {\n    strategy: 'materialized_only',\n    replayed_event_count: 0,\n    latest_sequence_number: 3,\n    history_event_count: 3,\n    history_window_truncated: false,\n  },\n};\n\nconst storyText = '# Chapter 1\\\\n\\\\nMira carried the lantern home. The hush of the pier softened around her, and every board underfoot remembered the shape of her small, careful steps.\\\\n\\\\n# Chapter 2\\\\n\\\\nThe harbor lights lowered themselves into the water like patient stars. By the time Mira reached her window, the room already felt ready to listen.\\\\n\\\\n# Chapter 3\\\\n\\\\nShe tucked the lantern beside the sill, watched the last shimmer settle, and let the quiet carry the story all the way to sleep.';\n\nasync function wireMocks(page) {\n  await page.route('**/api/v1/sessions/' + sessionId + '/hydrate**', async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: 'application/json',\n      body: JSON.stringify(hydration),\n    });\n  });\n\n  await page.route('**/api/v1/sessions/' + sessionId + '/assets/story-asset-qa/content?**', async (route) => {\n    await route.fulfill({\n      status: 200,\n      contentType: 'text/markdown; charset=utf-8',\n      body: storyText,\n    });\n  });\n}\n\ntest('desktop read mode screenshot', async ({ page }) => {\n  await wireMocks(page);\n  await page.setViewportSize({ width: 1440, height: 900 });\n  await page.goto('http://127.0.0.1:8566/sessions/' + sessionId + '?stage=finalize');\n  await expect(page.getByText('Final review')).toBeVisible();\n  await expect(page.getByRole('heading', { name: 'Chapter 1' })).toBeVisible();\n  await page.screenshot({ path: '/tmp/storyteller-finalize-read-desktop.png' });\n});\n\ntest('desktop listen mode screenshot', async ({ page }) => {\n  await wireMocks(page);\n  await page.setViewportSize({ width: 1440, height: 900 });\n  await page.goto('http://127.0.0.1:8566/sessions/' + sessionId + '?stage=finalize');\n  await expect(page.getByRole('heading', { name: 'Chapter 1' })).toBeVisible();\n  await page.getByRole('tab', { name: 'Listen back' }).click();\n  await expect(page.getByRole('heading', { name: 'Compiled narration' })).toBeVisible();\n  await page.screenshot({ path: '/tmp/storyteller-finalize-listen-desktop.png' });\n});\n\ntest('mobile listen mode screenshot', async ({ page }) => {\n  await wireMocks(page);\n  await page.setViewportSize({ width: 430, height: 932 });\n  await page.goto('http://127.0.0.1:8566/sessions/' + sessionId + '?stage=finalize');\n  await expect(page.getByRole('heading', { name: 'Chapter 1' })).toBeVisible();\n  await page.getByRole('tab', { name: 'Listen back' }).click();\n  await expect(page.getByRole('heading', { name: 'Compiled narration' })).toBeVisible();\n  await page.screenshot({ path: '/tmp/storyteller-finalize-listen-mobile.png' });\n});\nEOF\nnpx playwright test /tmp/storyteller-finalize-qa.spec.mjs --reporter=line\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx playwright test --test-dir=/tmp /tmp/storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cp /tmp/storyteller-finalize-qa.spec.mjs /Users/kevin/code/storyteller/frontend/.tmp-storyteller-finalize-qa.spec.mjs\nnpx playwright test .tmp-storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx -y @playwright/test .tmp-storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx -y @playwright/test test .tmp-storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx playwright test .tmp-storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx playwright test .tmp-storyteller-finalize-qa.spec.mjs --reporter=line'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run dev -- --host 127.0.0.1 --port 8566'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-03T03:03:58.569361Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/FinalizeStage.test.tsx:",
+      "2026-04-03T03:06:27.243788Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 406,
+    "file_paths": [
+      "frontend/src/features/session/sessionArtifacts.ts",
+      "frontend/src/features/session/FinalizeStage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/FinalizeStage.test.tsx",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/80_finalize_screen_with_read_and_listen_modes/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d513e-893f-7430-bc75-88f529272969",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 20639744,
+      "input_tokens": 21561977,
+      "output_tokens": 72812,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "agent": {
+      "model_high": "gemini-3-flash-preview",
+      "model_low": "gemini-3-flash-preview",
+      "model_medium": "gemini-3-flash-preview",
+      "model_provider": "gemini"
+    },
+    "cached_input_cost_per_1m": null,
+    "codex": {
+      "model": "gpt-5.4",
+      "reasoning_effort": "xhigh"
+    },
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "output_cost_per_1m": null,
+    "sandbox": "danger-full-access",
+    "version": 1.0
+  },
+  "failure_messages": [
+    "2026-04-03T03:03:58.569361Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/FinalizeStage.test.tsx:",
+    "2026-04-03T03:06:27.243788Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open"
+  ],
+  "head_commit": "17f630459fda09fd9cc074cc297ffc6ec9a5d63e",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "80-finalize-screen-read-and-listen.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_80_finalize_screen_with_read_and_listen_modes",
+  "task_name_human": "80 finalize screen with read and listen modes",
+  "task_name_system": "80_finalize_screen_with_read_and_listen_modes",
+  "timing": {
+    "duration_seconds": 1852.0,
+    "finished_at": "2026-04-02T20:19:56-07:00",
+    "started_at": "2026-04-02T19:49:04-07:00"
+  }
+}
