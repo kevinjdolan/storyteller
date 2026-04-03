@@ -7,6 +7,7 @@ import type {
   SessionHistoryEvent,
   SessionSnapshot,
 } from '../../api/sessions.ts'
+import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 import {
   Badge,
   Button,
@@ -659,6 +660,105 @@ function buildSegmentPreviewCopy(
   return null
 }
 
+function readDetailsRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value != null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function readNestedRecord(
+  value: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  return readDetailsRecord(value?.[key])
+}
+
+function readOptionalString(
+  value: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const rawValue = value?.[key]
+  return typeof rawValue === 'string' && rawValue.trim().length > 0
+    ? rawValue.trim()
+    : null
+}
+
+function formatDurationLabel(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  const roundedSeconds = Math.round(value)
+  const minutes = Math.floor(roundedSeconds / 60)
+  const seconds = roundedSeconds % 60
+
+  if (minutes <= 0) {
+    return `${seconds}s`
+  }
+
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
+}
+
+function formatPublishedAtLabel(value: string | null | undefined) {
+  if (value == null) {
+    return null
+  }
+
+  const parsedValue = new Date(value)
+  if (Number.isNaN(parsedValue.getTime())) {
+    return null
+  }
+
+  return parsedValue.toLocaleString('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  })
+}
+
+function buildCompiledAudioMeta(
+  asset: SessionSnapshot['latest_audio_asset'],
+) {
+  if (asset == null) {
+    return []
+  }
+
+  const details = readDetailsRecord(asset.details)
+  const generation = readNestedRecord(details, 'generation')
+  const mix = readNestedRecord(details, 'mix')
+  const metadata: string[] = []
+  const runtimeLabel = formatDurationLabel(asset.duration_seconds)
+  if (runtimeLabel != null) {
+    metadata.push(`Runtime ${runtimeLabel}`)
+  }
+
+  const voiceName = readOptionalString(generation, 'voice_name')
+  const voiceKey = readOptionalString(generation, 'voice_key')
+  const resolvedVoiceLabel = voiceName ?? humanizeToken(voiceKey)
+  if (resolvedVoiceLabel != null) {
+    metadata.push(`Voice ${resolvedVoiceLabel}`)
+  }
+
+  const mixApplied = mix?.applied
+  if (mixApplied === true) {
+    metadata.push('Music mixed')
+  } else if (mixApplied === false) {
+    metadata.push('Voice only')
+  }
+
+  const publishedAtLabel = formatPublishedAtLabel(asset.ready_at)
+  if (publishedAtLabel != null) {
+    metadata.push(`Published ${publishedAtLabel}`)
+  }
+
+  return metadata
+}
+
 export function AudioSettingsStage({
   onSaveAudioSettings,
   selectedStage,
@@ -723,6 +823,11 @@ export function AudioSettingsStage({
     (segment) => segment.preview_asset?.public_url != null,
   ).length
   const finalAudioReady = snapshot.latest_audio_asset != null
+  const compiledAudioMeta = buildCompiledAudioMeta(snapshot.latest_audio_asset)
+  const showingPreviousMaster =
+    activeAudioJob != null &&
+    snapshot.latest_audio_asset?.audio_job_id != null &&
+    snapshot.latest_audio_asset.audio_job_id !== activeAudioJob.id
   const audioProgressPercent =
     displayAudioJob?.progress_percent ??
     (finalAudioReady ? 100 : 0)
@@ -1091,6 +1196,37 @@ export function AudioSettingsStage({
                   inline playback is unavailable in this environment.
                 </p>
               )}
+
+              {showingPreviousMaster ? (
+                <p className="audio-stage__compiled-note">
+                  This player is showing the previous published master while
+                  the current narration run assembles a replacement. The older
+                  file stays available until the new publish succeeds.
+                </p>
+              ) : null}
+
+              {compiledAudioMeta.length > 0 ? (
+                <div className="audio-stage__compiled-meta">
+                  {compiledAudioMeta.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              ) : null}
+
+              {snapshot.latest_audio_asset.public_url != null ? (
+                <div className="audio-stage__compiled-actions">
+                  <a
+                    className={getButtonClassName({
+                      size: 'compact',
+                      tone: 'secondary',
+                    })}
+                    download
+                    href={snapshot.latest_audio_asset.public_url}
+                  >
+                    Download narration
+                  </a>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </div>

@@ -299,3 +299,78 @@ def test_asset_service_rejects_missing_sessions_and_cross_session_links(db_sessi
             mime_type="audio/mpeg",
             audio_job_id=audio_job.id,
         )
+
+
+def test_asset_service_supersedes_prior_final_audio_with_replacement_metadata(
+    db_session,
+) -> None:
+    story_session = StorySession(working_title="Superseded Audio History")
+    db_session.add(story_session)
+    db_session.flush()
+
+    first_job = AudioJob(
+        session_id=story_session.id,
+        status=JobStatus.COMPLETED,
+        voice_key="moonbeam",
+    )
+    replacement_job = AudioJob(
+        session_id=story_session.id,
+        status=JobStatus.COMPLETED,
+        voice_key="hearthside",
+    )
+    db_session.add_all([first_job, replacement_job])
+    db_session.flush()
+
+    service = SessionAssetService(db_session)
+    first_asset = service.save_asset_record(
+        session_id=story_session.id,
+        asset_kind=AssetKind.FINAL_AUDIO,
+        storage_bucket="storyteller-audio",
+        object_path="sessions/story-4/audio/jobs/audio-job-1/final/story.wav",
+        mime_type="audio/wav",
+        status=AssetStatus.READY,
+        audio_job_id=first_job.id,
+        metadata_json={"duration_seconds": 101.2},
+    )
+    replacement_asset = service.save_asset_record(
+        session_id=story_session.id,
+        asset_kind=AssetKind.FINAL_AUDIO,
+        storage_bucket="storyteller-audio",
+        object_path="sessions/story-4/audio/jobs/audio-job-2/final/story.wav",
+        mime_type="audio/wav",
+        status=AssetStatus.READY,
+        audio_job_id=replacement_job.id,
+        metadata_json={
+            "duration_seconds": 98.4,
+            "supersedes_asset_ids": [first_asset.id],
+        },
+    )
+
+    superseded_views = service.supersede_assets(
+        story_session.id,
+        asset_kinds=(AssetKind.FINAL_AUDIO,),
+        exclude_asset_ids=(replacement_asset.id,),
+        replacement_asset_id=replacement_asset.id,
+        replacement_audio_job_id=replacement_job.id,
+        reason="replaced_by_regenerated_audio",
+    )
+
+    stored_first_asset = db_session.get(SessionAsset, first_asset.id)
+    stored_replacement_asset = db_session.get(SessionAsset, replacement_asset.id)
+
+    assert len(superseded_views) == 1
+    assert superseded_views[0].id == first_asset.id
+    assert superseded_views[0].status == AssetStatus.SUPERSEDED
+    assert superseded_views[0].audio_job_id == first_job.id
+    assert superseded_views[0].duration_seconds == pytest.approx(101.2)
+    assert superseded_views[0].details == {
+        "duration_seconds": 101.2,
+        "superseded_reason": "replaced_by_regenerated_audio",
+        "superseded_by_asset_id": replacement_asset.id,
+        "superseded_by_audio_job_id": replacement_job.id,
+    }
+    assert stored_first_asset is not None
+    assert stored_first_asset.status == AssetStatus.SUPERSEDED
+    assert stored_first_asset.superseded_at is not None
+    assert stored_replacement_asset is not None
+    assert stored_replacement_asset.status == AssetStatus.READY

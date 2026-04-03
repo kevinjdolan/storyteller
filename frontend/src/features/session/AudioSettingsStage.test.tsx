@@ -283,7 +283,17 @@ describe('AudioSettingsStage', () => {
         id: 'final-audio',
         asset_kind: 'final_audio',
         status: 'ready',
-        public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/final/story.wav?alt=media',
+        audio_job_id: 'audio-job-6',
+        duration_seconds: 812,
+        details: {
+          generation: {
+            voice_key: 'moonbeam',
+          },
+          mix: {
+            applied: false,
+          },
+        },
+        public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-6/final/story.wav?alt=media',
         ready_at: '2026-04-02T05:22:00Z',
       },
     }
@@ -308,6 +318,17 @@ describe('AudioSettingsStage', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByLabelText('Compiled narration preview'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /This player is showing the previous published master while the current narration run assembles a replacement\./,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Runtime 13m 32s')).toBeInTheDocument()
+    expect(screen.getByText('Voice moonbeam')).toBeInTheDocument()
+    expect(screen.getByText('Voice only')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Download narration' }),
     ).toBeInTheDocument()
   })
 

@@ -378,13 +378,18 @@ class SessionAssetView(BaseModel):
     storage_bucket: str
     object_path: str
     mime_type: str
+    composition_job_id: str | None = None
+    audio_job_id: str | None = None
     byte_size: int | None = None
+    duration_seconds: float | None = None
     checksum_sha256: str | None = None
     segment_index: int | None = None
     error_message: str | None = None
+    details: dict[str, Any] | None = None
     public_url: str | None = None
     ready_at: datetime | None = None
     failed_at: datetime | None = None
+    superseded_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

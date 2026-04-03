@@ -39,8 +39,8 @@ from app.models import (
     ContinuityBibleView,
     ContinuityFact,
     ConversationMemorySnapshotView,
-    NormalizedBriefPreferences,
     NarrationSegmentView,
+    NormalizedBriefPreferences,
     PitchBatchView,
     PitchView,
     PlanArtifactRefView,
@@ -2182,6 +2182,7 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
     if row is None:
         return None
 
+    details = _read_mapping(row.metadata_json)
     return SessionAssetView(
         id=row.id,
         asset_kind=row.asset_kind,
@@ -2189,13 +2190,18 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         storage_bucket=row.storage_bucket,
         object_path=row.object_path,
         mime_type=row.mime_type,
+        composition_job_id=row.composition_job_id,
+        audio_job_id=row.audio_job_id,
         byte_size=row.byte_size,
+        duration_seconds=_read_optional_mapping_float(details, "duration_seconds"),
         checksum_sha256=row.checksum_sha256,
         segment_index=row.segment_index,
         error_message=row.error_message,
+        details=details or None,
         public_url=_build_public_asset_url(row),
         ready_at=row.ready_at,
         failed_at=row.failed_at,
+        superseded_at=row.superseded_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

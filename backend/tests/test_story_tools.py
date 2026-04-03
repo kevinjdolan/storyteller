@@ -865,6 +865,13 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
             "job_completed": audio_job.status == JobStatus.COMPLETED,
             "all_segments_rendered": len(adapter.calls) == 3 and len(audio_segment_assets) == 3,
             "final_asset_ready": final_audio_asset.mime_type == "audio/wav",
+            "final_asset_records_duration_and_generation_metadata": (
+                isinstance(final_audio_asset.metadata_json["duration_seconds"], float)
+                and final_audio_asset.metadata_json["duration_seconds"] > 0
+                and final_audio_asset.metadata_json["generation"]["audio_job_id"]
+                == result.audio_job_id
+                and final_audio_asset.metadata_json["mix"]["applied"] is False
+            ),
             "job_persists_progress_metadata": (
                 audio_job.config_json["progress_percent"] == 100.0
                 and audio_job.config_json["current_step"]
@@ -872,6 +879,12 @@ def test_audio_job_service_renders_segment_assets_and_final_audio(tmp_path: Path
                 and audio_job.config_json["latest_asset_kind"] == AssetKind.FINAL_AUDIO.value
             ),
             "snapshot_exposes_latest_audio_asset": snapshot.latest_audio_asset is not None,
+            "snapshot_exposes_audio_asset_metadata": (
+                snapshot.latest_audio_asset is not None
+                and snapshot.latest_audio_asset.audio_job_id == result.audio_job_id
+                and snapshot.latest_audio_asset.duration_seconds is not None
+                and snapshot.latest_audio_asset.details is not None
+            ),
             "snapshot_marks_audio_stage_completed": (
                 _stage_status(snapshot, WorkflowStage.AUDIO) == WorkflowStageState.COMPLETED
             ),
@@ -955,10 +968,186 @@ def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: P
         assert audio_mixer.calls[0][1].music_profile.value == "night_ambience"
         assert run_result["mix_applied"] is True
         assert run_result["mix_strategy"] == "curated_bed_ducked"
-        assert final_audio_asset.metadata_json["mix_strategy"] == "curated_bed_ducked"
-        assert final_audio_asset.metadata_json["music_track_file_name"] == "night_ambience.wav"
-        assert final_audio_asset.metadata_json["narration_master_object_path"] is not None
-        assert "sidechaincompress" in (final_audio_asset.metadata_json["ffmpeg_command"] or "")
+        assert final_audio_asset.metadata_json["mix"]["applied"] is True
+        assert final_audio_asset.metadata_json["mix"]["strategy"] == "curated_bed_ducked"
+        assert final_audio_asset.metadata_json["mix"]["music_track_file_name"] == (
+            "night_ambience.wav"
+        )
+        assert final_audio_asset.metadata_json["debug"]["narration_master_object_path"] is not None
+        assert "sidechaincompress" in (
+            final_audio_asset.metadata_json["debug"]["ffmpeg_command"] or ""
+        )
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_audio_regeneration_keeps_previous_master_until_replacement_publishes(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[220, 180],
+            )
+            first_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=RecordingTextToSpeechAdapter(),
+            ).run_job(first_result.audio_job_id)
+
+        with session_factory() as session:
+            first_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.audio_job_id == first_result.audio_job_id,
+                    SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                    SessionAsset.status == AssetStatus.READY,
+                )
+            ).scalar_one()
+            second_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={"voice_key": "hearthside"},
+            )
+            snapshot_during_rerender = SessionService(session).load_session_snapshot(
+                seeded["session_id"]
+            )
+            preserved_first_asset = session.get(SessionAsset, first_asset.id)
+
+        assert preserved_first_asset is not None
+        assert preserved_first_asset.status == AssetStatus.READY
+        assert snapshot_during_rerender.latest_audio_asset is not None
+        assert snapshot_during_rerender.latest_audio_asset.id == first_asset.id
+        assert snapshot_during_rerender.active_audio_job is not None
+        assert snapshot_during_rerender.active_audio_job.id == second_result.audio_job_id
+
+        with session_factory() as session:
+            AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=RecordingTextToSpeechAdapter(),
+            ).run_job(second_result.audio_job_id)
+
+        with session_factory() as session:
+            superseded_first_asset = session.get(SessionAsset, first_asset.id)
+            replacement_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.audio_job_id == second_result.audio_job_id,
+                    SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                    SessionAsset.status == AssetStatus.READY,
+                )
+            ).scalar_one()
+            ready_final_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.session_id == seeded["session_id"],
+                        SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                        SessionAsset.status == AssetStatus.READY,
+                    )
+                ).scalars()
+            )
+            refreshed_snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+
+        assert superseded_first_asset is not None
+        assert superseded_first_asset.status == AssetStatus.SUPERSEDED
+        assert superseded_first_asset.superseded_at is not None
+        assert superseded_first_asset.metadata_json["superseded_by_asset_id"] == (
+            replacement_asset.id
+        )
+        assert superseded_first_asset.metadata_json["superseded_by_audio_job_id"] == (
+            second_result.audio_job_id
+        )
+        assert replacement_asset.metadata_json["supersedes_asset_ids"] == [first_asset.id]
+        assert len(ready_final_assets) == 1
+        assert ready_final_assets[0].id == replacement_asset.id
+        assert refreshed_snapshot.latest_audio_asset is not None
+        assert refreshed_snapshot.latest_audio_asset.id == replacement_asset.id
+    finally:
+        object_storage.close()
+        client.close()
+
+
+def test_failed_audio_regeneration_preserves_previous_master(tmp_path: Path) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(
+                session,
+                mark_composition_completed=True,
+                composition_segment_word_counts=[240, 160],
+            )
+            first_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            AudioJobService(
+                session,
+                object_storage=object_storage,
+                tts_adapter=RecordingTextToSpeechAdapter(),
+            ).run_job(first_result.audio_job_id)
+
+        with session_factory() as session:
+            first_asset = session.execute(
+                select(SessionAsset).where(
+                    SessionAsset.audio_job_id == first_result.audio_job_id,
+                    SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                    SessionAsset.status == AssetStatus.READY,
+                )
+            ).scalar_one()
+            failed_result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+                session_id=seeded["session_id"],
+                arguments={"voice_key": "storykeeper"},
+            )
+
+        with pytest.raises(TextToSpeechTransportError):
+            with session_factory() as session:
+                AudioJobService(
+                    session,
+                    object_storage=object_storage,
+                    tts_adapter=RecordingTextToSpeechAdapter(fail_on_call=1),
+                ).run_job(failed_result.audio_job_id)
+
+        with session_factory() as session:
+            preserved_first_asset = session.get(SessionAsset, first_asset.id)
+            ready_final_assets = list(
+                session.execute(
+                    select(SessionAsset).where(
+                        SessionAsset.session_id == seeded["session_id"],
+                        SessionAsset.asset_kind == AssetKind.FINAL_AUDIO,
+                        SessionAsset.status == AssetStatus.READY,
+                    )
+                ).scalars()
+            )
+            failed_job = session.get(AudioJob, failed_result.audio_job_id)
+            snapshot = SessionService(session).load_session_snapshot(seeded["session_id"])
+
+        assert preserved_first_asset is not None
+        assert preserved_first_asset.status == AssetStatus.READY
+        assert preserved_first_asset.superseded_at is None
+        assert len(ready_final_assets) == 1
+        assert ready_final_assets[0].id == first_asset.id
+        assert failed_job is not None
+        assert failed_job.status == JobStatus.FAILED
+        assert snapshot.latest_audio_asset is not None
+        assert snapshot.latest_audio_asset.id == first_asset.id
     finally:
         object_storage.close()
         client.close()

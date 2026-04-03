@@ -519,16 +519,21 @@ export type SessionAssetView = {
   id: string
   asset_kind: string
   status: string
+  composition_job_id?: string | null
+  audio_job_id?: string | null
   storage_bucket?: string
   object_path?: string
   mime_type?: string
   byte_size?: number | null
+  duration_seconds?: number | null
   checksum_sha256?: string | null
   segment_index?: number | null
   error_message?: string | null
+  details?: Record<string, unknown> | null
   public_url?: string | null
   ready_at?: string | null
   failed_at?: string | null
+  superseded_at?: string | null
   created_at?: string
   updated_at?: string
 }

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -57,6 +58,7 @@ class SessionAssetService:
         checksum_sha256: str | None = None,
         metadata_json: dict | list | None = None,
         error_message: str | None = None,
+        commit: bool = True,
     ) -> SessionAssetView:
         self._require_session(session_id)
         composition_job = self._validate_composition_job(session_id, composition_job_id)
@@ -103,7 +105,8 @@ class SessionAssetService:
             ready_at=ready_at,
             failed_at=failed_at,
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return _build_session_asset_view(asset)
 
     def upsert_asset_record(
@@ -123,6 +126,7 @@ class SessionAssetService:
         checksum_sha256: str | None = None,
         metadata_json: dict | list | None = None,
         error_message: str | None = None,
+        commit: bool = True,
     ) -> SessionAssetView:
         normalized_bucket = _normalize_required_text(
             storage_bucket,
@@ -182,6 +186,7 @@ class SessionAssetService:
                 checksum_sha256=checksum_sha256,
                 metadata_json=metadata_json,
                 error_message=normalized_error,
+                commit=commit,
             )
 
         if existing_asset.session_id != session_id:
@@ -211,7 +216,8 @@ class SessionAssetService:
         now = utc_now()
         existing_asset.ready_at = now if status == AssetStatus.READY else None
         existing_asset.failed_at = now if status == AssetStatus.FAILED else None
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return _build_session_asset_view(existing_asset)
 
     def mark_asset_ready(
@@ -222,6 +228,7 @@ class SessionAssetService:
         checksum_sha256: str | None = None,
         metadata_json: dict | list | None = None,
         ready_at: datetime | None = None,
+        commit: bool = True,
     ) -> SessionAssetView:
         asset = self._require_asset(asset_id)
         self._assets.mark_ready(
@@ -231,7 +238,8 @@ class SessionAssetService:
             metadata_json=metadata_json,
             ready_at=ready_at or utc_now(),
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return _build_session_asset_view(asset)
 
     def mark_asset_failed(
@@ -241,6 +249,7 @@ class SessionAssetService:
         error_message: str,
         metadata_json: dict | list | None = None,
         failed_at: datetime | None = None,
+        commit: bool = True,
     ) -> SessionAssetView:
         asset = self._require_asset(asset_id)
         self._assets.mark_failed(
@@ -249,8 +258,55 @@ class SessionAssetService:
             metadata_json=metadata_json,
             failed_at=failed_at or utc_now(),
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
         return _build_session_asset_view(asset)
+
+    def supersede_assets(
+        self,
+        session_id: str,
+        *,
+        asset_kinds: Sequence[AssetKind],
+        exclude_asset_ids: Sequence[str] = (),
+        replacement_asset_id: str | None = None,
+        replacement_audio_job_id: str | None = None,
+        reason: str | None = None,
+        superseded_at: datetime | None = None,
+        commit: bool = True,
+    ) -> list[SessionAssetView]:
+        self._require_session(session_id)
+        excluded_ids = {asset_id for asset_id in exclude_asset_ids if asset_id}
+        rows = self._assets.list_for_session(
+            session_id,
+            asset_kinds=asset_kinds,
+            statuses=(AssetStatus.READY,),
+            include_superseded=False,
+        )
+        if not rows:
+            return []
+
+        now = superseded_at or utc_now()
+        updated: list[SessionAsset] = []
+        for row in rows:
+            if row.id in excluded_ids:
+                continue
+            row.status = AssetStatus.SUPERSEDED
+            row.superseded_at = now
+            existing_details = _read_mapping(row.metadata_json)
+            row.metadata_json = {
+                **existing_details,
+                "superseded_reason": _normalize_optional_text(reason),
+                "superseded_by_asset_id": replacement_asset_id,
+                "superseded_by_audio_job_id": replacement_audio_job_id,
+            }
+            updated.append(row)
+
+        if commit:
+            self._session.commit()
+        else:
+            self._session.flush()
+
+        return [_build_session_asset_view(row) for row in updated]
 
     def list_session_assets(
         self,
@@ -363,6 +419,7 @@ class SessionAssetService:
 
 
 def _build_session_asset_view(row: SessionAsset) -> SessionAssetView:
+    details = _read_mapping(row.metadata_json)
     return SessionAssetView(
         id=row.id,
         asset_kind=row.asset_kind,
@@ -370,15 +427,34 @@ def _build_session_asset_view(row: SessionAsset) -> SessionAssetView:
         storage_bucket=row.storage_bucket,
         object_path=row.object_path,
         mime_type=row.mime_type,
+        composition_job_id=row.composition_job_id,
+        audio_job_id=row.audio_job_id,
         byte_size=row.byte_size,
+        duration_seconds=_read_duration_seconds(details),
         checksum_sha256=row.checksum_sha256,
         segment_index=row.segment_index,
         error_message=row.error_message,
+        details=details or None,
         ready_at=row.ready_at,
         failed_at=row.failed_at,
+        superseded_at=row.superseded_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _read_mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _read_duration_seconds(details: dict[str, Any]) -> float | None:
+    raw_value = details.get("duration_seconds")
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalize_optional_text(value: str | None) -> str | None:

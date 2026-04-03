@@ -1226,6 +1226,26 @@ h4 {
   width: 100%;
 }
 
+.audio-stage__compiled-meta,
+.audio-stage__compiled-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.audio-stage__compiled-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.28rem 0.68rem;
+  border-radius: var(--radius-pill);
+  background: rgba(39, 69, 99, 0.08);
+  color: var(--color-brand);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .audio-stage__segment-preview-empty,
 .audio-stage__compiled-note {
   color: var(--color-ink-soft);

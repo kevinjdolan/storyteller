@@ -18,9 +18,6 @@ from app.services.audio_jobs import (
     AudioJobServiceError,
     AudioJobStartResult,
     AudioJobStateError,
-    build_silence_pcm,
-    build_wav_bytes,
-    read_wav_bytes,
 )
 from app.services.audio_mixing import AudioMixingError, AudioMixResult, FfmpegAudioMixer
 from app.services.audio_music import (
@@ -31,6 +28,7 @@ from app.services.audio_music import (
     get_background_music_track,
     list_audio_music_profile_options,
 )
+from app.services.audio_wave import build_silence_pcm, build_wav_bytes, read_wav_bytes
 from app.services.beat_sheet_generation import (
     BeatSheetGenerationService,
     build_beat_sheet_model_output,
@@ -66,6 +64,10 @@ from app.services.composition_prompt_assembly import (
 from app.services.continuity import SessionContinuityService, build_continuity_payload
 from app.services.conversation_memory import SessionMemoryService
 from app.services.event_log import SessionEventLogService
+from app.services.final_audio_assembly import (
+    FinalAudioAssemblyError,
+    FinalAudioAssemblyService,
+)
 from app.services.intent_parser import SessionIntentParserService
 from app.services.jobs import (
     BackgroundJobLeaseLostError,
@@ -187,6 +189,8 @@ __all__ = [
     "evaluate_pitch_batch",
     "deserialize_audio_mix_plan",
     "FfmpegAudioMixer",
+    "FinalAudioAssemblyError",
+    "FinalAudioAssemblyService",
     "get_background_music_track",
     "get_story_workflow_tool_prompt_catalog",
     "get_story_workflow_tool_registry",
