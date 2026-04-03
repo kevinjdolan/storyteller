@@ -4,7 +4,9 @@ import type {
   CompositionSegmentView,
   SessionAssetView,
   SessionSnapshot,
+  StoryReaderDocumentView,
 } from '../../api/sessions.ts'
+import { fetchSessionStoryReaderDocument } from '../../api/sessions.ts'
 import { FeedbackBanner, InlineSpinner } from '../../shared/ui/feedback.tsx'
 import {
   Badge,
@@ -17,11 +19,9 @@ import {
   EmptyStateBlock,
   SummaryPanel,
 } from '../../shared/ui/workflow.tsx'
-import {
-  fetchSessionAssetText,
-  resolveSessionAssetStreamUrl,
-} from './sessionArtifacts.ts'
+import { resolveSessionAssetStreamUrl } from './sessionArtifacts.ts'
 import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
+import { StoryReader } from './StoryReader.tsx'
 
 type FinalizeStageProps = {
   onAcceptRewrite: (jobId: string) => Promise<unknown>
@@ -39,7 +39,7 @@ type FinalizeStageProps = {
 
 type ReviewTab = 'read' | 'listen'
 
-type StoryBlock =
+type FallbackStoryBlock =
   | {
       content: string
       kind: 'heading'
@@ -233,7 +233,7 @@ function buildFallbackStoryText(snapshot: SessionSnapshot) {
   return segmentTexts.join('\n\n')
 }
 
-function buildStoryBlocks(value: string): StoryBlock[] {
+function buildFallbackStoryBlocks(value: string): FallbackStoryBlock[] {
   return value
     .split(/\n{2,}/u)
     .map((block) => block.trim())
@@ -605,7 +605,8 @@ export function FinalizeStage({
       ? 'read'
       : 'listen'
   const [activeTab, setActiveTab] = useState<ReviewTab>(initialTab)
-  const [storyAssetText, setStoryAssetText] = useState<string | null>(null)
+  const [storyReaderDocument, setStoryReaderDocument] =
+    useState<StoryReaderDocumentView | null>(null)
   const [storyTextState, setStoryTextState] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
@@ -635,16 +636,17 @@ export function FinalizeStage({
     snapshot.latest_audio_asset?.audio_job_id != null &&
     displayAudioJob != null &&
     snapshot.latest_audio_asset.audio_job_id !== displayAudioJob.id
-  const displayStoryText = storyAssetText ?? fallbackStoryText ?? null
-  const storyBlocks = useMemo(
+  const fallbackStoryBlocks = useMemo(
     () =>
-      displayStoryText != null
-        ? buildStoryBlocks(displayStoryText)
-        : ([] as StoryBlock[]),
-    [displayStoryText],
+      fallbackStoryText != null
+        ? buildFallbackStoryBlocks(fallbackStoryText)
+        : ([] as FallbackStoryBlock[]),
+    [fallbackStoryText],
   )
   const usingFallbackStoryText =
-    storyAssetText == null && fallbackStoryText != null
+    storyReaderDocument == null && fallbackStoryText != null
+  const storyContentAvailable =
+    storyReaderDocument != null || fallbackStoryText != null
   const storyWordCount = useMemo(() => {
     const assetWordCount = readOptionalNumber(
       readDetailsRecord(snapshot.latest_story_asset?.details),
@@ -654,13 +656,17 @@ export function FinalizeStage({
       return assetWordCount
     }
 
-    return displayStoryText != null ? countWords(displayStoryText) : null
-  }, [displayStoryText, snapshot.latest_story_asset])
+    if (storyReaderDocument != null) {
+      return storyReaderDocument.word_count
+    }
+
+    return fallbackStoryText != null ? countWords(fallbackStoryText) : null
+  }, [fallbackStoryText, snapshot.latest_story_asset, storyReaderDocument])
   const storyMeta: string[] = []
   if (storyWordCount != null && storyWordCount > 0) {
     storyMeta.push(`${storyWordCount.toLocaleString()} words`)
   }
-  if (storyAssetText != null) {
+  if (storyReaderDocument != null) {
     const publishedAtLabel = formatTimestamp(
       snapshot.latest_story_asset?.ready_at,
     )
@@ -715,8 +721,8 @@ export function FinalizeStage({
   useEffect(() => {
     let isActive = true
 
-    if (!finalStoryReady) {
-      setStoryAssetText(null)
+    if (!finalStoryReady || snapshot.latest_story_asset?.id == null) {
+      setStoryReaderDocument(null)
       setStoryTextState('idle')
       setStoryTextError(null)
       return () => {
@@ -726,14 +732,18 @@ export function FinalizeStage({
 
     setStoryTextState('loading')
     setStoryTextError(null)
+    setStoryReaderDocument(null)
 
-    void fetchSessionAssetText(snapshot.latest_story_asset)
-      .then((text) => {
+    void fetchSessionStoryReaderDocument(
+      snapshot.id,
+      snapshot.latest_story_asset.id,
+    )
+      .then((document) => {
         if (!isActive) {
           return
         }
 
-        setStoryAssetText(text)
+        setStoryReaderDocument(document)
         setStoryTextState('ready')
       })
       .catch((error: unknown) => {
@@ -741,7 +751,7 @@ export function FinalizeStage({
           return
         }
 
-        setStoryAssetText(null)
+        setStoryReaderDocument(null)
         setStoryTextState('error')
         setStoryTextError(
           error instanceof Error
@@ -753,7 +763,7 @@ export function FinalizeStage({
     return () => {
       isActive = false
     }
-  }, [finalStoryReady, snapshot.latest_story_asset])
+  }, [finalStoryReady, snapshot.id, snapshot.latest_story_asset])
 
   async function runAction(
     nextActionState: Exclude<ActionState, null>,
@@ -813,13 +823,13 @@ export function FinalizeStage({
             description={
               reviewJob != null
                 ? 'A rewrite candidate is still waiting for review before it replaces the accepted manuscript.'
-                : displayStoryText != null
+                : storyContentAvailable
                   ? 'The story is readable inside the app now, even if the durable export is still syncing.'
                   : 'The reading surface will unlock as soon as the accepted manuscript is available.'
             }
             label="Manuscript"
             title={storyStatusLabel}
-            tone={displayStoryText != null ? 'accent' : 'default'}
+            tone={storyContentAvailable ? 'accent' : 'default'}
           />
 
           <SummaryPanel
@@ -947,7 +957,7 @@ export function FinalizeStage({
               </p>
             ) : null}
 
-            {displayStoryText != null ? (
+            {storyContentAvailable ? (
               <>
                 {storyMeta.length > 0 ? (
                   <div className="finalize-stage__meta">
@@ -958,15 +968,19 @@ export function FinalizeStage({
                 ) : null}
 
                 <div className="finalize-stage__reader">
-                  <div className="finalize-stage__reader-copy">
-                    {storyBlocks.map((block, index) =>
-                      block.kind === 'heading' ? (
-                        <h4 key={`story-block-${index}`}>{block.content}</h4>
-                      ) : (
-                        <p key={`story-block-${index}`}>{block.content}</p>
-                      ),
-                    )}
-                  </div>
+                  {storyReaderDocument != null ? (
+                    <StoryReader document={storyReaderDocument} />
+                  ) : (
+                    <div className="finalize-stage__reader-copy">
+                      {fallbackStoryBlocks.map((block, index) =>
+                        block.kind === 'heading' ? (
+                          <h4 key={`story-block-${index}`}>{block.content}</h4>
+                        ) : (
+                          <p key={`story-block-${index}`}>{block.content}</p>
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="cta-row finalize-stage__surface-actions">

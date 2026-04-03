@@ -545,6 +545,27 @@ export type SessionAssetAccessView = {
   stream_path?: string | null
 }
 
+export type StoryReaderSpanView = {
+  text: string
+  style: 'plain' | 'emphasis' | 'strong' | 'strong_emphasis'
+}
+
+export type StoryReaderBlockView = {
+  kind: 'chapter_heading' | 'heading' | 'paragraph'
+  text: string
+  spans: StoryReaderSpanView[]
+  level?: number | null
+}
+
+export type StoryReaderDocumentView = {
+  format_version: string
+  asset_id?: string | null
+  word_count: number
+  chapter_count: number
+  has_structure: boolean
+  blocks: StoryReaderBlockView[]
+}
+
 export type SessionEventActorType = 'user' | 'assistant' | 'system' | 'service'
 
 export type SessionEventActor = {
@@ -939,6 +960,15 @@ export function fetchSessionSnapshot(sessionId: string) {
 
 export function fetchSessionHydration(sessionId: string) {
   return getJson<SessionHydration>(`/api/v1/sessions/${sessionId}/hydrate`)
+}
+
+export function fetchSessionStoryReaderDocument(
+  sessionId: string,
+  assetId: string,
+) {
+  return getJson<StoryReaderDocumentView>(
+    `/api/v1/sessions/${sessionId}/assets/${assetId}/reader`,
+  )
 }
 
 export function fetchSessionHistory(sessionId: string) {

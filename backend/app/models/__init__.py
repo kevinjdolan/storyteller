@@ -342,6 +342,9 @@ from app.models.session import (
     StoryBriefView,
     StoryOutlineEditView,
     StoryOutlineView,
+    StoryReaderBlockView,
+    StoryReaderDocumentView,
+    StoryReaderSpanView,
     StorySetupView,
 )
 from app.models.story_outline import (
@@ -673,6 +676,9 @@ __all__ = [
     "SessionSnapshot",
     "SessionStageStateView",
     "SessionStoryBriefResponse",
+    "StoryReaderBlockView",
+    "StoryReaderDocumentView",
+    "StoryReaderSpanView",
     "SessionStoryOutlineResponse",
     "SessionStorySetupResponse",
     "SessionUsageBucketSummaryView",

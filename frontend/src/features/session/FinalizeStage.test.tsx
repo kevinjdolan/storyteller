@@ -1,6 +1,9 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SessionSnapshot } from '../../api/sessions.ts'
+import type {
+  SessionSnapshot,
+  StoryReaderDocumentView,
+} from '../../api/sessions.ts'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { FinalizeStage } from './FinalizeStage.tsx'
 
@@ -143,6 +146,40 @@ function buildSnapshot(
   }
 }
 
+function buildStoryReaderResponse(
+  overrides: Partial<StoryReaderDocumentView> = {},
+) {
+  return new Response(
+    JSON.stringify({
+      format_version: 'story_reader.v1',
+      asset_id: 'story-asset-1',
+      word_count: 5,
+      chapter_count: 1,
+      has_structure: true,
+      blocks: [
+        {
+          kind: 'chapter_heading',
+          level: 1,
+          text: 'Chapter 1',
+          spans: [{ text: 'Chapter 1', style: 'plain' }],
+        },
+        {
+          kind: 'paragraph',
+          text: 'Mira carried the lantern home.',
+          spans: [{ text: 'Mira carried the lantern home.', style: 'plain' }],
+        },
+      ],
+      ...overrides,
+    }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    },
+  )
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -193,14 +230,7 @@ describe('FinalizeStage', () => {
   })
 
   it('renders calm read and listen surfaces once finalized assets exist', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('# Chapter 1\n\nMira carried the lantern home.', {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/markdown; charset=utf-8',
-        },
-      }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(buildStoryReaderResponse())
     vi.stubGlobal('fetch', fetchMock)
 
     const onDownloadAudio = vi.fn()
@@ -299,11 +329,7 @@ describe('FinalizeStage', () => {
   })
 
   it('keeps the story readable while narration is still processing', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('# Chapter 1\n\nMira carried the lantern home.', {
-        status: 200,
-      }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(buildStoryReaderResponse())
     vi.stubGlobal('fetch', fetchMock)
 
     renderWithAppProviders(
@@ -378,11 +404,7 @@ describe('FinalizeStage', () => {
   })
 
   it('handles failed narration without losing the finish-line review surface', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('# Chapter 1\n\nMira carried the lantern home.', {
-        status: 200,
-      }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(buildStoryReaderResponse())
     vi.stubGlobal('fetch', fetchMock)
 
     renderWithAppProviders(

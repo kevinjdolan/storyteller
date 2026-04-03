@@ -112,6 +112,13 @@ from app.services.sessions import (
     SessionServiceError,
     UnsupportedSessionContextUpdateError,
 )
+from app.services.story_exports import (
+    DOCX_MIME_TYPE,
+    StoryDocxExportService,
+    StoryExportError,
+    StoryExportUnavailableError,
+)
+from app.services.story_formatting import build_story_reader_document
 from app.services.story_tools import (
     StoryWorkflowActionRouter,
     StoryWorkflowToolDefinition,
@@ -121,12 +128,6 @@ from app.services.story_tools import (
     get_story_workflow_tool_prompt_catalog,
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
-)
-from app.services.story_exports import (
-    DOCX_MIME_TYPE,
-    StoryDocxExportService,
-    StoryExportError,
-    StoryExportUnavailableError,
 )
 
 __all__ = [
@@ -206,6 +207,7 @@ __all__ = [
     "build_wav_bytes",
     "build_character_model_output",
     "build_continuity_payload",
+    "build_story_reader_document",
     "build_brief_normalization_result_from_existing",
     "build_pitch_model_output",
     "evaluate_character_sheet_batch",

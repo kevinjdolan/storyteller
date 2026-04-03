@@ -401,6 +401,31 @@ class SessionAssetView(BaseModel):
     updated_at: datetime
 
 
+StoryReaderSpanStyle = Literal["plain", "emphasis", "strong", "strong_emphasis"]
+StoryReaderBlockKind = Literal["chapter_heading", "heading", "paragraph"]
+
+
+class StoryReaderSpanView(BaseModel):
+    text: str = Field(min_length=1)
+    style: StoryReaderSpanStyle = "plain"
+
+
+class StoryReaderBlockView(BaseModel):
+    kind: StoryReaderBlockKind
+    text: str = Field(min_length=1)
+    spans: list[StoryReaderSpanView] = Field(default_factory=list)
+    level: int | None = Field(default=None, ge=1, le=6)
+
+
+class StoryReaderDocumentView(BaseModel):
+    format_version: str = "story_reader.v1"
+    asset_id: str | None = None
+    word_count: int = Field(default=0, ge=0)
+    chapter_count: int = Field(default=0, ge=0)
+    has_structure: bool = False
+    blocks: list[StoryReaderBlockView] = Field(default_factory=list)
+
+
 class NarrationSegmentView(BaseModel):
     id: str
     audio_job_id: str

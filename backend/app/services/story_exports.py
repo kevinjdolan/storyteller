@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session
 from app.db import AssetKind, SessionAsset, StorySession
 from app.repositories import SessionAssetRepository
 from app.services.assets import AssetSessionNotFoundError, SessionAssetService
+from app.services.story_formatting import build_story_reader_document
 from app.storage import ObjectStorageService, StorageObjectLocation
 from app.storage.service import ObjectNotFoundError, StorageError
 
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _DOCX_EXPORT_ID = "final-manuscript"
-_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$")
 
 
 class StoryExportError(Exception):
@@ -136,50 +136,23 @@ def render_story_docx_bytes(
     if metadata_parts:
         document.add_paragraph(" | ".join(metadata_parts))
 
-    for block_kind, block_value in _iter_story_blocks(story_text):
-        if block_kind == "heading":
-            heading_level, heading_text = block_value
-            document.add_heading(heading_text, level=min(heading_level, 4))
-            continue
-        document.add_paragraph(block_value)
+    formatted_story = build_story_reader_document(story_text)
+    for block in formatted_story.blocks:
+        if block.kind in {"chapter_heading", "heading"}:
+            paragraph = document.add_heading("", level=min(block.level or 1, 4))
+        else:
+            paragraph = document.add_paragraph()
+
+        for span in block.spans:
+            run = paragraph.add_run(span.text)
+            if span.style in {"emphasis", "strong_emphasis"}:
+                run.italic = True
+            if span.style in {"strong", "strong_emphasis"}:
+                run.bold = True
 
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
-
-
-def _iter_story_blocks(story_text: str) -> list[tuple[str, tuple[int, str] | str]]:
-    blocks: list[tuple[str, tuple[int, str] | str]] = []
-    paragraph_lines: list[str] = []
-
-    def flush_paragraph() -> None:
-        if not paragraph_lines:
-            return
-        paragraph = " ".join(line.strip() for line in paragraph_lines if line.strip()).strip()
-        paragraph_lines.clear()
-        if paragraph:
-            blocks.append(("paragraph", paragraph))
-
-    for raw_line in story_text.splitlines():
-        heading_match = _HEADING_PATTERN.match(raw_line.strip())
-        if heading_match is not None:
-            flush_paragraph()
-            blocks.append(
-                (
-                    "heading",
-                    (len(heading_match.group(1)), heading_match.group(2).strip()),
-                )
-            )
-            continue
-
-        if not raw_line.strip():
-            flush_paragraph()
-            continue
-
-        paragraph_lines.append(raw_line)
-
-    flush_paragraph()
-    return blocks
 
 
 def _docx_matches_story_asset(

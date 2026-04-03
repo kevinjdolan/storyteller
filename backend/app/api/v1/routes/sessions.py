@@ -72,6 +72,7 @@ from app.models import (
     SessionStorySetupResponse,
     SessionUsageDiagnosticsView,
     StartSessionCompositionRequest,
+    StoryReaderDocumentView,
     StoryWorkflowToolName,
     WorkflowStage,
 )
@@ -91,6 +92,7 @@ from app.services import (
     SessionIntentParserService,
     StoryExportUnavailableError,
     StoryWorkflowToolService,
+    build_story_reader_document,
 )
 from app.services.session_hydration import (
     SessionHydrationNotFoundError,
@@ -209,6 +211,50 @@ def get_session_asset_content(
         disposition=disposition,
         byte_range=byte_range,
     )
+
+
+@router.get(
+    "/{session_id}/assets/{asset_id}/reader",
+    response_model=StoryReaderDocumentView,
+    summary="Load a reader-friendly story document for a ready text asset",
+)
+def get_session_story_reader_document(
+    session_id: str,
+    asset_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    object_storage: Annotated[ObjectStorageService, Depends(get_object_storage_service)],
+) -> StoryReaderDocumentView:
+    service = SessionArtifactAccessService(
+        db_session,
+        object_storage=object_storage,
+    )
+    try:
+        asset = service.load_ready_asset(session_id, asset_id)
+        content = service.load_asset_content(asset)
+    except SessionArtifactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (
+        SessionArtifactUnavailableError,
+        ObjectNotFoundError,
+        StorageError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    if not content.asset.mime_type.startswith("text/"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The requested asset is not a readable text manuscript.",
+        )
+
+    try:
+        story_text = content.payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The requested manuscript could not be decoded as UTF-8 text.",
+        ) from exc
+
+    return build_story_reader_document(story_text, asset_id=asset.id)
 
 
 @router.get(

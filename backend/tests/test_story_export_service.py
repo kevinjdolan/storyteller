@@ -153,3 +153,71 @@ def test_story_docx_export_service_regenerates_when_story_text_changes() -> None
     finally:
         db_session.close()
         engine.dispose()
+
+
+def test_story_docx_export_service_preserves_simple_emphasis() -> None:
+    engine = make_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db_session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
+    storage = InMemoryObjectStorage(get_settings())
+
+    try:
+        story_session = StorySession(working_title="Lantern Harbor")
+        db_session.add(story_session)
+        db_session.flush()
+
+        story_location = storage.paths.export_asset(
+            session_id=story_session.id,
+            export_kind="story",
+            export_id="accepted-manuscript",
+            extension="md",
+        )
+        storage.upload_text(
+            story_location,
+            "# Chapter 1\n\nMira carried a *soft* lantern toward the **steady** dock.",
+            content_type="text/markdown; charset=utf-8",
+        )
+        db_session.add(
+            SessionAsset(
+                session_id=story_session.id,
+                asset_kind=AssetKind.STORY_TEXT,
+                status=AssetStatus.READY,
+                storage_bucket=story_location.bucket,
+                object_path=story_location.key,
+                mime_type="text/markdown",
+            )
+        )
+        db_session.commit()
+
+        service = StoryDocxExportService(db_session, object_storage=storage)
+        service.ensure_docx_asset(story_session.id)
+
+        exported_bytes = storage.download_bytes(
+            storage.paths.export_asset(
+                session_id=story_session.id,
+                export_kind="docx",
+                export_id="final-manuscript",
+                extension="docx",
+            )
+        )
+        document = Document(BytesIO(exported_bytes))
+        story_paragraph = next(
+            paragraph
+            for paragraph in document.paragraphs
+            if paragraph.text == "Mira carried a soft lantern toward the steady dock."
+        )
+
+        assert [run.text for run in story_paragraph.runs] == [
+            "Mira carried a ",
+            "soft",
+            " lantern toward the ",
+            "steady",
+            " dock.",
+        ]
+        assert story_paragraph.runs[1].italic is True
+        assert story_paragraph.runs[1].bold is not True
+        assert story_paragraph.runs[3].bold is True
+        assert story_paragraph.runs[3].italic is not True
+    finally:
+        db_session.close()
+        engine.dispose()

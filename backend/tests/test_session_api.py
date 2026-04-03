@@ -998,6 +998,65 @@ def test_get_named_story_docx_artifact_generates_export_from_story_text(
         db_session.close()
 
 
+def test_get_session_story_reader_document_formats_story_asset(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Lantern Harbor"},
+    )
+    created = create_response.json()
+    fake_storage = session_api_client.app.state.object_storage
+    assert isinstance(fake_storage, InMemoryObjectStorage)
+
+    story_location = fake_storage.paths.export_asset(
+        session_id=created["id"],
+        export_kind="story",
+        export_id="accepted-manuscript",
+        extension="md",
+    )
+    fake_storage.upload_text(
+        story_location,
+        "Chapter 1: Lantern Wake\n\nMira carried a *soft* lantern home.\n\n## A Quiet Promise",
+        content_type="text/markdown; charset=utf-8",
+    )
+
+    db_session = get_session_factory()()
+    try:
+        story_asset = SessionAsset(
+            session_id=created["id"],
+            asset_kind=AssetKind.STORY_TEXT,
+            status=AssetStatus.READY,
+            storage_bucket=story_location.bucket,
+            object_path=story_location.key,
+            mime_type="text/markdown",
+        )
+        db_session.add(story_asset)
+        db_session.commit()
+        asset_id = story_asset.id
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(
+        f"/api/v1/sessions/{created['id']}/assets/{asset_id}/reader",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["asset_id"] == asset_id
+    assert payload["chapter_count"] == 1
+    assert [block["kind"] for block in payload["blocks"]] == [
+        "chapter_heading",
+        "paragraph",
+        "heading",
+    ]
+    assert payload["blocks"][1]["spans"] == [
+        {"text": "Mira carried a ", "style": "plain"},
+        {"text": "soft", "style": "emphasis"},
+        {"text": " lantern home.", "style": "plain"},
+    ]
+
+
 def test_post_story_docx_artifact_generates_export_metadata(
     session_api_client: TestClient,
 ) -> None:
