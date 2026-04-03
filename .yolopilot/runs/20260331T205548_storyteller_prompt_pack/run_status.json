@@ -73,9 +73,12 @@
     "70-audio-settings-model-and-ui.md",
     "71-audio-length-estimation.md",
     "72-narration-segmentation.md",
-    "73-gemini-tts-integration.md"
+    "73-gemini-tts-integration.md",
+    "74-background-music-mixing.md",
+    "75-audio-job-orchestration.md",
+    "76-audio-preview-and-segment-status-ui.md"
   ],
-  "current_success_ref": "38bb998c56e75466348ca712e8217ec65105a977",
+  "current_success_ref": "f0adf9f1d71744976bbe0398de5fa115eb904971",
   "failed_tasks": [],
   "finished_at": null,
   "overall_status": "interrupted",
