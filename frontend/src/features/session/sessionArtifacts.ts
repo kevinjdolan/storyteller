@@ -32,6 +32,23 @@ export function buildSessionArtifactDownloadUrl(
   )
 }
 
+export async function fetchSessionAssetText(
+  asset: SessionAssetView | null | undefined,
+) {
+  const textUrl =
+    resolveSessionAssetStreamUrl(asset) ?? resolveSessionAssetDownloadUrl(asset)
+  if (textUrl == null) {
+    throw new Error('The requested text asset is not readable yet.')
+  }
+
+  const response = await fetch(textUrl)
+  if (!response.ok) {
+    throw new Error(`Unexpected status code: ${response.status}`)
+  }
+
+  return response.text()
+}
+
 export function triggerArtifactDownload(url: string) {
   const link = document.createElement('a')
   link.href = url
