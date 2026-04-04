@@ -15,13 +15,17 @@ from app.db import (
     CompositionJobKind,
     CompositionSegment,
     CompositionSegmentAcceptanceState,
+    Genre,
     JobStatus,
     NarrationPauseHint,
     NarrationSegment,
     NarrationSourceBoundaryKind,
+    Pitch,
     SessionAsset,
+    StoryBrief,
     StorySession,
     StorySetup,
+    ToneProfile,
 )
 from app.db.session import get_engine, get_session_factory
 from app.main import create_app
@@ -453,6 +457,34 @@ def _seed_catalog_rows() -> None:
         db_session.close()
 
 
+def _load_catalog_lane(db_session, *, index: int = 0) -> tuple[Genre, ToneProfile]:
+    genres = db_session.execute(
+        select(Genre).order_by(Genre.sort_order.asc(), Genre.label.asc())
+    ).scalars().all()
+    genre = genres[index]
+    tone = db_session.execute(
+        select(ToneProfile)
+        .where(ToneProfile.genre_id == genre.id)
+        .order_by(ToneProfile.sort_order.asc(), ToneProfile.label.asc())
+    ).scalars().first()
+    assert tone is not None
+    return genre, tone
+
+
+def _mark_session_completed(story_session: StorySession, *, at: datetime) -> None:
+    for stage_state in story_session.workflow_stage_states:
+        stage_state.status = WorkflowStageState.COMPLETED
+        stage_state.started_at = at
+        stage_state.completed_at = at
+
+    story_session.current_stage = WorkflowStage.FINALIZE
+    story_session.resume_stage = WorkflowStage.FINALIZE
+    story_session.furthest_completed_stage = WorkflowStage.FINALIZE
+    story_session.overall_status = WorkflowStageState.COMPLETED
+    story_session.completed_at = at
+    story_session.updated_at = at
+
+
 def _create_composition_ready_session_via_api(
     session_api_client: TestClient,
 ) -> dict[str, object]:
@@ -591,6 +623,155 @@ def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
     assert payload[0]["progress"]["completed_stages"] == 1
     assert payload[1]["overall_status"] == "draft"
     assert payload[1]["progress"]["completed_stages"] == 0
+
+
+def test_list_recent_sessions_endpoint_supports_filters_and_completed_story_metadata(
+    session_api_client: TestClient,
+) -> None:
+    _seed_catalog_rows()
+
+    create_response = session_api_client.post("/api/v1/sessions", json={})
+    assert create_response.status_code == 201
+    polished_session_id = create_response.json()["id"]
+
+    draft_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Draft Harbor"},
+    )
+    assert draft_response.status_code == 201
+    draft_session_id = draft_response.json()["id"]
+
+    db_session = get_session_factory()()
+    try:
+        polished_row = db_session.get(StorySession, polished_session_id)
+        draft_row = db_session.get(StorySession, draft_session_id)
+        assert polished_row is not None and draft_row is not None
+
+        primary_genre, primary_tone = _load_catalog_lane(db_session, index=0)
+        secondary_genre, secondary_tone = _load_catalog_lane(db_session, index=1)
+        polished_row.selected_genre = primary_genre
+        polished_row.selected_tone_profile = primary_tone
+        draft_row.selected_genre = secondary_genre
+        draft_row.selected_tone_profile = secondary_tone
+
+        now = datetime.now(timezone.utc)
+        brief = StoryBrief(
+            session_id=polished_session_id,
+            revision_number=1,
+            story_idea="A moon door leads home through the harbor.",
+            raw_brief="A moon door harbor bedtime story.",
+            normalized_summary="A moon door harbor bedtime story.",
+            is_active=True,
+            accepted_at=now,
+        )
+        db_session.add(brief)
+        db_session.flush()
+
+        db_session.add(
+            Pitch(
+                session_id=polished_session_id,
+                story_brief_id=brief.id,
+                generation_key="pitch-batch-1",
+                pitch_index=1,
+                title="Moon Door Lullaby",
+                logline="A moon door leads a child home through the harbor.",
+                is_selected=True,
+                accepted_at=now,
+            )
+        )
+        db_session.add(
+            StorySetup(
+                session_id=polished_session_id,
+                revision_number=1,
+                target_runtime_minutes=12,
+                is_selected=True,
+                accepted_at=now,
+            )
+        )
+        db_session.flush()
+
+        story_asset = SessionAsset(
+            session_id=polished_session_id,
+            asset_kind=AssetKind.STORY_TEXT,
+            status=AssetStatus.READY,
+            storage_bucket="storyteller-story",
+            object_path="sessions/api-polished/story.md",
+            mime_type="text/markdown",
+            ready_at=now,
+        )
+        db_session.add(story_asset)
+        db_session.flush()
+
+        db_session.add(
+            SessionAsset(
+                session_id=polished_session_id,
+                asset_kind=AssetKind.STORY_DOCX,
+                status=AssetStatus.READY,
+                storage_bucket="storyteller-exports",
+                object_path="sessions/api-polished/story.docx",
+                mime_type=(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ),
+                metadata_json={"source_story_asset_id": story_asset.id},
+                ready_at=now + timedelta(minutes=1),
+            )
+        )
+        audio_job = AudioJob(
+            session_id=polished_session_id,
+            status=JobStatus.COMPLETED,
+            estimated_duration_seconds=742,
+            completed_at=now + timedelta(minutes=2),
+        )
+        db_session.add(audio_job)
+        db_session.flush()
+
+        db_session.add(
+            SessionAsset(
+                session_id=polished_session_id,
+                audio_job_id=audio_job.id,
+                asset_kind=AssetKind.FINAL_AUDIO,
+                status=AssetStatus.READY,
+                storage_bucket="storyteller-audio",
+                object_path="sessions/api-polished/story.mp3",
+                mime_type="audio/mpeg",
+                metadata_json={"duration_seconds": 734},
+                ready_at=now + timedelta(minutes=2),
+            )
+        )
+
+        _mark_session_completed(polished_row, at=now + timedelta(minutes=2))
+        draft_row.updated_at = now - timedelta(minutes=5)
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(
+        "/api/v1/sessions",
+        params={
+            "limit": 10,
+            "query": "Moon Door",
+            "status": "completed",
+            "genre_slug": primary_genre.slug,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [session["id"] for session in payload] == [polished_session_id]
+    assert payload[0]["display_title"] == "Moon Door Lullaby"
+    assert payload[0]["library_summary"] == {
+        "display_kind": "polished_story",
+        "title_source": "pitch_title",
+        "runtime_seconds": 734,
+        "runtime_source": "final_audio",
+        "artifact_readiness": {
+            "story_text": "ready",
+            "story_docx": "ready",
+            "final_audio": "ready",
+            "ready_count": 3,
+            "total_count": 3,
+        },
+    }
 
 
 def test_session_usage_endpoint_returns_rollups_and_recent_calls(

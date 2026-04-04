@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import (
@@ -14,6 +14,7 @@ from app.db import (
     CompositionJob,
     CompositionSegment,
     ContinuityBible,
+    Genre,
     JobStatus,
     NarrationSegment,
     Pitch,
@@ -63,6 +64,18 @@ class SessionAggregate:
     latest_story_export_asset: SessionAsset | None
     latest_audio_asset: SessionAsset | None
     selected_continuity_bible: ContinuityBible | None
+
+
+@dataclass(frozen=True)
+class RecentSessionLibraryRecord:
+    session: StorySession
+    active_story_brief: StoryBrief | None
+    selected_pitch: Pitch | None
+    selected_story_setup: StorySetup | None
+    latest_audio_job: AudioJob | None
+    latest_story_asset: SessionAsset | None
+    latest_story_export_asset: SessionAsset | None
+    latest_audio_asset: SessionAsset | None
 
 
 class StorySessionRepository:
@@ -192,6 +205,119 @@ class StorySessionRepository:
             .limit(limit)
         )
         return list(self._session.execute(stmt).scalars().all())
+
+    def list_recent_library_records(
+        self,
+        *,
+        limit: int = 20,
+        query: str | None = None,
+        status_filter: str | None = None,
+        genre_slug: str | None = None,
+    ) -> list[RecentSessionLibraryRecord]:
+        stmt: Select[tuple[StorySession]] = (
+            select(StorySession)
+            .options(
+                selectinload(StorySession.selected_genre),
+                selectinload(StorySession.selected_tone_profile),
+                selectinload(StorySession.workflow_stage_states),
+                selectinload(StorySession.story_briefs),
+                selectinload(StorySession.pitches),
+                selectinload(StorySession.story_setups),
+                selectinload(StorySession.audio_jobs),
+            )
+            .order_by(StorySession.updated_at.desc(), StorySession.created_at.desc())
+        )
+
+        if status_filter is not None and status_filter != "all":
+            if status_filter == "active":
+                stmt = stmt.where(
+                    StorySession.overall_status.in_(
+                        (
+                            WorkflowStageState.DRAFT,
+                            WorkflowStageState.IN_PROGRESS,
+                            WorkflowStageState.NEEDS_REGENERATION,
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.where(StorySession.overall_status == WorkflowStageState(status_filter))
+
+        normalized_genre_slug = (genre_slug or "").strip()
+        if normalized_genre_slug:
+            stmt = stmt.where(StorySession.selected_genre.has(Genre.slug == normalized_genre_slug))
+
+        query_tokens = _tokenize_library_query(query)
+        for token in query_tokens:
+            pattern = f"%{token}%"
+            stmt = stmt.where(
+                or_(
+                    StorySession.working_title.ilike(pattern),
+                    StorySession.story_briefs.any(
+                        or_(
+                            StoryBrief.story_idea.ilike(pattern),
+                            StoryBrief.normalized_summary.ilike(pattern),
+                            StoryBrief.raw_brief.ilike(pattern),
+                        )
+                    ),
+                    StorySession.pitches.any(Pitch.title.ilike(pattern)),
+                )
+            )
+
+        sessions = list(self._session.execute(stmt.limit(limit)).scalars().all())
+        if not sessions:
+            return []
+
+        asset_map = self._load_library_assets([story_session.id for story_session in sessions])
+
+        return [
+            RecentSessionLibraryRecord(
+                session=story_session,
+                active_story_brief=_select_active_story_brief(story_session.story_briefs),
+                selected_pitch=_select_selected_pitch(story_session.pitches),
+                selected_story_setup=_select_selected_story_setup(story_session.story_setups),
+                latest_audio_job=_select_latest_audio_job(story_session.audio_jobs),
+                latest_story_asset=asset_map.get(story_session.id, {}).get(AssetKind.STORY_TEXT),
+                latest_story_export_asset=asset_map.get(story_session.id, {}).get(
+                    AssetKind.STORY_DOCX
+                ),
+                latest_audio_asset=asset_map.get(story_session.id, {}).get(AssetKind.FINAL_AUDIO),
+            )
+            for story_session in sessions
+        ]
+
+    def _load_library_assets(
+        self,
+        session_ids: list[str],
+    ) -> dict[str, dict[AssetKind, SessionAsset]]:
+        stmt: Select[tuple[SessionAsset]] = (
+            select(SessionAsset)
+            .where(
+                SessionAsset.session_id.in_(session_ids),
+                SessionAsset.asset_kind.in_(
+                    (
+                        AssetKind.STORY_TEXT,
+                        AssetKind.STORY_DOCX,
+                        AssetKind.FINAL_AUDIO,
+                    )
+                ),
+                SessionAsset.status == AssetStatus.READY,
+            )
+            .order_by(
+                SessionAsset.session_id.asc(),
+                SessionAsset.asset_kind.asc(),
+                SessionAsset.ready_at.desc(),
+                SessionAsset.created_at.desc(),
+            )
+        )
+
+        asset_map: dict[str, dict[AssetKind, SessionAsset]] = {
+            session_id: {} for session_id in session_ids
+        }
+        for asset in self._session.execute(stmt).scalars().all():
+            session_assets = asset_map.setdefault(asset.session_id, {})
+            session_assets.setdefault(asset.asset_kind, asset)
+
+        return asset_map
 
     def _get_active_story_brief(self, session_id: str) -> StoryBrief | None:
         stmt: Select[tuple[StoryBrief]] = (
@@ -463,6 +589,46 @@ class StorySessionRepository:
             .limit(1)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+
+def _tokenize_library_query(query: str | None) -> list[str]:
+    normalized_query = (query or "").strip()
+    if not normalized_query:
+        return []
+    return [token for token in normalized_query.split() if token]
+
+
+def _select_active_story_brief(story_briefs: list[StoryBrief]) -> StoryBrief | None:
+    active_story_briefs = [row for row in story_briefs if row.is_active]
+    if not active_story_briefs:
+        return None
+    return max(
+        active_story_briefs,
+        key=lambda row: (row.revision_number, row.updated_at, row.created_at),
+    )
+
+
+def _select_selected_pitch(pitches: list[Pitch]) -> Pitch | None:
+    selected_pitches = [row for row in pitches if row.is_selected]
+    if not selected_pitches:
+        return None
+    return max(selected_pitches, key=lambda row: (row.accepted_at or row.updated_at, row.created_at))
+
+
+def _select_selected_story_setup(story_setups: list[StorySetup]) -> StorySetup | None:
+    selected_story_setups = [row for row in story_setups if row.is_selected]
+    if not selected_story_setups:
+        return None
+    return max(
+        selected_story_setups,
+        key=lambda row: (row.revision_number, row.accepted_at or row.updated_at, row.created_at),
+    )
+
+
+def _select_latest_audio_job(audio_jobs: list[AudioJob]) -> AudioJob | None:
+    if not audio_jobs:
+        return None
+    return max(audio_jobs, key=lambda row: (row.updated_at, row.created_at))
 
 
 class WorkflowStageStateRepository:

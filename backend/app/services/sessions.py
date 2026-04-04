@@ -209,12 +209,36 @@ class SessionService:
         except SessionHydrationNotFoundError as exc:
             raise SessionNotFoundError(f"session {session_id!r} was not found") from exc
 
-    def list_recent_sessions(self, *, limit: int = 20) -> list[RecentSessionSummary]:
+    def list_recent_sessions(
+        self,
+        *,
+        limit: int = 20,
+        query: str | None = None,
+        status_filter: str | None = None,
+        genre_slug: str | None = None,
+    ) -> list[RecentSessionSummary]:
         if limit <= 0:
             raise ValueError("limit must be greater than zero")
 
-        sessions = self._sessions.list_recent(limit=limit)
-        return [build_recent_session_summary(story_session) for story_session in sessions]
+        sessions = self._sessions.list_recent_library_records(
+            limit=limit,
+            query=query,
+            status_filter=status_filter,
+            genre_slug=genre_slug,
+        )
+        return [
+            build_recent_session_summary(
+                record.session,
+                active_story_brief=record.active_story_brief,
+                selected_pitch=record.selected_pitch,
+                selected_story_setup=record.selected_story_setup,
+                latest_audio_job=record.latest_audio_job,
+                latest_story_asset=record.latest_story_asset,
+                latest_story_export_asset=record.latest_story_export_asset,
+                latest_audio_asset=record.latest_audio_asset,
+            )
+            for record in sessions
+        ]
 
     def load_session_history(
         self,

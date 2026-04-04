@@ -38,6 +38,29 @@ class SessionProgress(BaseModel):
     needs_regeneration_stages: int
 
 
+class SessionArtifactReadinessView(BaseModel):
+    story_text: Literal["ready", "missing"] = "missing"
+    story_docx: Literal["ready", "missing"] = "missing"
+    final_audio: Literal["ready", "missing", "stale"] = "missing"
+    ready_count: int = Field(default=0, ge=0, le=3)
+    total_count: int = Field(default=3, ge=3, le=3)
+
+
+class SessionLibrarySummaryView(BaseModel):
+    display_kind: Literal["draft_session", "completed_story", "polished_story"]
+    title_source: Literal[
+        "working_title",
+        "pitch_title",
+        "story_idea",
+        "normalized_summary",
+        "raw_brief",
+        "fallback",
+    ]
+    runtime_seconds: int | None = Field(default=None, ge=1)
+    runtime_source: Literal["final_audio", "audio_job_estimate", "story_setup"] | None = None
+    artifact_readiness: SessionArtifactReadinessView
+
+
 class SessionStageStateView(BaseModel):
     stage: WorkflowStage
     label: str
@@ -942,6 +965,7 @@ class RecentSessionSummary(BaseModel):
     id: str
     display_title: str
     working_title: str | None = None
+    library_summary: SessionLibrarySummaryView
     current_stage: WorkflowStage
     resume_stage: WorkflowStage
     furthest_completed_stage: WorkflowStage | None = None

@@ -72,6 +72,37 @@ def _seed_catalog_rows(db_session) -> None:
     seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))
 
 
+def _load_catalog_lane(db_session, *, index: int = 0) -> tuple[Genre, ToneProfile]:
+    genres = (
+        db_session.query(Genre)
+        .order_by(Genre.sort_order.asc(), Genre.label.asc())
+        .all()
+    )
+    genre = genres[index]
+    tone = (
+        db_session.query(ToneProfile)
+        .filter(ToneProfile.genre_id == genre.id)
+        .order_by(ToneProfile.sort_order.asc(), ToneProfile.label.asc())
+        .first()
+    )
+    assert tone is not None
+    return genre, tone
+
+
+def _mark_session_completed(story_session: StorySession, *, at: datetime) -> None:
+    for stage_state in story_session.workflow_stage_states:
+        stage_state.status = WorkflowStageState.COMPLETED
+        stage_state.started_at = at
+        stage_state.completed_at = at
+
+    story_session.current_stage = WorkflowStage.FINALIZE
+    story_session.resume_stage = WorkflowStage.FINALIZE
+    story_session.furthest_completed_stage = WorkflowStage.FINALIZE
+    story_session.overall_status = WorkflowStageState.COMPLETED
+    story_session.completed_at = at
+    story_session.updated_at = at
+
+
 class StubBriefNormalizationService:
     def __init__(
         self,
@@ -1640,6 +1671,129 @@ def test_list_recent_sessions_returns_latest_first_with_progress_counts(db_sessi
     assert [session.id for session in recent[:2]] == [newer.id, older.id]
     assert recent[0].progress.completed_stages == 1
     assert recent[1].progress.completed_stages == 0
+
+
+def test_list_recent_sessions_can_filter_and_build_polished_story_metadata(db_session) -> None:
+    _seed_catalog_rows(db_session)
+    service = SessionService(db_session)
+    polished_snapshot = service.create_session()
+    draft_snapshot = service.create_session(working_title="Lantern Draft")
+
+    polished_row = db_session.get(StorySession, polished_snapshot.id)
+    draft_row = db_session.get(StorySession, draft_snapshot.id)
+    assert polished_row is not None and draft_row is not None
+
+    primary_genre, primary_tone = _load_catalog_lane(db_session, index=0)
+    secondary_genre, secondary_tone = _load_catalog_lane(db_session, index=1)
+    polished_row.selected_genre = primary_genre
+    polished_row.selected_tone_profile = primary_tone
+    draft_row.selected_genre = secondary_genre
+    draft_row.selected_tone_profile = secondary_tone
+
+    now = datetime.now(timezone.utc)
+    polished_brief = StoryBrief(
+        session_id=polished_snapshot.id,
+        revision_number=1,
+        story_idea="A child follows a moon door home across the harbor.",
+        raw_brief="A moon door bedtime journey across the harbor.",
+        normalized_summary="A moon door bedtime journey across the harbor.",
+        is_active=True,
+        accepted_at=now,
+    )
+    db_session.add(polished_brief)
+    db_session.flush()
+
+    polished_pitch = Pitch(
+        session_id=polished_snapshot.id,
+        story_brief_id=polished_brief.id,
+        generation_key="pitch-batch-1",
+        pitch_index=1,
+        title="Moon Door Lullaby",
+        logline="A moon door leads a child back through a harbor of settling lights.",
+        is_selected=True,
+        accepted_at=now,
+    )
+    polished_setup = StorySetup(
+        session_id=polished_snapshot.id,
+        revision_number=1,
+        target_runtime_minutes=12,
+        is_selected=True,
+        accepted_at=now,
+    )
+    db_session.add_all([polished_pitch, polished_setup])
+    db_session.flush()
+
+    story_asset = SessionAsset(
+        session_id=polished_snapshot.id,
+        asset_kind=AssetKind.STORY_TEXT,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-story",
+        object_path="sessions/polished/story.md",
+        mime_type="text/markdown",
+        ready_at=now,
+    )
+    db_session.add(story_asset)
+    db_session.flush()
+
+    docx_asset = SessionAsset(
+        session_id=polished_snapshot.id,
+        asset_kind=AssetKind.STORY_DOCX,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-exports",
+        object_path="sessions/polished/story.docx",
+        mime_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        metadata_json={"source_story_asset_id": story_asset.id},
+        ready_at=now + timedelta(minutes=1),
+    )
+    audio_job = AudioJob(
+        session_id=polished_snapshot.id,
+        status=JobStatus.COMPLETED,
+        estimated_duration_seconds=740,
+        completed_at=now + timedelta(minutes=2),
+    )
+    db_session.add_all([docx_asset, audio_job])
+    db_session.flush()
+
+    audio_asset = SessionAsset(
+        session_id=polished_snapshot.id,
+        audio_job_id=audio_job.id,
+        asset_kind=AssetKind.FINAL_AUDIO,
+        status=AssetStatus.READY,
+        storage_bucket="storyteller-audio",
+        object_path="sessions/polished/story.mp3",
+        mime_type="audio/mpeg",
+        metadata_json={"duration_seconds": 734},
+        ready_at=now + timedelta(minutes=2),
+    )
+    db_session.add(audio_asset)
+
+    _mark_session_completed(polished_row, at=now + timedelta(minutes=2))
+    draft_row.updated_at = now - timedelta(minutes=5)
+    db_session.commit()
+
+    filtered = service.list_recent_sessions(
+        limit=10,
+        query="Moon Door",
+        status_filter="completed",
+        genre_slug=primary_genre.slug,
+    )
+
+    assert [session.id for session in filtered] == [polished_snapshot.id]
+    assert filtered[0].display_title == "Moon Door Lullaby"
+    assert filtered[0].library_summary.display_kind == "polished_story"
+    assert filtered[0].library_summary.title_source == "pitch_title"
+    assert filtered[0].library_summary.runtime_seconds == 734
+    assert filtered[0].library_summary.runtime_source == "final_audio"
+    assert filtered[0].library_summary.artifact_readiness.story_text == "ready"
+    assert filtered[0].library_summary.artifact_readiness.story_docx == "ready"
+    assert filtered[0].library_summary.artifact_readiness.final_audio == "ready"
+    assert filtered[0].library_summary.artifact_readiness.ready_count == 3
+
+    active = service.list_recent_sessions(limit=10, status_filter="active")
+    assert [session.id for session in active] == [draft_snapshot.id]
+    assert active[0].library_summary.display_kind == "draft_session"
 
 
 def test_load_session_snapshot_raises_for_missing_session(db_session) -> None:

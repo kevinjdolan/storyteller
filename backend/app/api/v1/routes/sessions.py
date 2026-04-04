@@ -133,8 +133,22 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 def list_recent_sessions(
     db_session: Annotated[Session, Depends(get_db_session)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    query: Annotated[str | None, Query(max_length=120)] = None,
+    status_filter: Annotated[
+        str | None,
+        Query(
+            alias="status",
+            pattern="^(all|active|draft|in_progress|needs_regeneration|completed)$",
+        ),
+    ] = None,
+    genre_slug: Annotated[str | None, Query(max_length=80)] = None,
 ) -> list[RecentSessionSummary]:
-    return SessionService(db_session).list_recent_sessions(limit=limit)
+    return SessionService(db_session).list_recent_sessions(
+        limit=limit,
+        query=query,
+        status_filter=status_filter,
+        genre_slug=genre_slug,
+    )
 
 
 @router.get(

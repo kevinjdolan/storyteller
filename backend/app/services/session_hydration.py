@@ -44,11 +44,13 @@ from app.models import (
     PlanArtifactRefView,
     PlanRevisionView,
     RecentSessionSummary,
+    SessionArtifactReadinessView,
     SessionAssetView,
     SessionCatalogSelection,
     SessionEventType,
     SessionHydrationMetadata,
     SessionHydrationView,
+    SessionLibrarySummaryView,
     SessionProgress,
     SessionSnapshot,
     SessionStageStateView,
@@ -250,11 +252,39 @@ class SessionHydrationService:
         return self._object_storage
 
 
-def build_recent_session_summary(story_session) -> RecentSessionSummary:
+def build_recent_session_summary(
+    story_session,
+    *,
+    active_story_brief=None,
+    selected_pitch=None,
+    selected_story_setup=None,
+    latest_audio_job=None,
+    latest_story_asset=None,
+    latest_story_export_asset=None,
+    latest_audio_asset=None,
+) -> RecentSessionSummary:
+    display_title, title_source = resolve_display_title_with_source(
+        working_title=story_session.working_title,
+        pitch_title=selected_pitch.title if selected_pitch is not None else None,
+        story_idea=active_story_brief.story_idea if active_story_brief is not None else None,
+        normalized_summary=(
+            active_story_brief.normalized_summary if active_story_brief is not None else None
+        ),
+        raw_brief=active_story_brief.raw_brief if active_story_brief is not None else None,
+    )
     return RecentSessionSummary(
         id=story_session.id,
-        display_title=resolve_display_title(working_title=story_session.working_title),
+        display_title=display_title,
         working_title=story_session.working_title,
+        library_summary=build_session_library_summary(
+            overall_status=story_session.overall_status,
+            title_source=title_source,
+            selected_story_setup=selected_story_setup,
+            latest_audio_job=latest_audio_job,
+            latest_story_asset=latest_story_asset,
+            latest_story_export_asset=latest_story_export_asset,
+            latest_audio_asset=latest_audio_asset,
+        ),
         current_stage=story_session.current_stage,
         resume_stage=story_session.resume_stage,
         furthest_completed_stage=story_session.furthest_completed_stage,
@@ -265,6 +295,45 @@ def build_recent_session_summary(story_session) -> RecentSessionSummary:
         selected_genre=build_catalog_selection(story_session.selected_genre),
         selected_tone_profile=build_catalog_selection(story_session.selected_tone_profile),
         progress=build_progress(story_session.workflow_stage_states),
+    )
+
+
+def build_session_library_summary(
+    *,
+    overall_status: WorkflowStageState,
+    title_source: str,
+    selected_story_setup,
+    latest_audio_job,
+    latest_story_asset,
+    latest_story_export_asset,
+    latest_audio_asset,
+) -> SessionLibrarySummaryView:
+    artifact_readiness = build_session_artifact_readiness(
+        latest_story_asset=latest_story_asset,
+        latest_story_export_asset=latest_story_export_asset,
+        latest_audio_asset=latest_audio_asset,
+    )
+    runtime_seconds, runtime_source = resolve_session_library_runtime_seconds(
+        selected_story_setup=selected_story_setup,
+        latest_audio_job=latest_audio_job,
+        latest_story_asset=latest_story_asset,
+        latest_audio_asset=latest_audio_asset,
+    )
+
+    display_kind = "draft_session"
+    if overall_status == WorkflowStageState.COMPLETED:
+        display_kind = (
+            "polished_story"
+            if artifact_readiness.ready_count == artifact_readiness.total_count
+            else "completed_story"
+        )
+
+    return SessionLibrarySummaryView(
+        display_kind=display_kind,
+        title_source=title_source,
+        runtime_seconds=runtime_seconds,
+        runtime_source=runtime_source,
+        artifact_readiness=artifact_readiness,
     )
 
 
@@ -280,24 +349,34 @@ def build_session_snapshot(
         (revision for revision in plan_revision_views if revision.is_current),
         None,
     )
+    display_title, title_source = resolve_display_title_with_source(
+        working_title=story_session.working_title,
+        pitch_title=aggregate.selected_pitch.title if aggregate.selected_pitch else None,
+        story_idea=(
+            aggregate.active_story_brief.story_idea if aggregate.active_story_brief else None
+        ),
+        normalized_summary=(
+            aggregate.active_story_brief.normalized_summary
+            if aggregate.active_story_brief
+            else None
+        ),
+        raw_brief=(
+            aggregate.active_story_brief.raw_brief if aggregate.active_story_brief else None
+        ),
+    )
     snapshot = SessionSnapshot(
         id=story_session.id,
-        display_title=resolve_display_title(
-            working_title=story_session.working_title,
-            pitch_title=aggregate.selected_pitch.title if aggregate.selected_pitch else None,
-            story_idea=(
-                aggregate.active_story_brief.story_idea if aggregate.active_story_brief else None
-            ),
-            normalized_summary=(
-                aggregate.active_story_brief.normalized_summary
-                if aggregate.active_story_brief
-                else None
-            ),
-            raw_brief=(
-                aggregate.active_story_brief.raw_brief if aggregate.active_story_brief else None
-            ),
-        ),
+        display_title=display_title,
         working_title=story_session.working_title,
+        library_summary=build_session_library_summary(
+            overall_status=story_session.overall_status,
+            title_source=title_source,
+            selected_story_setup=aggregate.selected_story_setup,
+            latest_audio_job=aggregate.latest_audio_job,
+            latest_story_asset=aggregate.latest_story_asset,
+            latest_story_export_asset=aggregate.latest_story_export_asset,
+            latest_audio_asset=aggregate.latest_audio_asset,
+        ),
         current_stage=story_session.current_stage,
         resume_stage=story_session.resume_stage,
         furthest_completed_stage=story_session.furthest_completed_stage,
@@ -1133,12 +1212,24 @@ def _read_mapping(value: object) -> Mapping[str, Any]:
     return {}
 
 
+def _read_nested_mapping(
+    data: Mapping[str, Any] | dict[str, Any],
+    key: str,
+) -> Mapping[str, Any]:
+    value = data.get(key)
+    return value if isinstance(value, Mapping) else {}
+
+
 def _enum_value(value: Any) -> str:
     return getattr(value, "value", value)
 
 
 def _read_optional_mapping_text(data: Mapping[str, Any] | dict[str, Any], key: str) -> str | None:
     value = data.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _read_optional_text(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
@@ -2214,6 +2305,146 @@ def _job_needs_draft_snapshot_fallback(
     return True
 
 
+def build_session_artifact_readiness(
+    *,
+    latest_story_asset,
+    latest_story_export_asset,
+    latest_audio_asset,
+) -> SessionArtifactReadinessView:
+    story_text_status = "ready" if latest_story_asset is not None else "missing"
+    story_docx_status = (
+        "ready"
+        if _story_export_asset_is_current(
+            latest_story_export_asset=latest_story_export_asset,
+            latest_story_asset=latest_story_asset,
+        )
+        else "missing"
+    )
+    final_audio_status = "missing"
+    if latest_audio_asset is not None:
+        final_audio_status = (
+            "stale"
+            if _audio_asset_is_outdated(
+                latest_audio_asset=latest_audio_asset,
+                latest_story_asset=latest_story_asset,
+            )
+            else "ready"
+        )
+
+    ready_count = sum(
+        1
+        for status in (story_text_status, story_docx_status, final_audio_status)
+        if status == "ready"
+    )
+    return SessionArtifactReadinessView(
+        story_text=story_text_status,
+        story_docx=story_docx_status,
+        final_audio=final_audio_status,
+        ready_count=ready_count,
+    )
+
+
+def resolve_session_library_runtime_seconds(
+    *,
+    selected_story_setup,
+    latest_audio_job,
+    latest_story_asset,
+    latest_audio_asset,
+) -> tuple[int | None, str | None]:
+    if (
+        latest_audio_asset is not None
+        and not _audio_asset_is_outdated(
+            latest_audio_asset=latest_audio_asset,
+            latest_story_asset=latest_story_asset,
+        )
+    ):
+        duration_seconds = _read_optional_asset_duration_seconds(latest_audio_asset)
+        if duration_seconds is not None:
+            return duration_seconds, "final_audio"
+
+    estimated_duration_seconds = getattr(latest_audio_job, "estimated_duration_seconds", None)
+    if isinstance(estimated_duration_seconds, int) and estimated_duration_seconds > 0:
+        return estimated_duration_seconds, "audio_job_estimate"
+
+    target_runtime_minutes = getattr(selected_story_setup, "target_runtime_minutes", None)
+    if isinstance(target_runtime_minutes, int) and target_runtime_minutes > 0:
+        return target_runtime_minutes * 60, "story_setup"
+
+    return None, None
+
+
+def _story_export_asset_is_current(
+    *,
+    latest_story_export_asset,
+    latest_story_asset,
+) -> bool:
+    if latest_story_export_asset is None or latest_story_asset is None:
+        return False
+
+    metadata = _read_mapping(latest_story_export_asset.metadata_json)
+    return metadata.get("source_story_asset_id") == latest_story_asset.id
+
+
+def _audio_asset_is_outdated(
+    *,
+    latest_audio_asset,
+    latest_story_asset,
+) -> bool:
+    if latest_story_asset is None:
+        return False
+
+    generation = _read_nested_mapping(_read_mapping(latest_audio_asset.metadata_json), "generation")
+    source_composition_job_id = _read_optional_text(generation.get("source_composition_job_id"))
+    if (
+        latest_story_asset.composition_job_id is not None
+        and source_composition_job_id is not None
+        and latest_story_asset.composition_job_id != source_composition_job_id
+    ):
+        return True
+
+    if (
+        latest_story_asset.ready_at is not None
+        and latest_audio_asset.ready_at is not None
+        and latest_story_asset.ready_at > latest_audio_asset.ready_at
+    ):
+        return True
+
+    return False
+
+
+def _read_optional_asset_duration_seconds(asset: SessionAsset) -> int | None:
+    details = _read_mapping(asset.metadata_json)
+    duration_seconds = _read_optional_mapping_float(details, "duration_seconds")
+    if duration_seconds is None or duration_seconds <= 0:
+        return None
+    return round(duration_seconds)
+
+
+def resolve_display_title_with_source(
+    *,
+    working_title: str | None,
+    pitch_title: str | None = None,
+    story_idea: str | None = None,
+    normalized_summary: str | None = None,
+    raw_brief: str | None = None,
+) -> tuple[
+    str,
+    str,
+]:
+    for source, candidate in (
+        ("working_title", working_title),
+        ("pitch_title", pitch_title),
+        ("story_idea", story_idea),
+        ("normalized_summary", normalized_summary),
+        ("raw_brief", raw_brief),
+    ):
+        normalized = normalize_optional_text(candidate)
+        if normalized:
+            return normalized[:120], source
+
+    return "Untitled bedtime story", "fallback"
+
+
 def resolve_display_title(
     *,
     working_title: str | None,
@@ -2222,12 +2453,14 @@ def resolve_display_title(
     normalized_summary: str | None = None,
     raw_brief: str | None = None,
 ) -> str:
-    for candidate in (working_title, pitch_title, story_idea, normalized_summary, raw_brief):
-        normalized = normalize_optional_text(candidate)
-        if normalized:
-            return normalized[:120]
-
-    return "Untitled bedtime story"
+    title, _ = resolve_display_title_with_source(
+        working_title=working_title,
+        pitch_title=pitch_title,
+        story_idea=story_idea,
+        normalized_summary=normalized_summary,
+        raw_brief=raw_brief,
+    )
+    return title
 
 
 def normalize_optional_text(value: str | None) -> str | None:
