@@ -47,3 +47,6 @@ infra/persistence/local/
 .DS_Store
 .idea/
 .vscode/
+
+.yolopilot
+.yolopilot/
