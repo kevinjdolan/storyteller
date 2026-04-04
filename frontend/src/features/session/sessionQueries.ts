@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createSession,
+  type FetchRecentSessionsOptions,
   fetchSessionArtifactInventory,
   fetchSessionHydration,
   fetchRecentSessions,
@@ -11,7 +12,8 @@ import {
 export const sessionQueryKeys = {
   all: ['sessions'] as const,
   lists: () => [...sessionQueryKeys.all, 'list'] as const,
-  list: (limit: number) => [...sessionQueryKeys.lists(), limit] as const,
+  list: (options: FetchRecentSessionsOptions) =>
+    [...sessionQueryKeys.lists(), options] as const,
   hydrations: () => [...sessionQueryKeys.all, 'hydration'] as const,
   hydration: (sessionId: string) =>
     [...sessionQueryKeys.hydrations(), sessionId] as const,
@@ -26,10 +28,11 @@ export const sessionQueryKeys = {
     [...sessionQueryKeys.artifactInventories(), sessionId] as const,
 }
 
-export function useRecentSessionsQuery(limit = 20) {
+export function useRecentSessionsQuery(options: FetchRecentSessionsOptions = {}) {
   return useQuery({
-    queryKey: sessionQueryKeys.list(limit),
-    queryFn: () => fetchRecentSessions(limit),
+    placeholderData: (previousData) => previousData,
+    queryKey: sessionQueryKeys.list(options),
+    queryFn: () => fetchRecentSessions(options),
     staleTime: 30_000,
   })
 }

@@ -18,10 +18,33 @@ export type SessionProgress = {
   needs_regeneration_stages: number
 }
 
+export type SessionArtifactReadiness = {
+  story_text: 'ready' | 'missing'
+  story_docx: 'ready' | 'missing'
+  final_audio: 'ready' | 'missing' | 'stale'
+  ready_count: number
+  total_count: number
+}
+
+export type SessionLibrarySummary = {
+  display_kind: 'draft_session' | 'completed_story' | 'polished_story'
+  title_source:
+    | 'working_title'
+    | 'pitch_title'
+    | 'story_idea'
+    | 'normalized_summary'
+    | 'raw_brief'
+    | 'fallback'
+  runtime_seconds?: number | null
+  runtime_source?: 'final_audio' | 'audio_job_estimate' | 'story_setup' | null
+  artifact_readiness: SessionArtifactReadiness
+}
+
 export type RecentSessionSummary = {
   id: string
   display_title: string
   working_title?: string | null
+  library_summary?: SessionLibrarySummary | null
   current_stage: WorkflowStageId
   resume_stage: WorkflowStageId
   furthest_completed_stage?: WorkflowStageId | null
@@ -955,8 +978,36 @@ export type SessionCompositionResponse = {
 
 export type CreateSessionResponse = Pick<SessionSnapshot, 'id'>
 
-export function fetchRecentSessions(limit = 20) {
-  return getJson<RecentSessionSummary[]>(`/api/v1/sessions?limit=${limit}`)
+export type RecentSessionsStatusFilter =
+  | 'all'
+  | 'active'
+  | 'draft'
+  | 'in_progress'
+  | 'needs_regeneration'
+  | 'completed'
+
+export type FetchRecentSessionsOptions = {
+  genreSlug?: string | null
+  limit?: number
+  query?: string | null
+  status?: RecentSessionsStatusFilter | null
+}
+
+export function fetchRecentSessions(options: FetchRecentSessionsOptions = {}) {
+  const searchParams = new URLSearchParams()
+
+  searchParams.set('limit', String(options.limit ?? 20))
+  if (options.query != null && options.query.trim().length > 0) {
+    searchParams.set('query', options.query.trim())
+  }
+  if (options.status != null && options.status !== 'all') {
+    searchParams.set('status', options.status)
+  }
+  if (options.genreSlug != null && options.genreSlug.trim().length > 0) {
+    searchParams.set('genre_slug', options.genreSlug.trim())
+  }
+
+  return getJson<RecentSessionSummary[]>(`/api/v1/sessions?${searchParams}`)
 }
 
 export function fetchSessionSnapshot(sessionId: string) {

@@ -8,6 +8,19 @@ const sampleSessions = [
   {
     id: 'juniper-lake',
     display_title: 'Lanterns Over Juniper Lake',
+    library_summary: {
+      display_kind: 'draft_session',
+      title_source: 'working_title',
+      runtime_seconds: null,
+      runtime_source: null,
+      artifact_readiness: {
+        story_text: 'missing',
+        story_docx: 'missing',
+        final_audio: 'missing',
+        ready_count: 0,
+        total_count: 3,
+      },
+    },
     current_stage: 'beats',
     resume_stage: 'beats',
     overall_status: 'in_progress',
@@ -29,6 +42,19 @@ const sampleSessionSnapshot = {
   id: 'moonlit-harbor',
   display_title: 'Lanterns Over Juniper Lake',
   working_title: 'Lanterns Over Juniper Lake',
+  library_summary: {
+    display_kind: 'draft_session',
+    title_source: 'working_title',
+    runtime_seconds: null,
+    runtime_source: null,
+    artifact_readiness: {
+      story_text: 'missing',
+      story_docx: 'missing',
+      final_audio: 'missing',
+      ready_count: 0,
+      total_count: 3,
+    },
+  },
   current_stage: 'beats',
   resume_stage: 'beats',
   furthest_completed_stage: 'characters',
@@ -138,11 +164,15 @@ function mockBackendOnline({
         )
       }
 
+      if (url.endsWith('/api/v1/catalog/genres')) {
+        return Promise.resolve(buildJsonResponse(200, []))
+      }
+
       if (url.endsWith('/api/v1/sessions') && init?.method === 'POST') {
         return Promise.resolve(buildJsonResponse(201, { id: createSessionId }))
       }
 
-      if (url.includes('/api/v1/sessions?limit=20')) {
+      if (url.includes('/api/v1/sessions?limit=100')) {
         return Promise.resolve(buildJsonResponse(200, sessions))
       }
 
@@ -199,7 +229,7 @@ describe('app router', () => {
     expect(
       await screen.findByRole('heading', {
         level: 1,
-        name: 'Pick up where bedtime left off.',
+        name: 'Return to the stories worth keeping.',
       }),
     ).toBeInTheDocument()
     expect(
@@ -257,7 +287,11 @@ describe('app router', () => {
           )
         }
 
-        if (url.includes('/api/v1/sessions?limit=20')) {
+        if (url.endsWith('/api/v1/catalog/genres')) {
+          return Promise.resolve(buildJsonResponse(200, []))
+        }
+
+        if (url.includes('/api/v1/sessions?limit=100')) {
           return Promise.resolve(buildJsonResponse(200, []))
         }
 
