@@ -23,6 +23,20 @@ EXPECTED_TABLES = {
     "tone_profiles",
     "workflow_stage_states",
 }
+EXPECTED_TONE_PROFILE_COLUMNS = {
+    "id",
+    "genre_id",
+    "slug",
+    "label",
+    "description",
+    "bedtime_notes",
+    "descriptors",
+    "default_planning_hints",
+    "sort_order",
+    "is_active",
+    "created_at",
+    "updated_at",
+}
 
 
 def _build_alembic_config(database_url: str) -> Config:
@@ -41,6 +55,15 @@ def _get_table_names(database_url: str) -> set[str]:
         engine.dispose()
 
 
+def _get_column_names(database_url: str, table_name: str) -> set[str]:
+    engine = create_engine(database_url)
+
+    try:
+        return {column["name"] for column in inspect(engine).get_columns(table_name)}
+    finally:
+        engine.dispose()
+
+
 def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
     database_path = tmp_path / "storyteller-migrations.db"
     database_url = f"sqlite:///{database_path}"
@@ -48,9 +71,11 @@ def test_alembic_can_upgrade_from_zero_to_head_and_back(tmp_path) -> None:
 
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _get_table_names(database_url)
+    assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")
 
     command.downgrade(config, "base")
     assert not (EXPECTED_TABLES & _get_table_names(database_url))
 
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _get_table_names(database_url)
+    assert EXPECTED_TONE_PROFILE_COLUMNS <= _get_column_names(database_url, "tone_profiles")

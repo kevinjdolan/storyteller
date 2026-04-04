@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-seed-catalog
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,9 @@ backend-lint: ## Run backend Ruff lint checks
 
 backend-test: ## Run the backend pytest suite
 	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi
+
+backend-seed-catalog: ## Seed the backend-owned genre and tone catalog
+	@cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.seed_catalog; elif command -v python3 >/dev/null 2>&1; then python3 -m app.seed_catalog; else python -m app.seed_catalog; fi
 
 format: ## Format frontend and backend source files
 	@$(MAKE) frontend-format

@@ -58,6 +58,7 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             slug="hushed-wonder",
             label="Hushed Wonder",
             description="Calm and luminous.",
+            default_planning_hints={"pacing": "unhurried"},
         )
 
         draft_session = StorySession(
@@ -257,6 +258,9 @@ def test_story_schema_can_store_in_progress_and_completed_sessions() -> None:
             and stage.status == WorkflowStageState.IN_PROGRESS
             for stage in session_rows[0].workflow_stage_states
         )
+        assert session_rows[0].selected_tone_profile.default_planning_hints == {
+            "pacing": "unhurried"
+        }
         assert (
             session_rows[0]
             .composition_jobs[0]

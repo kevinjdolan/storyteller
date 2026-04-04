@@ -46,3 +46,13 @@ alembic revision --autogenerate -m "describe change"
 
 Keep this directory focused on schema history and migration tooling rather than application runtime
 code.
+
+After migrations are applied, seed the backend-owned genre and tone catalog from the application
+runtime layer:
+
+```bash
+cd backend
+STORYTELLER_SECRETS_FILE="" \
+STORYTELLER_DATABASE_URL="postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller" \
+python -m app.seed_catalog
+```

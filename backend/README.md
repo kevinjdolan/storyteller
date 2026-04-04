@@ -55,6 +55,7 @@ python -m ruff format app tests
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8565
 alembic upgrade head
 alembic downgrade base
+python -m app.seed_catalog
 ```
 
 ## Database migrations
@@ -83,6 +84,30 @@ alembic revision --autogenerate -m "describe change"
 
 The migration environment prefers an explicit `sqlalchemy.url` or `STORYTELLER_DATABASE_URL`. If
 neither is supplied, it falls back to the application settings loader.
+
+## Seeded catalog
+
+The curated genre and tone catalog is stored in
+[`app/data/genre_tone_catalog.yaml`](/Users/kevin/code/storyteller/backend/app/data/genre_tone_catalog.yaml)
+and seeded with:
+
+```bash
+cd backend
+python -m app.seed_catalog
+```
+
+For local Compose Postgres:
+
+```bash
+cd backend
+STORYTELLER_SECRETS_FILE="" \
+STORYTELLER_DATABASE_URL="postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller" \
+python -m app.seed_catalog
+```
+
+Use `--dry-run` to validate the YAML file and report the expected write counts without committing.
+Catalog provenance and editing guidance live in
+[docs/genre-tone-catalog.md](/Users/kevin/code/storyteller/docs/genre-tone-catalog.md).
 
 ## Health routes
 

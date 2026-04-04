@@ -1,3 +1,10 @@
+from app.models.catalog import (
+    GenreCatalogEntry,
+    GenreCatalogSeed,
+    GenreToneCatalogDocument,
+    ToneCatalogEntry,
+    ToneCatalogSeed,
+)
 from app.models.system import DependencyStatus, HealthResponse, HelloResponse
 from app.models.workflow import (
     WORKFLOW_STAGE_DEFINITIONS,
@@ -13,11 +20,16 @@ from app.models.workflow import (
 
 __all__ = [
     "DependencyStatus",
+    "GenreCatalogEntry",
+    "GenreCatalogSeed",
+    "GenreToneCatalogDocument",
     "HealthResponse",
     "HelloResponse",
     "WORKFLOW_STAGE_DEFINITIONS",
     "WORKFLOW_STAGE_SEQUENCE",
     "WORKFLOW_STAGE_STATES",
+    "ToneCatalogEntry",
+    "ToneCatalogSeed",
     "WorkflowStage",
     "WorkflowStageDefinition",
     "WorkflowStageState",
