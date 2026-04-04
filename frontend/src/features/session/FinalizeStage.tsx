@@ -24,7 +24,12 @@ import {
   resolveSessionAssetStreamUrl,
 } from './sessionArtifacts.ts'
 import { useSessionArtifactInventoryQuery } from './sessionQueries.ts'
+import { FinalizeAudioPlayer } from './FinalizeAudioPlayer.tsx'
 import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
+import {
+  type AudioPlaybackMarker,
+  useNarrationPlaybackSync,
+} from './finalizeAudioSync.ts'
 
 type FinalizeStageProps = {
   onAcceptRewrite: (jobId: string) => Promise<unknown>
@@ -483,6 +488,73 @@ function buildReaderSectionDescription(section: ReaderSection, index: number) {
   return detailBits.join(' • ')
 }
 
+function normalizeComparableText(value: string | null | undefined) {
+  const normalizedValue = value
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/gu, ' ')
+    .trim()
+
+  return normalizedValue != null && normalizedValue.length > 0
+    ? normalizedValue
+    : null
+}
+
+function findReaderSectionForPlaybackMarker(
+  readerSections: ReaderSection[],
+  marker: AudioPlaybackMarker | null,
+  totalMarkerCount: number,
+) {
+  if (marker == null || readerSections.length === 0) {
+    return null
+  }
+
+  const markerTitle = normalizeComparableText(
+    marker.sourceOutlineCardTitle ?? marker.label,
+  )
+
+  if (markerTitle != null) {
+    const exactMatch = readerSections.find(
+      (section) => normalizeComparableText(section.title) === markerTitle,
+    )
+    if (exactMatch != null) {
+      return exactMatch
+    }
+
+    const fuzzyMatch = readerSections.find((section) => {
+      const sectionTitle = normalizeComparableText(section.title)
+      if (sectionTitle == null) {
+        return false
+      }
+
+      return sectionTitle.includes(markerTitle) || markerTitle.includes(sectionTitle)
+    })
+    if (fuzzyMatch != null) {
+      return fuzzyMatch
+    }
+  }
+
+  if (readerSections.length === totalMarkerCount) {
+    return readerSections[marker.order - 1] ?? null
+  }
+
+  return null
+}
+
+function buildAudioSyncCopy(options: {
+  syncSource: 'asset_timeline' | 'preview_segments' | 'unavailable'
+  hasMarkers: boolean
+}) {
+  if (!options.hasMarkers || options.syncSource === 'unavailable') {
+    return 'This narration master is playable, but it does not include timed chapter markers yet.'
+  }
+
+  if (options.syncSource === 'preview_segments') {
+    return 'Marker timing is estimated from rendered preview clip lengths, so chapter sync is approximate.'
+  }
+
+  return 'Marker timing follows the rendered narration segments. It can keep playback aligned to chapter breaks, but word-by-word highlighting is not available yet.'
+}
+
 function buildLengthTargetsCopy(snapshot: SessionSnapshot) {
   const storySetup = snapshot.selected_story_setup
   if (storySetup == null) {
@@ -908,6 +980,7 @@ export function FinalizeStage({
   const audioStreamUrl = resolveSessionAssetStreamUrl(
     snapshot.latest_audio_asset,
   )
+  const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0)
   const compiledAudioMeta = useMemo(
     () => buildCompiledAudioMeta(snapshot.latest_audio_asset),
     [snapshot.latest_audio_asset],
@@ -920,6 +993,20 @@ export function FinalizeStage({
   const readerSections = useMemo(
     () => buildReaderSections(snapshot, displayStoryText),
     [displayStoryText, snapshot],
+  )
+  const playbackSync = useNarrationPlaybackSync({
+    asset: snapshot.latest_audio_asset,
+    audioSegments: snapshot.audio_segments ?? [],
+    currentTime: playbackCurrentTime,
+  })
+  const syncedReaderSection = useMemo(
+    () =>
+      findReaderSectionForPlaybackMarker(
+        readerSections,
+        playbackSync.activeMarker,
+        playbackSync.markers.length,
+      ),
+    [playbackSync.activeMarker, playbackSync.markers.length, readerSections],
   )
   const [activeReaderSectionId, setActiveReaderSectionId] = useState<
     string | null
@@ -978,6 +1065,10 @@ export function FinalizeStage({
     finalAudioReady,
     renderState: audioRenderState,
     showingPreviousMaster,
+  })
+  const audioSyncCopy = buildAudioSyncCopy({
+    syncSource: playbackSync.syncSource,
+    hasMarkers: playbackSync.markers.length > 0,
   })
   const audioBadgeTone = getAudioBadgeTone(audioRenderState, {
     showingPreviousMaster,
@@ -1180,6 +1271,12 @@ export function FinalizeStage({
       return readerSections[0]?.id ?? null
     })
   }, [readerSections])
+
+  useEffect(() => {
+    if (snapshot.latest_audio_asset == null) {
+      setPlaybackCurrentTime(0)
+    }
+  }, [snapshot.latest_audio_asset])
 
   async function runAction(
     nextActionState: Exclude<ActionState, null>,
@@ -1687,12 +1784,13 @@ export function FinalizeStage({
             {finalAudioReady ? (
               <div className="finalize-stage__listen-card">
                 {audioStreamUrl != null ? (
-                  <audio
-                    aria-label="Final narration preview"
-                    className="audio-stage__player"
-                    controls
-                    preload="none"
-                    src={audioStreamUrl}
+                  <FinalizeAudioPlayer
+                    asset={snapshot.latest_audio_asset!}
+                    currentTime={playbackCurrentTime}
+                    markers={playbackSync.markers}
+                    onCurrentTimeChange={setPlaybackCurrentTime}
+                    storageNamespace={snapshot.id}
+                    streamUrl={audioStreamUrl}
                   />
                 ) : (
                   <p className="finalize-stage__surface-note">
@@ -1708,6 +1806,33 @@ export function FinalizeStage({
                     ))}
                   </div>
                 ) : null}
+
+                <div className="finalize-stage__sync-card">
+                  <div className="finalize-stage__sync-copy">
+                    <p className="eyebrow">Text sync</p>
+                    <h4>
+                      {playbackSync.activeMarker != null
+                        ? `Following ${playbackSync.activeMarker.label}`
+                        : playbackSync.markers.length > 0
+                          ? 'Timed chapter markers are available'
+                          : 'Timed chapter markers are not available yet'}
+                    </h4>
+                    <p>{audioSyncCopy}</p>
+                  </div>
+
+                  {syncedReaderSection != null ? (
+                    <Button
+                      onClick={() => {
+                        setActiveTab('read')
+                        scrollReaderToSection(syncedReaderSection.id)
+                      }}
+                      size="compact"
+                      tone="ghost"
+                    >
+                      Open chapter in reader
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : audioRenderState === 'planned' ? (
               <EmptyStateBlock

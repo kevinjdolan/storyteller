@@ -419,6 +419,32 @@ The oars slowed as the lake went still again.`,
               '/api/v1/sessions/session-finalize-1/assets/audio-asset-1/content?disposition=inline',
             duration_seconds: 734,
             details: {
+              segment_timeline: [
+                {
+                  segment_id: 'audio-segment-1',
+                  segment_index: 1,
+                  start_seconds: 0,
+                  end_seconds: 210,
+                  timeline_end_seconds: 213,
+                  duration_seconds: 210,
+                  pause_after_seconds: 3,
+                  source_boundary_kind: 'chapter',
+                  source_outline_card_key: 'chapter-1',
+                  source_outline_card_title: 'Lantern Wake',
+                },
+                {
+                  segment_id: 'audio-segment-2',
+                  segment_index: 2,
+                  start_seconds: 213,
+                  end_seconds: 470,
+                  timeline_end_seconds: 473,
+                  duration_seconds: 257,
+                  pause_after_seconds: 3,
+                  source_boundary_kind: 'chapter',
+                  source_outline_card_key: 'chapter-2',
+                  source_outline_card_title: 'Moonlit Crossing',
+                },
+              ],
               generation: {
                 voice_key: 'moonbeam',
                 voice_name: 'Moonbeam',
@@ -476,7 +502,13 @@ The oars slowed as the lake went still again.`,
     expect(onDownloadStoryExport).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Listen back' }))
-    expect(screen.getByLabelText('Final narration preview')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Play narration' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Text sync')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Open chapter in reader' }),
+    ).toBeInTheDocument()
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Download narration' }),

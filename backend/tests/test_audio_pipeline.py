@@ -193,6 +193,7 @@ def test_audio_runtime_worker_marks_partial_tts_failure_and_keeps_partial_assets
         JobStatus.FAILED,
     ]
     assert len(segment_assets) == 1
+    assert segment_assets[0].metadata_json["duration_seconds"] == 0.1
     audio_progress_payloads = [
         event.payload
         for event in history.events
@@ -414,6 +415,42 @@ def test_final_audio_assembly_service_builds_master_and_supersedes_previous_asse
     assert final_audio_asset is not None
     assert final_audio_asset.metadata_json["pause_seconds_total"] == 2
     assert final_audio_asset.metadata_json["segment_indexes"] == [1, 2]
+    assert final_audio_asset.metadata_json["segment_timeline"] == [
+        {
+            "segment_id": first_segment.id,
+            "segment_index": 1,
+            "start_seconds": 0.0,
+            "end_seconds": 0.1,
+            "timeline_end_seconds": 2.1,
+            "duration_seconds": 0.1,
+            "pause_after_seconds": 2,
+            "pause_hint": "chapter_break",
+            "source_boundary_kind": "chapter",
+            "source_outline_card_key": None,
+            "source_outline_card_title": None,
+            "text_start_offset": first_segment.text_start_offset,
+            "text_end_offset": first_segment.text_end_offset,
+            "word_count": first_segment.word_count,
+            "split_reason": None,
+        },
+        {
+            "segment_id": second_segment.id,
+            "segment_index": 2,
+            "start_seconds": 2.1,
+            "end_seconds": 2.2,
+            "timeline_end_seconds": 2.2,
+            "duration_seconds": 0.1,
+            "pause_after_seconds": 0,
+            "pause_hint": "none",
+            "source_boundary_kind": "chapter",
+            "source_outline_card_key": None,
+            "source_outline_card_title": None,
+            "text_start_offset": second_segment.text_start_offset,
+            "text_end_offset": second_segment.text_end_offset,
+            "word_count": second_segment.word_count,
+            "split_reason": None,
+        },
+    ]
     assert final_audio_asset.metadata_json["supersedes_asset_ids"] == [previous_asset.id]
     assert final_audio_asset.metadata_json["generation"]["audio_job_id"] == current_job.id
     assert object_storage.download_bytes(

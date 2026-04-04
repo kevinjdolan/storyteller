@@ -279,6 +279,45 @@ def test_publish_final_audio_supersedes_previous_asset_and_records_mix_metadata(
     assert refreshed_previous_asset.status == AssetStatus.SUPERSEDED
     assert published_asset.metadata_json["mix"]["applied"] is True
     assert published_asset.metadata_json["mix"]["music_profile"] == "night_ambience"
+    assert published_asset.metadata_json["segment_timeline_version"] == (
+        "narration_segment_timeline.v1"
+    )
+    assert published_asset.metadata_json["segment_timeline"] == [
+        {
+            "segment_id": rendered_segments[0].segment.id,
+            "segment_index": 1,
+            "start_seconds": 0.0,
+            "end_seconds": 0.1,
+            "timeline_end_seconds": 1.1,
+            "duration_seconds": 0.1,
+            "pause_after_seconds": 1,
+            "pause_hint": "chapter_break",
+            "source_boundary_kind": "unknown",
+            "source_outline_card_key": None,
+            "source_outline_card_title": None,
+            "text_start_offset": rendered_segments[0].segment.text_start_offset,
+            "text_end_offset": rendered_segments[0].segment.text_end_offset,
+            "word_count": rendered_segments[0].segment.word_count,
+            "split_reason": None,
+        },
+        {
+            "segment_id": rendered_segments[1].segment.id,
+            "segment_index": 2,
+            "start_seconds": 1.1,
+            "end_seconds": 1.2,
+            "timeline_end_seconds": 1.2,
+            "duration_seconds": 0.1,
+            "pause_after_seconds": 0,
+            "pause_hint": "none",
+            "source_boundary_kind": "unknown",
+            "source_outline_card_key": None,
+            "source_outline_card_title": None,
+            "text_start_offset": rendered_segments[1].segment.text_start_offset,
+            "text_end_offset": rendered_segments[1].segment.text_end_offset,
+            "word_count": rendered_segments[1].segment.word_count,
+            "split_reason": None,
+        },
+    ]
     assert published_asset.metadata_json["debug"]["narration_master_object_path"] == (
         narration_master_location.key
     )

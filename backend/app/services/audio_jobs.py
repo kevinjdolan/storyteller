@@ -40,6 +40,7 @@ from app.services.assets import SessionAssetService
 from app.services.audio_mixing import AudioMixingError, FfmpegAudioMixer
 from app.services.audio_music import build_audio_mix_plan, deserialize_audio_mix_plan
 from app.services.audio_wave import build_wav_bytes, read_wav_bytes
+from app.services.audio_wave import wav_duration_seconds
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.final_audio_assembly import (
     FinalAudioAssemblyError,
@@ -494,6 +495,7 @@ class AudioJobService:
             checksum_sha256=checksum,
             metadata_json={
                 "orchestration_version": "audio_job_segment.v1",
+                "duration_seconds": round(wav_duration_seconds(wav_bytes), 3),
                 "provider": synthesis.provider,
                 "model_id": synthesis.model_id,
                 "prompt_version": synthesis.prompt_version,

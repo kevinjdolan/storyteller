@@ -212,6 +212,8 @@ class FinalAudioAssemblyService:
                 "narration_master_duration_seconds": narration_master.duration_seconds,
                 "segment_count": len(rendered_segments),
                 "segment_indexes": list(narration_master.segment_indexes),
+                "segment_timeline_version": "narration_segment_timeline.v1",
+                "segment_timeline": _build_segment_timeline(rendered_segments),
                 "pause_seconds_total": narration_master.pause_seconds_total,
                 "estimated_duration_seconds": job.estimated_duration_seconds,
                 "media": {
@@ -321,6 +323,62 @@ def read_asset_detail_map(asset: SessionAsset | None) -> dict[str, Any]:
     if asset is None:
         return {}
     return _read_mapping(asset.metadata_json)
+
+
+def _build_segment_timeline(
+    rendered_segments: Sequence[RenderedNarrationSegment],
+) -> list[dict[str, Any]]:
+    timeline: list[dict[str, Any]] = []
+    cursor_seconds = 0.0
+
+    for rendered in rendered_segments:
+        duration_seconds = _segment_duration_seconds(rendered)
+        start_seconds = cursor_seconds
+        end_seconds = start_seconds + duration_seconds
+        timeline_end_seconds = end_seconds + max(rendered.segment.pause_after_seconds, 0)
+        metadata = _read_mapping(rendered.segment.metadata_json)
+
+        timeline.append(
+            {
+                "segment_id": rendered.segment.id,
+                "segment_index": rendered.segment.segment_index,
+                "start_seconds": round(start_seconds, 3),
+                "end_seconds": round(end_seconds, 3),
+                "timeline_end_seconds": round(timeline_end_seconds, 3),
+                "duration_seconds": round(duration_seconds, 3),
+                "pause_after_seconds": rendered.segment.pause_after_seconds,
+                "pause_hint": (
+                    rendered.segment.pause_hint.value
+                    if rendered.segment.pause_hint is not None
+                    else None
+                ),
+                "source_boundary_kind": (
+                    rendered.segment.source_boundary_kind.value
+                    if rendered.segment.source_boundary_kind is not None
+                    else "unknown"
+                ),
+                "source_outline_card_key": rendered.segment.source_outline_card_key,
+                "source_outline_card_title": rendered.segment.source_outline_card_title,
+                "text_start_offset": rendered.segment.text_start_offset,
+                "text_end_offset": rendered.segment.text_end_offset,
+                "word_count": rendered.segment.word_count,
+                "split_reason": metadata.get("split_reason"),
+            }
+        )
+        cursor_seconds = timeline_end_seconds
+
+    return timeline
+
+
+def _segment_duration_seconds(rendered: RenderedNarrationSegment) -> float:
+    frame_width_bytes = (
+        rendered.synthesis.channel_count * rendered.synthesis.sample_width_bytes
+    )
+    if frame_width_bytes <= 0 or rendered.synthesis.sample_rate_hz <= 0:
+        raise FinalAudioAssemblyError("audio segments must expose valid PCM metadata")
+
+    frame_count = len(rendered.synthesis.pcm_audio_bytes) / frame_width_bytes
+    return frame_count / rendered.synthesis.sample_rate_hz
 
 
 def _read_mapping(value: Any) -> dict[str, Any]:
