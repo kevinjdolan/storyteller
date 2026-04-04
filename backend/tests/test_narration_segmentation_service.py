@@ -245,3 +245,88 @@ def test_create_plan_splits_large_segment_on_sentence_boundaries(db_session) -> 
         NarrationMusicTransitionHint.END_STORY
     )
     assert result.segments[0].metadata_json["split_reason"] == "sentence_group"
+
+
+def test_create_plan_applies_chapter_break_only_to_last_split_segment(db_session) -> None:
+    now = datetime.now(timezone.utc)
+    story_session = StorySession(working_title="Split Chapter Boundaries")
+    db_session.add(story_session)
+    db_session.flush()
+
+    composition_job = CompositionJob(
+        session_id=story_session.id,
+        job_kind=CompositionJobKind.DRAFT,
+        status=JobStatus.COMPLETED,
+        progress_percent=100,
+        completed_at=now,
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+
+    chapter_one_text = (
+        "Mira followed the bell beside sleeping skiffs. "
+        "Soft lantern light kept every ripple readable."
+    )
+    chapter_two_text = "She tucked it home and the harbor rested."
+    for index, text in enumerate((chapter_one_text, chapter_two_text), start=1):
+        db_session.add(
+            CompositionSegment(
+                session_id=story_session.id,
+                composition_job_id=composition_job.id,
+                segment_index=index,
+                revision_number=1,
+                status=JobStatus.COMPLETED,
+                accepted_text=text,
+                text_content=text,
+                word_count=len(text.split()),
+                payload={
+                    "outline_kind": "chapter",
+                    "outline_card_key": f"chapter-{index}",
+                    "outline_card_title": f"Chapter {index}",
+                },
+                completed_at=now,
+            )
+        )
+    db_session.flush()
+
+    audio_job = AudioJob(
+        session_id=story_session.id,
+        source_composition_job_id=composition_job.id,
+        status=JobStatus.IN_PROGRESS,
+        voice_key="moonbeam",
+        playback_speed=1.0,
+        include_background_music=True,
+        started_at=now,
+    )
+    db_session.add(audio_job)
+    db_session.flush()
+
+    result = NarrationSegmentationService(
+        db_session,
+        max_words_per_segment=8,
+    ).create_plan(
+        session_id=story_session.id,
+        audio_job_id=audio_job.id,
+    )
+
+    assert result.total_segments == 3
+    assert [segment.text_content for segment in result.segments] == [
+        "Mira followed the bell beside sleeping skiffs.",
+        "Soft lantern light kept every ripple readable.",
+        chapter_two_text,
+    ]
+    assert result.segments[0].pause_after_seconds == 0
+    assert result.segments[0].pause_hint == NarrationPauseHint.NONE
+    assert result.segments[0].music_transition_hint == (
+        NarrationMusicTransitionHint.CONTINUE_BED
+    )
+    assert result.segments[1].pause_after_seconds == 3
+    assert result.segments[1].pause_hint == NarrationPauseHint.CHAPTER_BREAK
+    assert result.segments[1].music_transition_hint == (
+        NarrationMusicTransitionHint.SOFT_RESET
+    )
+    assert result.segments[2].music_transition_hint == (
+        NarrationMusicTransitionHint.END_STORY
+    )
+    assert result.segments[0].metadata_json["ends_source_boundary"] is False
+    assert result.segments[1].metadata_json["ends_source_boundary"] is True
