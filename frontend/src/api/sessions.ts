@@ -3,7 +3,7 @@ import {
   type WorkflowStageState,
 } from '../features/session/workflowStages.ts'
 import type { ChatToUiActionBatch } from '../features/session/chat/chatToUiActions.ts'
-import { getJson, postJson } from './client.ts'
+import { getJson, postJson, resolveApiUrl } from './client.ts'
 
 export type SessionCatalogSelection = {
   id: string
@@ -783,6 +783,108 @@ export type SessionHydration = {
   hydration: SessionHydrationMetadata
 }
 
+export type ModelUsageBucket = 'planning' | 'composition' | 'audio'
+
+export type ModelCallOutcome =
+  | 'succeeded'
+  | 'failed'
+  | 'succeeded_with_fallback'
+
+export type ModelTokenUsageView = {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
+  cached_input_tokens?: number | null
+  thought_tokens?: number | null
+}
+
+export type SessionUsageBucketSummaryView = {
+  usage_bucket: ModelUsageBucket
+  total_calls: number
+  succeeded_calls: number
+  failed_calls: number
+  fallback_calls: number
+  token_metadata_call_count: number
+  cost_estimate_call_count: number
+  total_elapsed_ms: number
+  average_elapsed_ms?: number | null
+  max_elapsed_ms?: number | null
+  approximate_cost_usd?: number | null
+  models_used: string[]
+  token_usage: ModelTokenUsageView
+  last_model_id?: string | null
+  last_purpose?: string | null
+  last_called_at?: string | null
+}
+
+export type SessionUsageSummaryView = {
+  total_calls: number
+  succeeded_calls: number
+  failed_calls: number
+  fallback_calls: number
+  token_metadata_call_count: number
+  cost_estimate_call_count: number
+  total_elapsed_ms: number
+  average_elapsed_ms?: number | null
+  max_elapsed_ms?: number | null
+  approximate_cost_usd?: number | null
+  token_usage: ModelTokenUsageView
+  buckets: SessionUsageBucketSummaryView[]
+}
+
+export type SessionUsageStageBreakdownView = {
+  usage_bucket: ModelUsageBucket
+  workflow_stage?: WorkflowStageId | null
+  model_id: string
+  total_calls: number
+  succeeded_calls: number
+  failed_calls: number
+  fallback_calls: number
+  token_metadata_call_count: number
+  cost_estimate_call_count: number
+  total_elapsed_ms: number
+  average_elapsed_ms?: number | null
+  max_elapsed_ms?: number | null
+  approximate_cost_usd?: number | null
+  token_usage: ModelTokenUsageView
+}
+
+export type SessionUsageEventView = {
+  id: string
+  usage_bucket: ModelUsageBucket
+  workflow_stage?: WorkflowStageId | null
+  purpose: string
+  provider: string
+  model_id: string
+  prompt_version?: string | null
+  outcome: ModelCallOutcome
+  elapsed_ms: number
+  approximate_cost_usd?: number | null
+  token_usage: ModelTokenUsageView
+  error_message?: string | null
+  created_at: string
+}
+
+export type SessionUsageDiagnosticsView = {
+  session_id: string
+  generated_at: string
+  summary: SessionUsageSummaryView
+  stage_breakdown: SessionUsageStageBreakdownView[]
+  recent_calls: SessionUsageEventView[]
+  slowest_calls: SessionUsageEventView[]
+  costliest_calls: SessionUsageEventView[]
+}
+
+export type SessionDebugInspector = {
+  session_id: string
+  generated_at: string
+  snapshot: SessionSnapshot
+  hydration: SessionHydrationMetadata
+  recent_history: SessionHistory
+  artifact_inventory: SessionArtifactInventoryView
+  usage_diagnostics: SessionUsageDiagnosticsView
+}
+
 export type SessionContextUpdateResponse = {
   snapshot: SessionSnapshot
   event: SessionHistoryEvent
@@ -1016,6 +1118,21 @@ export function fetchSessionSnapshot(sessionId: string) {
 
 export function fetchSessionHydration(sessionId: string) {
   return getJson<SessionHydration>(`/api/v1/sessions/${sessionId}/hydrate`)
+}
+
+export function fetchSessionDebugInspector(sessionId: string) {
+  return fetch(resolveApiUrl(`/api/v1/sessions/${sessionId}/debug-inspector`)).then(
+    async (response) => {
+      if (response.ok) {
+        return (await response.json()) as SessionDebugInspector
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | { detail?: string }
+        | null
+      throw new Error(payload?.detail ?? `Unexpected status code: ${response.status}`)
+    },
+  )
 }
 
 export function fetchSessionHistory(sessionId: string) {

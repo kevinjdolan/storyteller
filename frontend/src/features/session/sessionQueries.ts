@@ -3,6 +3,7 @@ import {
   createSession,
   type FetchRecentSessionsOptions,
   fetchSessionArtifactInventory,
+  fetchSessionDebugInspector,
   fetchSessionHydration,
   fetchRecentSessions,
   fetchSessionHistory,
@@ -26,6 +27,9 @@ export const sessionQueryKeys = {
   artifactInventories: () => [...sessionQueryKeys.all, 'artifact-inventory'] as const,
   artifactInventory: (sessionId: string) =>
     [...sessionQueryKeys.artifactInventories(), sessionId] as const,
+  debugInspectors: () => [...sessionQueryKeys.all, 'debug-inspector'] as const,
+  debugInspector: (sessionId: string) =>
+    [...sessionQueryKeys.debugInspectors(), sessionId] as const,
 }
 
 export function useRecentSessionsQuery(options: FetchRecentSessionsOptions = {}) {
@@ -70,6 +74,15 @@ export function useSessionArtifactInventoryQuery(sessionId: string) {
     queryFn: () => fetchSessionArtifactInventory(sessionId),
     enabled: sessionId.length > 0,
     staleTime: 10_000,
+  })
+}
+
+export function useSessionDebugInspectorQuery(sessionId: string) {
+  return useQuery({
+    queryKey: sessionQueryKeys.debugInspector(sessionId),
+    queryFn: () => fetchSessionDebugInspector(sessionId),
+    enabled: sessionId.length > 0,
+    staleTime: 5_000,
   })
 }
 

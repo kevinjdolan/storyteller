@@ -3,6 +3,7 @@ import { generatePath } from 'react-router-dom'
 export const routePaths = {
   home: '/',
   sessionWorkspace: '/sessions/:sessionId',
+  sessionDebugInspector: '/sessions/:sessionId/debug',
   notFound: '*',
 } as const
 
@@ -23,4 +24,8 @@ export function buildSessionWorkspacePath(
   })
 
   return `${path}?${searchParams.toString()}`
+}
+
+export function buildSessionDebugInspectorPath(sessionId: string) {
+  return generatePath(routePaths.sessionDebugInspector, { sessionId })
 }

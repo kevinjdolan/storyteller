@@ -15,7 +15,8 @@ export function AppShell() {
   const toasts = useAppShellToasts()
   const previousBackendStateRef = useRef(backendStatus.state)
   const workspaceNavIsActive =
-    matchPath(routePaths.sessionWorkspace, location.pathname) !== null
+    matchPath(routePaths.sessionWorkspace, location.pathname) !== null ||
+    matchPath(routePaths.sessionDebugInspector, location.pathname) !== null
 
   useEffect(() => {
     const previousState = previousBackendStateRef.current
