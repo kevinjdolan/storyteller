@@ -109,9 +109,7 @@ def test_intent_parser_service_handles_happy_path_updates_and_audits_events(db_s
                                     "Make the midpoint and mystery beats feel "
                                     "a little more mysterious."
                                 ),
-                                "bedtime_goal": (
-                                    "Keep the tension gentle and resolve it quickly."
-                                ),
+                                "bedtime_goal": ("Keep the tension gentle and resolve it quickly."),
                             },
                         },
                         {
@@ -201,9 +199,7 @@ def test_intent_parser_service_falls_back_gracefully_when_adapter_fails(db_sessi
     result = SessionIntentParserService(
         db_session,
         RaisingIntentParserAdapter(),
-    ).parse_user_message(
-        session_id, message="make it a little more mysterious and shorter"
-    )
+    ).parse_user_message(session_id, message="make it a little more mysterious and shorter")
 
     assert result.status == IntentParserStatus.FAILED
     assert result.proposed_actions.actions == []
@@ -221,15 +217,19 @@ def test_intent_parser_service_uses_updated_ui_context_in_prompt_summary(db_sess
     session_service = SessionService(db_session)
     session_service.apply_context_update(
         session_id,
-        payload=SessionContextUpdateRequest.model_validate({
-            "target_kind": "stage_note",
-            "stage": "beats",
-            "control_id": "stage-note-editor",
-            "origin": "workspace",
-            "values": {
-                "detail": "Make the midpoint gentler and add one calmer beat before the finale.",
-            },
-        }),
+        payload=SessionContextUpdateRequest.model_validate(
+            {
+                "target_kind": "stage_note",
+                "stage": "beats",
+                "control_id": "stage-note-editor",
+                "origin": "workspace",
+                "values": {
+                    "detail": (
+                        "Make the midpoint gentler and add one calmer beat before the finale."
+                    ),
+                },
+            }
+        ),
     )
     adapter = StubIntentParserAdapter(
         IntentParserStructuredOutput.model_validate(
@@ -335,8 +335,7 @@ def test_explicit_plan_summary_includes_pending_composition_interruption(
     assert result.status == IntentParserStatus.PARSED
     assert (
         "Rewrite requested from segment 2. The current chunk will finish "
-        "saving before the redirect applies."
-        in result.assistant_response
+        "saving before the redirect applies." in result.assistant_response
     )
 
 

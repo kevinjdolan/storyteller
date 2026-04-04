@@ -1,3 +1,9 @@
+import logging
+
+from app.api.dependencies import get_db_session, require_owned_session_access
+from app.main import create_app
+from app.repositories import StorySessionRepository
+from fastapi import Depends
 from fastapi.testclient import TestClient
 
 
@@ -46,3 +52,46 @@ def test_legacy_hello_endpoint_remains_available_for_existing_frontend_checks(
 
     assert response.status_code == 200
     assert response.json() == {"message": "Hello from FastAPI!"}
+
+
+def test_request_logging_echoes_request_id_and_binds_session_context(
+    caplog,
+    monkeypatch,
+) -> None:
+    caplog.set_level(logging.INFO)
+    session_id = "session-trace-test"
+
+    app = create_app()
+
+    def override_db_session():
+        yield object()
+
+    app.dependency_overrides[get_db_session] = override_db_session
+    monkeypatch.setattr(StorySessionRepository, "exists", lambda *_args, **_kwargs: True)
+
+    @app.get("/_test/trace/{session_id}", dependencies=[Depends(require_owned_session_access)])
+    def trace_session(session_id: str) -> dict[str, str]:
+        return {"session_id": session_id}
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/_test/trace/{session_id}",
+            headers={"X-Request-ID": "req-test-session-trace"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "req-test-session-trace"
+
+    matching_records = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "http.request.completed"
+        and getattr(record, "log_context_fields", {}).get("path")
+        == f"/_test/trace/{session_id}"
+    ]
+
+    assert matching_records
+    fields = matching_records[-1].log_context_fields
+    assert fields["request_id"] == "req-test-session-trace"
+    assert fields["session_id"] == session_id
+    assert fields["status_code"] == 200

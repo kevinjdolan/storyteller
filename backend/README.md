@@ -63,6 +63,9 @@ python -m app.storage.smoke_test
 python -m app.maintenance.artifact_cleanup
 ```
 
+Structured logging and request or job correlation notes live in
+[docs/observability-and-logging.md](/Users/kevin/code/storyteller/docs/observability-and-logging.md).
+
 ## Database migrations
 
 The first PostgreSQL schema now lives in SQLAlchemy models under

@@ -28,3 +28,7 @@ Useful follow-up commands:
 - `make logs` to follow service logs
 - `make down` to stop containers without removing durable app data
 - `make reset` to stop the stack and remove only the Postgres and fake GCS data volumes
+
+The structured logging field guide is in
+[docs/observability-and-logging.md](/Users/kevin/code/storyteller/docs/observability-and-logging.md),
+including examples for tracing a `session_id` across API and worker logs.

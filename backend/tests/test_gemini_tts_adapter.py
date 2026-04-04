@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 
 import httpx
 import pytest
@@ -9,6 +10,7 @@ from app.ai import GeminiTextToSpeechAdapter, render_gemini_tts_prompt
 from app.ai.gemini_resilience import GeminiFailureKind, GeminiRetryNotice
 from app.ai.gemini_tts import NarrationSynthesisRequest, TextToSpeechTransportError
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
+from app.observability import configure_structured_logging
 
 
 def _build_request() -> NarrationSynthesisRequest:
@@ -204,9 +206,7 @@ def test_gemini_tts_adapter_does_not_retry_quota_exhaustion() -> None:
             json={
                 "error": {
                     "status": "RESOURCE_EXHAUSTED",
-                    "message": (
-                        "You exceeded your current quota. Check plan and billing details."
-                    ),
+                    "message": ("You exceeded your current quota. Check plan and billing details."),
                 }
             },
         )
@@ -254,4 +254,72 @@ def test_gemini_tts_adapter_raises_clear_error_for_missing_audio_payload() -> No
         adapter.synthesize(_build_request())
 
     assert "inline audio data" in str(exc_info.value)
+    adapter.close()
+
+
+def test_gemini_tts_adapter_logs_useful_metadata_without_prompt_content(caplog) -> None:
+    sensitive_line = "Lantern secret for observability coverage."
+    caplog.set_level(logging.INFO)
+    configure_structured_logging("INFO")
+
+    adapter = GeminiTextToSpeechAdapter(
+        credential="test-key",
+        model_id="gemini-2.5-flash-preview-tts",
+        retry_backoff_seconds=0,
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200,
+                    json={
+                        "candidates": [
+                            {
+                                "finishReason": "STOP",
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "inlineData": {
+                                                "data": base64.b64encode(b"\x00\x00" * 32).decode(
+                                                    "utf-8"
+                                                )
+                                            }
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                )
+            )
+        ),
+    )
+
+    adapter.synthesize(
+        NarrationSynthesisRequest(
+            text=sensitive_line,
+            voice_key=AudioVoiceKey.MOONBEAM,
+            narration_style=AudioNarrationStyle.CALM,
+            playback_speed=1.0,
+        )
+    )
+
+    started_records = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "ai.request.started"
+    ]
+    succeeded_records = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "ai.request.succeeded"
+    ]
+
+    assert started_records
+    assert succeeded_records
+    assert started_records[-1].log_context_fields["operation"] == "text_to_speech_generation"
+    assert succeeded_records[-1].log_context_fields["attempts_used"] == 1
+    assert all(
+        sensitive_line not in json.dumps(getattr(record, "log_context_fields", {}), sort_keys=True)
+        for record in caplog.records
+    )
+
     adapter.close()
