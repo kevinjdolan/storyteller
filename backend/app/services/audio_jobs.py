@@ -17,6 +17,11 @@ from app.ai import (
     NarrationTextToSpeechAdapter,
     TextToSpeechTransportError,
 )
+from app.ai.gemini_resilience import (
+    GeminiFailureDetail,
+    GeminiRetryNotice,
+    classify_gemini_exception,
+)
 from app.db import (
     AssetKind,
     AssetStatus,
@@ -39,8 +44,7 @@ from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
 from app.services.assets import SessionAssetService
 from app.services.audio_mixing import AudioMixingError, FfmpegAudioMixer
 from app.services.audio_music import build_audio_mix_plan, deserialize_audio_mix_plan
-from app.services.audio_wave import build_wav_bytes, read_wav_bytes
-from app.services.audio_wave import wav_duration_seconds
+from app.services.audio_wave import build_wav_bytes, read_wav_bytes, wav_duration_seconds
 from app.services.event_log import DEFAULT_SYSTEM_ACTOR, SessionEventLogService
 from app.services.final_audio_assembly import (
     FinalAudioAssemblyError,
@@ -276,6 +280,16 @@ class AudioJobService:
 
                     synthesis_started_at = perf_counter()
                     try:
+                        if hasattr(adapter, "set_retry_notifier"):
+                            adapter.set_retry_notifier(
+                                lambda notice: self._record_tts_retry_notice(
+                                    job=job,
+                                    segment=segment,
+                                    total_segments=total_segments,
+                                    notice=notice,
+                                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                                )
+                            )
                         synthesis = adapter.synthesize(
                             NarrationSynthesisRequest(
                                 text=segment.text_content,
@@ -289,6 +303,7 @@ class AudioJobService:
                                 ),
                             )
                         )
+                        self._clear_provider_runtime_notice(job)
                         self._record_model_usage(
                             job=job,
                             segment=segment,
@@ -306,6 +321,9 @@ class AudioJobService:
                             error_message=str(exc),
                         )
                         raise
+                    finally:
+                        if hasattr(adapter, "set_retry_notifier"):
+                            adapter.set_retry_notifier(None)
 
                     rendered_segments.append(
                         RenderedNarrationSegment(segment=segment, synthesis=synthesis)
@@ -402,7 +420,7 @@ class AudioJobService:
                 if job.status not in {JobStatus.CANCELLED, JobStatus.FAILED}:
                     self.mark_job_failed(
                         audio_job_id,
-                        error_message=str(exc).strip() or exc.__class__.__name__,
+                        error_message=_build_audio_terminal_failure_message(exc),
                         actor=actor,
                     )
                     self._session.commit()
@@ -456,6 +474,65 @@ class AudioJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         return job
+
+    def _record_tts_retry_notice(
+        self,
+        *,
+        job: AudioJob,
+        segment: NarrationSegment,
+        total_segments: int,
+        notice: GeminiRetryNotice,
+        actor: SessionEventActor,
+    ) -> None:
+        message = _build_audio_retry_message(
+            segment_index=segment.segment_index,
+            total_segments=total_segments,
+            notice=notice,
+        )
+        job.config_json = {
+            **_read_mapping(job.config_json),
+            "current_step": message,
+            "provider_failure": notice.failure.to_metadata(),
+            "provider_retry": {
+                "failed_attempt": notice.failed_attempt,
+                "next_attempt": notice.next_attempt,
+                "max_attempts": notice.max_attempts,
+                "delay_seconds": notice.delay_seconds,
+            },
+        }
+        self._record_job_progress(
+            job=job,
+            status=JobStatus.IN_PROGRESS,
+            progress_percent=_segment_progress_percent(
+                self._completed_segment_count(job.id),
+                total_segments,
+            ),
+            current_step=message,
+            current_step_index=segment.segment_index,
+            total_steps=_read_total_steps(job),
+            completed_segments=self._completed_segment_count(job.id),
+            current_segment_index=segment.segment_index,
+            total_segments=total_segments,
+            segment_id=segment.id,
+            message=message,
+            actor=actor,
+        )
+        self._sessions.update_stage_state(
+            job.session_id,
+            stage=WorkflowStage.AUDIO,
+            status=WorkflowStageState.IN_PROGRESS,
+            detail=message,
+            actor=actor,
+        )
+        self._session.commit()
+
+    def _clear_provider_runtime_notice(self, job: AudioJob) -> None:
+        config = _read_mapping(job.config_json)
+        if not config:
+            return
+        config.pop("provider_failure", None)
+        config.pop("provider_retry", None)
+        job.config_json = config
 
     def _persist_rendered_segment(
         self,
@@ -844,6 +921,87 @@ class AudioJobService:
             message=message,
             actor=actor,
         )
+
+
+def _build_audio_retry_message(
+    *,
+    segment_index: int,
+    total_segments: int,
+    notice: GeminiRetryNotice,
+) -> str:
+    return (
+        f"{_describe_retryable_audio_issue(notice.failure)} while rendering "
+        f"segment {segment_index} of {total_segments}. Retrying in "
+        f"{_format_retry_delay_seconds(notice.delay_seconds)} "
+        f"(attempt {notice.next_attempt} of {notice.max_attempts})."
+    )
+
+
+def _build_audio_terminal_failure_message(exc: Exception) -> str:
+    if not isinstance(exc, TextToSpeechTransportError) and getattr(
+        exc,
+        "failure_detail",
+        None,
+    ) is None:
+        return str(exc).strip() or exc.__class__.__name__
+
+    failure_detail = classify_gemini_exception(
+        exc,
+        operation_name="text-to-speech generation",
+    )
+    if failure_detail.kind.value == "quota_exhausted":
+        return (
+            "Narration stopped because Gemini quota is exhausted. Wait for the limit "
+            "window to reset or increase the allowance, then retry."
+        )
+    if failure_detail.kind.value == "invalid_request":
+        provider_message = failure_detail.provider_message or failure_detail.message
+        return (
+            "Narration stopped because Gemini rejected the current audio settings. "
+            f"{provider_message}"
+        )
+    if failure_detail.kind.value == "authentication":
+        return (
+            "Narration stopped because the backend Gemini credentials or permissions "
+            "were rejected. Update the server-side configuration and retry."
+        )
+    if failure_detail.kind.value == "blocked":
+        return (
+            "Narration stopped because Gemini blocked the request. Adjust the source "
+            "content or narration guidance, then retry."
+        )
+    if failure_detail.kind.value == "rate_limited":
+        return (
+            "Narration stopped after Gemini kept rate limiting the request. Try again "
+            "in a few minutes."
+        )
+    if failure_detail.kind.value in {"transient", "transport", "invalid_response"}:
+        return (
+            "Narration stopped after Gemini failed repeatedly during a transient "
+            "provider issue. Try again shortly."
+        )
+    return str(exc).strip() or exc.__class__.__name__
+
+
+def _describe_retryable_audio_issue(failure_detail: GeminiFailureDetail) -> str:
+    if failure_detail.kind.value == "rate_limited":
+        return "Gemini hit a temporary rate limit"
+    if failure_detail.kind.value == "transient":
+        return "Gemini was temporarily unavailable"
+    if failure_detail.kind.value == "transport":
+        return "Gemini lost connectivity"
+    if failure_detail.kind.value == "invalid_response":
+        return "Gemini returned an invalid audio payload"
+    return "Gemini failed"
+
+
+def _format_retry_delay_seconds(value: float) -> str:
+    if value <= 0:
+        return "0s"
+    if value >= 10:
+        return f"{round(value)}s"
+    formatted = f"{value:.1f}".rstrip("0").rstrip(".")
+    return f"{formatted}s"
 
 
 def _coerce_voice_key(value: str | AudioVoiceKey | None) -> AudioVoiceKey:

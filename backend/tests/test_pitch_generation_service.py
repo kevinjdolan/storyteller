@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.ai.gemini_resilience import GeminiFailureDetail, GeminiFailureKind
 from app.ai.pitch_generation import PitchGenerationTransportError
 from app.models import (
     ExistingSelectedPitchContext,
@@ -90,6 +91,30 @@ class FailingPitchGenerationAdapter:
         return None
 
 
+class ClassifiedFailingPitchGenerationAdapter:
+    model_id = "gemini-3.1-pro"
+
+    def generate(
+        self,
+        invocation: PitchGenerationInvocation,
+    ) -> PitchGenerationInvocationResult:
+        raise PitchGenerationTransportError(
+            "Gemini pitch generation quota is exhausted.",
+            failure_detail=GeminiFailureDetail(
+                kind=GeminiFailureKind.QUOTA_EXHAUSTED,
+                message="Gemini pitch generation quota is exhausted.",
+                retryable=False,
+                user_action_required=True,
+                status_code=429,
+                provider_status="RESOURCE_EXHAUSTED",
+                provider_message="You exceeded your current quota.",
+            ),
+        )
+
+    def close(self) -> None:
+        return None
+
+
 class TrivialRewritePitchGenerationAdapter:
     model_id = "gemini-3.1-pro"
 
@@ -171,6 +196,30 @@ def test_eval_fallback_resilience_uses_heuristics_when_adapter_fails() -> None:
     assert result.evaluation.passed is True
     assert result.raw_response is not None
     assert result.raw_response["fallback_reason"] == "simulated Gemini outage"
+
+
+def test_eval_fallback_resilience_preserves_provider_failure_classification() -> None:
+    service = PitchGenerationService(adapter=ClassifiedFailingPitchGenerationAdapter())
+
+    result = service.generate_pitches(
+        candidate_count=3,
+        raw_brief="A child follows lanterns through a harbor before bed.",
+        genre_label="Quest Fantasy",
+        tone_label="Hushed Wonder",
+    )
+
+    assert result.source == "heuristic"
+    assert result.raw_response is not None
+    assert result.raw_response["fallback_classification"] == {
+        "kind": "quota_exhausted",
+        "message": "Gemini pitch generation quota is exhausted.",
+        "retryable": False,
+        "user_action_required": True,
+        "status_code": 429,
+        "provider_status": "RESOURCE_EXHAUSTED",
+        "provider_message": "You exceeded your current quota.",
+        "retry_after_seconds": None,
+    }
 
 
 def test_eval_validation_guardrail_falls_back_when_adapter_returns_trivial_rewrites() -> None:

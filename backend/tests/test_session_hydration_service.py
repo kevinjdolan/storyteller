@@ -398,6 +398,10 @@ def test_hydrate_session_recovers_draft_text_from_snapshot_asset(db_session) -> 
         metadata_json={
             "total_segments": 3,
             "start_segment_index": 1,
+            "status_message": (
+                "Gemini hit a temporary rate limit while drafting segment 2 of 3. "
+                "Retrying in 2s (attempt 2 of 3)."
+            ),
         },
     )
     db_session.add(composition_job)
@@ -436,6 +440,10 @@ def test_hydrate_session_recovers_draft_text_from_snapshot_asset(db_session) -> 
 
     assert hydrated.snapshot.active_composition_job is not None
     assert hydrated.snapshot.latest_composition_job is not None
+    assert hydrated.snapshot.active_composition_job.status_message == (
+        "Gemini hit a temporary rate limit while drafting segment 2 of 3. "
+        "Retrying in 2s (attempt 2 of 3)."
+    )
     assert (
         hydrated.snapshot.active_composition_job.accepted_story_so_far
         == "Draft segment 1 settles the harbor.\n\n"
@@ -448,6 +456,10 @@ def test_hydrate_session_recovers_draft_text_from_snapshot_asset(db_session) -> 
     assert (
         hydrated.snapshot.latest_composition_job.accepted_story_so_far
         == hydrated.snapshot.active_composition_job.accepted_story_so_far
+    )
+    assert (
+        hydrated.snapshot.latest_composition_job.status_message
+        == hydrated.snapshot.active_composition_job.status_message
     )
 
 

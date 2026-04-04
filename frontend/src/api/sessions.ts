@@ -397,6 +397,7 @@ export type CompositionJobView = {
   accepted_story_so_far?: string | null
   latest_partial_output?: string | null
   latest_segment_summary?: string | null
+  status_message?: string | null
   interruption_request?: CompositionInterruptionRequestView | null
   attempt_count?: number
   stop_reason?: string | null

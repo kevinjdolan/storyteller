@@ -16,6 +16,12 @@ from app.ai import (
     TextToSpeechTransportError,
     render_intent_parser_prompt,
 )
+from app.ai.composition_generation import CompositionSegmentGenerationTransportError
+from app.ai.gemini_resilience import (
+    GeminiFailureDetail,
+    GeminiFailureKind,
+    GeminiRetryNotice,
+)
 from app.db import (
     AssetKind,
     AssetStatus,
@@ -71,6 +77,7 @@ from app.services import (
 )
 from app.services.audio_mixing import AudioMixResult
 from app.services.composition_jobs import (
+    GeminiCompositionSegmentWriter,
     GeneratedCompositionSegmentDraft,
     _build_composition_summary_message,
     _has_emitted_summary_checkpoint,
@@ -254,6 +261,48 @@ class RecordingCompositionWriter:
             evaluation=evaluation,
             source="heuristic",
         )
+
+
+class RetryThenFallbackCompositionAdapter:
+    def __init__(self) -> None:
+        self.model_id = "test-gemini-composition"
+        self._retry_notifier = None
+
+    def set_retry_notifier(self, retry_notifier) -> None:
+        self._retry_notifier = retry_notifier
+
+    def generate(self, invocation):
+        if self._retry_notifier is not None:
+            self._retry_notifier(
+                GeminiRetryNotice(
+                    failure=GeminiFailureDetail(
+                        kind=GeminiFailureKind.RATE_LIMITED,
+                        message="Gemini hit a temporary rate limit.",
+                        retryable=True,
+                        user_action_required=False,
+                        status_code=429,
+                    ),
+                    failed_attempt=1,
+                    next_attempt=2,
+                    max_attempts=3,
+                    delay_seconds=1.5,
+                )
+            )
+        raise CompositionSegmentGenerationTransportError(
+            "Gemini composition segment generation quota is exhausted.",
+            failure_detail=GeminiFailureDetail(
+                kind=GeminiFailureKind.QUOTA_EXHAUSTED,
+                message="Gemini composition segment generation quota is exhausted.",
+                retryable=False,
+                user_action_required=True,
+                status_code=429,
+                provider_status="RESOURCE_EXHAUSTED",
+                provider_message="You exceeded your current quota.",
+            ),
+        )
+
+    def close(self) -> None:
+        return None
 
 
 class SummaryCheckpointCompositionWriter:
@@ -1779,6 +1828,60 @@ def test_composition_job_service_resume_does_not_duplicate_runtime_attempts(
     assert composition_job is not None
     assert composition_job.status == JobStatus.QUEUED
     assert len(pending_for_job) == 1
+
+
+def test_composition_job_service_records_retry_and_fallback_stage_updates(
+    tmp_path: Path,
+) -> None:
+    _fake_gcs, client, object_storage = _build_test_object_storage()
+    session_factory = _build_session_factory(tmp_path)
+
+    try:
+        with session_factory() as session:
+            seeded = _seed_story_setup_session(session)
+            result = StoryWorkflowToolService(session).execute(
+                tool_name=StoryWorkflowToolName.COMPOSE_NEXT_SEGMENT,
+                session_id=seeded["session_id"],
+                arguments={},
+            )
+
+        with session_factory() as session:
+            service = CompositionJobService(
+                session,
+                object_storage=object_storage,
+                writer=GeminiCompositionSegmentWriter(
+                    adapter=RetryThenFallbackCompositionAdapter(),
+                    fallback_writer=RecordingCompositionWriter(label="Fallback"),
+                ),
+            )
+            run_result = service.run_job(result.composition_job_id)
+            history = SessionEventLogService(session).list_session_history(
+                seeded["session_id"]
+            )
+
+        stage_change_details = [
+            getattr(event.payload, "detail", None)
+            for event in history.events
+            if event.event_type == "workflow.stage_changed"
+            and event.stage == WorkflowStage.COMPOSITION
+        ]
+
+        assert run_result["action"] == "queued_next_segment"
+        assert any(
+            detail is not None
+            and "Gemini hit a temporary rate limit while drafting segment 1 of 3." in detail
+            and "Retrying in 1.5s (attempt 2 of 3)." in detail
+            for detail in stage_change_details
+        )
+        assert any(
+            detail is not None
+            and "Gemini quota is exhausted while drafting segment 1 of 3." in detail
+            and "Continuing with the local fallback writer" in detail
+            for detail in stage_change_details
+        )
+    finally:
+        object_storage.close()
+        client.close()
 
 
 def test_composition_pause_request_is_durable_and_applies_after_checkpoint(

@@ -361,6 +361,7 @@ class CompositionJobView(BaseModel):
     accepted_story_so_far: str | None = None
     latest_partial_output: str | None = None
     latest_segment_summary: str | None = None
+    status_message: str | None = None
     interruption_request: CompositionInterruptionRequestView | None = None
     attempt_count: int
     stop_reason: str | None = None

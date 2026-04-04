@@ -745,6 +745,7 @@ def merge_composition_job_view(
         latest_segment_summary=(
             current_job.latest_segment_summary if current_job is not None else None
         ),
+        status_message=current_job.status_message if current_job is not None else None,
         interruption_request=interruption_request,
         attempt_count=current_job.attempt_count if current_job is not None else 1,
         stop_reason=current_job.stop_reason if current_job is not None else None,
@@ -2047,6 +2048,7 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
     accepted_story_so_far = _read_optional_mapping_text(metadata, "accepted_story_so_far")
     latest_partial_output = _read_optional_mapping_text(metadata, "latest_partial_output")
     latest_segment_summary = _read_optional_mapping_text(metadata, "latest_segment_summary")
+    status_message = _read_optional_mapping_text(metadata, "status_message")
     interruption_request = build_composition_interruption_request_view(
         _resolve_active_composition_interruption_request(row)
     )
@@ -2087,6 +2089,7 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
         accepted_story_so_far=accepted_story_so_far,
         latest_partial_output=latest_partial_output,
         latest_segment_summary=latest_segment_summary,
+        status_message=status_message,
         interruption_request=interruption_request,
         attempt_count=row.attempt_count,
         stop_reason=row.stop_reason,

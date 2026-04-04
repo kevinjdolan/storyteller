@@ -363,6 +363,7 @@ describe('sessionRuntimeStore', () => {
       id: 'composition-job-1',
       status: 'in_progress',
       progress_percent: 62.5,
+      status_message: 'Writing the harbor crossing.',
       current_segment_index: 3,
       updated_at: '2026-04-01T08:13:00Z',
     })

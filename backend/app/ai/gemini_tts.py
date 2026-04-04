@@ -2,14 +2,24 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 import re
 from dataclasses import dataclass
-from time import sleep
-from typing import Any, Mapping, Protocol
+from time import sleep as default_sleep
+from typing import Any, Callable, Mapping, Protocol
 
 import httpx
 
+from app.ai.gemini_resilience import (
+    DEFAULT_GEMINI_AUDIO_RETRY_POLICY,
+    GeminiFailureDetail,
+    GeminiRetryNotice,
+    GeminiRetryPolicy,
+    build_blocked_failure,
+    build_invalid_response_failure,
+    classify_gemini_exception,
+    execute_with_retry,
+    safe_json_payload,
+)
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
 
 DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -63,9 +73,11 @@ class TextToSpeechTransportError(TextToSpeechError):
         message: str,
         *,
         raw_response: Mapping[str, Any] | list[Any] | str | None = None,
+        failure_detail: GeminiFailureDetail | None = None,
     ) -> None:
         super().__init__(message)
         self.raw_response = raw_response
+        self.failure_detail = failure_detail
 
 
 @dataclass(frozen=True)
@@ -113,15 +125,36 @@ class GeminiTextToSpeechAdapter:
         timeout_seconds: float = DEFAULT_GEMINI_TTS_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_GEMINI_TTS_MAX_RETRIES,
         retry_backoff_seconds: float = DEFAULT_GEMINI_TTS_RETRY_BACKOFF_SECONDS,
+        max_retry_backoff_seconds: float | None = None,
+        retry_policy: GeminiRetryPolicy | None = None,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None = None,
         client: httpx.Client | None = None,
+        sleep_func: Callable[[float], None] = default_sleep,
     ) -> None:
         self._credential = credential
         self._model_id = model_id
         self._base_url = base_url.rstrip("/")
-        self._max_retries = max(int(max_retries), 1)
-        self._retry_backoff_seconds = max(float(retry_backoff_seconds), 0.0)
+        normalized_max_retries = max(int(max_retries), 1)
+        normalized_backoff_seconds = max(float(retry_backoff_seconds), 0.0)
+        self._retry_policy = retry_policy or GeminiRetryPolicy(
+            max_attempts=normalized_max_retries,
+            initial_backoff_seconds=normalized_backoff_seconds,
+            max_backoff_seconds=max(
+                float(
+                    max_retry_backoff_seconds
+                    if max_retry_backoff_seconds is not None
+                    else max(
+                        DEFAULT_GEMINI_AUDIO_RETRY_POLICY.max_backoff_seconds,
+                        normalized_backoff_seconds,
+                    )
+                ),
+                normalized_backoff_seconds,
+            ),
+        )
+        self._retry_notifier = retry_notifier
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=max(float(timeout_seconds), 1.0))
+        self._sleep_func = sleep_func
 
     @property
     def model_id(self) -> str:
@@ -130,85 +163,113 @@ class GeminiTextToSpeechAdapter:
     def synthesize(self, request: NarrationSynthesisRequest) -> NarrationSynthesisResult:
         rendered_prompt = render_gemini_tts_prompt(request)
         voice_name, _voice_direction = _VOICE_PROFILES[request.voice_key]
-        raw_response: dict[str, Any] | None = None
-        last_error: TextToSpeechTransportError | None = None
-
-        for attempt in range(1, self._max_retries + 1):
-            try:
-                response = self._client.post(
-                    f"{self._base_url}/models/{self._model_id}:generateContent",
-                    headers={
-                        "content-type": "application/json",
-                        "x-goog-api-key": self._credential,
-                    },
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [{"text": rendered_prompt}],
-                            }
-                        ],
-                        "generationConfig": {
-                            "responseModalities": ["AUDIO"],
-                            "speechConfig": {
-                                "voiceConfig": {
-                                    "prebuiltVoiceConfig": {
-                                        "voiceName": voice_name,
-                                    }
-                                }
-                            },
-                        },
-                    },
-                )
-                if response.status_code in _RETRYABLE_STATUS_CODES and attempt < self._max_retries:
-                    self._sleep_before_retry(attempt)
-                    continue
-                response.raise_for_status()
-                raw_response = response.json()
-                return _extract_synthesis_result(
-                    raw_response=raw_response,
-                    model_id=self._model_id,
+        try:
+            execution = execute_with_retry(
+                lambda: self._synthesize_once(
                     rendered_prompt=rendered_prompt,
                     voice_name=voice_name,
-                    attempts_used=attempt,
-                )
-            except httpx.HTTPStatusError as exc:
-                last_error = TextToSpeechTransportError(
-                    (
-                        "Gemini TTS request failed with status "
-                        f"{exc.response.status_code}: {_extract_error_message(exc.response)}"
-                    ),
-                    raw_response=_safe_json_payload(exc.response),
-                )
-                if (
-                    exc.response.status_code in _RETRYABLE_STATUS_CODES
-                    and attempt < self._max_retries
-                ):
-                    self._sleep_before_retry(attempt)
-                    continue
-                raise last_error from exc
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                last_error = TextToSpeechTransportError(
-                    f"Gemini TTS request failed during transport: {exc}",
-                )
-                if attempt < self._max_retries:
-                    self._sleep_before_retry(attempt)
-                    continue
-                raise last_error from exc
-
-        raise last_error or TextToSpeechTransportError(
-            "Gemini TTS request exhausted its retry budget without a usable response",
-            raw_response=raw_response,
-        )
+                ),
+                policy=self._retry_policy,
+                classify_exception=lambda exc: classify_gemini_exception(
+                    exc,
+                    operation_name="text-to-speech generation",
+                ),
+                on_retry=self._retry_notifier,
+                sleep_func=self._sleep_func,
+            )
+            result = execution.value
+            return NarrationSynthesisResult(
+                pcm_audio_bytes=result.pcm_audio_bytes,
+                provider=result.provider,
+                model_id=result.model_id,
+                prompt_version=result.prompt_version,
+                rendered_prompt=result.rendered_prompt,
+                voice_name=result.voice_name,
+                provider_mime_type=result.provider_mime_type,
+                sample_rate_hz=result.sample_rate_hz,
+                channel_count=result.channel_count,
+                sample_width_bytes=result.sample_width_bytes,
+                attempts_used=execution.attempts_used,
+                raw_response=result.raw_response,
+                response_metadata={
+                    **(result.response_metadata or {}),
+                    "attempts_used": execution.attempts_used,
+                },
+            )
+        except TextToSpeechTransportError:
+            raise
+        except Exception as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="text-to-speech generation",
+            )
+            raise TextToSpeechTransportError(
+                failure_detail.message,
+                failure_detail=failure_detail,
+            ) from exc
 
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
 
-    def _sleep_before_retry(self, attempt: int) -> None:
-        if self._retry_backoff_seconds <= 0:
-            return
-        sleep(self._retry_backoff_seconds * attempt)
+    def set_retry_notifier(
+        self,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None,
+    ) -> None:
+        self._retry_notifier = retry_notifier
+
+    def _synthesize_once(
+        self,
+        *,
+        rendered_prompt: str,
+        voice_name: str,
+    ) -> NarrationSynthesisResult:
+        response = self._client.post(
+            f"{self._base_url}/models/{self._model_id}:generateContent",
+            headers={
+                "content-type": "application/json",
+                "x-goog-api-key": self._credential,
+            },
+            json={
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": rendered_prompt}],
+                    }
+                ],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": voice_name,
+                            }
+                        }
+                    },
+                },
+            },
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="text-to-speech generation",
+            )
+            raise TextToSpeechTransportError(
+                failure_detail.message,
+                raw_response=safe_json_payload(exc.response),
+                failure_detail=failure_detail,
+            ) from exc
+
+        raw_response = response.json()
+        return _extract_synthesis_result(
+            raw_response=raw_response,
+            model_id=self._model_id,
+            rendered_prompt=rendered_prompt,
+            voice_name=voice_name,
+            attempts_used=1,
+        )
 
 
 def render_gemini_tts_prompt(request: NarrationSynthesisRequest) -> str:
@@ -280,24 +341,39 @@ def _extract_synthesis_result(
 ) -> NarrationSynthesisResult:
     blocked_reason = raw_response.get("promptFeedback", {}).get("blockReason")
     if blocked_reason:
+        failure_detail = build_blocked_failure(
+            operation_name="text-to-speech generation",
+            blocked_reason=str(blocked_reason),
+        )
         raise TextToSpeechTransportError(
-            f"Gemini TTS request was blocked: {blocked_reason}",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     candidates = raw_response.get("candidates")
     if not isinstance(candidates, list) or not candidates:
+        failure_detail = build_invalid_response_failure(
+            operation_name="text-to-speech generation",
+            detail="Gemini returned no candidates",
+        )
         raise TextToSpeechTransportError(
-            "Gemini TTS returned no candidates",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     candidate = candidates[0]
     parts = candidate.get("content", {}).get("parts", [])
     if not isinstance(parts, list) or not parts:
+        failure_detail = build_invalid_response_failure(
+            operation_name="text-to-speech generation",
+            detail="Gemini returned no content parts",
+        )
         raise TextToSpeechTransportError(
-            "Gemini TTS returned no content parts",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     inline_data = None
@@ -308,24 +384,39 @@ def _extract_synthesis_result(
             break
 
     if inline_data is None:
+        failure_detail = build_invalid_response_failure(
+            operation_name="text-to-speech generation",
+            detail="Gemini did not include inline audio data",
+        )
         raise TextToSpeechTransportError(
-            "Gemini TTS response did not include inline audio data",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     encoded_audio = inline_data.get("data")
     if not isinstance(encoded_audio, str) or not encoded_audio.strip():
+        failure_detail = build_invalid_response_failure(
+            operation_name="text-to-speech generation",
+            detail="Gemini returned an empty inline audio payload",
+        )
         raise TextToSpeechTransportError(
-            "Gemini TTS response included an empty inline audio payload",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     try:
         pcm_audio_bytes = base64.b64decode(encoded_audio, validate=True)
     except (ValueError, binascii.Error) as exc:
+        failure_detail = build_invalid_response_failure(
+            operation_name="text-to-speech generation",
+            detail="Gemini returned invalid base64 audio data",
+        )
         raise TextToSpeechTransportError(
-            "Gemini TTS response included invalid base64 audio data",
+            failure_detail.message,
             raw_response=raw_response,
+            failure_detail=failure_detail,
         ) from exc
 
     provider_mime_type = _normalize_provider_mime_type(inline_data.get("mimeType"))
@@ -370,24 +461,3 @@ def _extract_sample_rate(provider_mime_type: str) -> int:
         return int(match.group("rate"))
     except ValueError:
         return DEFAULT_GEMINI_TTS_SAMPLE_RATE_HZ
-
-
-def _safe_json_payload(response: httpx.Response) -> Mapping[str, Any] | list[Any] | str | None:
-    try:
-        return response.json()
-    except json.JSONDecodeError:
-        return response.text.strip() or None
-
-
-def _extract_error_message(response: httpx.Response) -> str:
-    payload = _safe_json_payload(response)
-    if isinstance(payload, dict):
-        error_payload = payload.get("error")
-        if isinstance(error_payload, dict):
-            message = error_payload.get("message")
-            if isinstance(message, str) and message.strip():
-                return message.strip()
-
-    if isinstance(payload, str) and payload:
-        return payload
-    return response.reason_phrase

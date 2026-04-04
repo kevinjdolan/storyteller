@@ -346,6 +346,41 @@ describe('CompositionStage', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('renders provider retry messaging when the worker is backing off', () => {
+    const retryMessage =
+      'Gemini hit a temporary rate limit while drafting segment 2 of 3. Retrying in 2s (attempt 2 of 3).'
+
+    renderWithAppProviders(
+      <CompositionStage
+        composition={liveComposition}
+        connectionState="open"
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={vi.fn()}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={{
+          ...sampleSnapshot,
+          active_composition_job: {
+            ...sampleSnapshot.active_composition_job!,
+            status_message: retryMessage,
+          },
+          latest_composition_job: {
+            ...sampleSnapshot.latest_composition_job!,
+            status_message: retryMessage,
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getAllByText(retryMessage)).not.toHaveLength(0)
+  })
+
   it('surfaces queued interruption state while the worker finishes a safe checkpoint', () => {
     renderWithAppProviders(
       <CompositionStage

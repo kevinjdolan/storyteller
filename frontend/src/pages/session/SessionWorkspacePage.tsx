@@ -243,6 +243,10 @@ function buildProductionCopy(snapshot: SessionSnapshot) {
       return snapshot.active_composition_job.interruption_request.message
     }
 
+    if (snapshot.active_composition_job.status_message) {
+      return snapshot.active_composition_job.status_message
+    }
+
     return `Writing is ${Math.round(snapshot.active_composition_job.progress_percent)}% complete.`
   }
 

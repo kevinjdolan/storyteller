@@ -5,7 +5,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter, sleep
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import uuid4
 
 import httpx
@@ -16,6 +16,11 @@ from app.ai import (
     CompositionSegmentGenerationAdapter,
     GeminiCompositionSegmentGenerationAdapter,
     build_composition_segment_generation_invocation,
+)
+from app.ai.gemini_resilience import (
+    GeminiFailureDetail,
+    GeminiRetryNotice,
+    classify_gemini_exception,
 )
 from app.db import (
     AssetKind,
@@ -329,9 +334,13 @@ class GeminiCompositionSegmentWriter:
         *,
         adapter: CompositionSegmentGenerationAdapter | None = None,
         fallback_writer: CompositionSegmentWriter | None = None,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None = None,
+        fallback_notifier: Callable[[GeminiFailureDetail], None] | None = None,
     ) -> None:
         self._adapter = adapter
         self._fallback_writer = fallback_writer or HeuristicCompositionSegmentWriter()
+        self._retry_notifier = retry_notifier
+        self._fallback_notifier = fallback_notifier
 
     @classmethod
     def from_settings(cls) -> "GeminiCompositionSegmentWriter":
@@ -342,6 +351,20 @@ class GeminiCompositionSegmentWriter:
                 model_id=settings.gemini.composition_model,
             )
         )
+
+    def set_retry_notifier(
+        self,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None,
+    ) -> None:
+        self._retry_notifier = retry_notifier
+        if hasattr(self._adapter, "set_retry_notifier"):
+            self._adapter.set_retry_notifier(retry_notifier)
+
+    def set_fallback_notifier(
+        self,
+        fallback_notifier: Callable[[GeminiFailureDetail], None] | None,
+    ) -> None:
+        self._fallback_notifier = fallback_notifier
 
     def compose_segment(
         self,
@@ -362,6 +385,8 @@ class GeminiCompositionSegmentWriter:
             )
 
         try:
+            if hasattr(self._adapter, "set_retry_notifier"):
+                self._adapter.set_retry_notifier(self._retry_notifier)
             prompt_context = CompositionSegmentGenerationPromptContext(
                 composition_prompt=prompt_payload,
                 carryover=carryover_payload,
@@ -401,6 +426,12 @@ class GeminiCompositionSegmentWriter:
                 raw_response=result.raw_response,
             )
         except Exception as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="composition segment generation",
+            )
+            if self._fallback_notifier is not None:
+                self._fallback_notifier(failure_detail)
             fallback = self._fallback_writer.compose_segment(
                 segment_payload=segment_payload,
                 prior_segments=prior_segments,
@@ -416,7 +447,10 @@ class GeminiCompositionSegmentWriter:
                 source="heuristic",
                 model_id=self._adapter.model_id,
                 prompt_version=COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
-                raw_response={"fallback_reason": str(exc)},
+                raw_response={
+                    "fallback_reason": str(exc),
+                    "fallback_classification": failure_detail.to_metadata(),
+                },
             )
 
 
@@ -1298,12 +1332,48 @@ class CompositionJobService:
             **_read_metadata(job),
             "accepted_story_so_far": build_accepted_story_so_far(completed_segments),
         }
+        if isinstance(self._writer, GeminiCompositionSegmentWriter):
+            self._writer.set_retry_notifier(
+                lambda notice: self._record_provider_retry_notice(
+                    job=job,
+                    current_segment=current_segment,
+                    total_segments=total_segments,
+                    notice=notice,
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+            )
+            self._writer.set_fallback_notifier(
+                lambda failure: self._record_provider_fallback_notice(
+                    job=job,
+                    current_segment=current_segment,
+                    total_segments=total_segments,
+                    failure_detail=failure,
+                    actor=actor or DEFAULT_SYSTEM_ACTOR,
+                )
+            )
         draft_started_at = perf_counter()
-        draft = self._writer.compose_segment(
-            segment_payload=refreshed_payload,
-            prior_segments=completed_segments,
-            current_partial_text=current_segment.accepted_text or current_segment.text_content,
-            total_segments=total_segments,
+        try:
+            draft = self._writer.compose_segment(
+                segment_payload=refreshed_payload,
+                prior_segments=completed_segments,
+                current_partial_text=current_segment.accepted_text or current_segment.text_content,
+                total_segments=total_segments,
+            )
+        finally:
+            if isinstance(self._writer, GeminiCompositionSegmentWriter):
+                self._writer.set_retry_notifier(None)
+                self._writer.set_fallback_notifier(None)
+        self._clear_provider_runtime_notice(job)
+        self._sessions.update_stage_state(
+            job.session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=WorkflowStageState.IN_PROGRESS,
+            detail=_build_segment_stage_detail(
+                current_segment.segment_index,
+                total_segments,
+                current_segment.planned_summary,
+            ),
+            actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         self._record_segment_model_usage(
             session_id=job.session_id,
@@ -1785,6 +1855,108 @@ class CompositionJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         return job
+
+    def _record_provider_retry_notice(
+        self,
+        *,
+        job: CompositionJob,
+        current_segment: CompositionSegment,
+        total_segments: int,
+        notice: GeminiRetryNotice,
+        actor: SessionEventActor,
+    ) -> None:
+        message = _build_composition_retry_message(
+            segment_index=current_segment.segment_index,
+            total_segments=total_segments,
+            notice=notice,
+        )
+        self._write_provider_runtime_notice(
+            job=job,
+            current_segment=current_segment,
+            total_segments=total_segments,
+            message=message,
+            failure_detail=notice.failure,
+            retry_notice=notice,
+            actor=actor,
+        )
+
+    def _record_provider_fallback_notice(
+        self,
+        *,
+        job: CompositionJob,
+        current_segment: CompositionSegment,
+        total_segments: int,
+        failure_detail: GeminiFailureDetail,
+        actor: SessionEventActor,
+    ) -> None:
+        message = _build_composition_fallback_message(
+            segment_index=current_segment.segment_index,
+            total_segments=total_segments,
+            failure_detail=failure_detail,
+        )
+        self._write_provider_runtime_notice(
+            job=job,
+            current_segment=current_segment,
+            total_segments=total_segments,
+            message=message,
+            failure_detail=failure_detail,
+            retry_notice=None,
+            actor=actor,
+        )
+
+    def _write_provider_runtime_notice(
+        self,
+        *,
+        job: CompositionJob,
+        current_segment: CompositionSegment,
+        total_segments: int,
+        message: str,
+        failure_detail: GeminiFailureDetail,
+        retry_notice: GeminiRetryNotice | None,
+        actor: SessionEventActor,
+    ) -> None:
+        retry_payload = None
+        if retry_notice is not None:
+            retry_payload = {
+                "failed_attempt": retry_notice.failed_attempt,
+                "next_attempt": retry_notice.next_attempt,
+                "max_attempts": retry_notice.max_attempts,
+                "delay_seconds": retry_notice.delay_seconds,
+            }
+
+        job.metadata_json = {
+            **_read_metadata(job),
+            "status_message": message,
+            "provider_failure": failure_detail.to_metadata(),
+            "provider_retry": retry_payload,
+        }
+        self._events.record_composition_progress(
+            job.session_id,
+            job_id=job.id,
+            status=job.status,
+            progress_percent=job.progress_percent,
+            current_segment_index=current_segment.segment_index,
+            total_segments=total_segments,
+            segment_id=current_segment.id,
+            actor=actor,
+        )
+        self._sessions.update_stage_state(
+            job.session_id,
+            stage=WorkflowStage.COMPOSITION,
+            status=WorkflowStageState.IN_PROGRESS,
+            detail=message,
+            actor=actor,
+        )
+        self._session.commit()
+
+    def _clear_provider_runtime_notice(self, job: CompositionJob) -> None:
+        metadata = _read_metadata(job)
+        if not metadata:
+            return
+        metadata.pop("status_message", None)
+        metadata.pop("provider_failure", None)
+        metadata.pop("provider_retry", None)
+        job.metadata_json = metadata
 
     def _record_composition_summary_checkpoint(
         self,
@@ -3428,6 +3600,66 @@ def _extract_model_usage_error_message(raw_response: Any) -> str | None:
         return None
     normalized = str(error).strip()
     return normalized or None
+
+
+def _build_composition_retry_message(
+    *,
+    segment_index: int,
+    total_segments: int,
+    notice: GeminiRetryNotice,
+) -> str:
+    return (
+        f"{_describe_retryable_gemini_issue(notice.failure)} while drafting "
+        f"segment {segment_index} of {total_segments}. Retrying in "
+        f"{_format_retry_delay_seconds(notice.delay_seconds)} "
+        f"(attempt {notice.next_attempt} of {notice.max_attempts})."
+    )
+
+
+def _build_composition_fallback_message(
+    *,
+    segment_index: int,
+    total_segments: int,
+    failure_detail: GeminiFailureDetail,
+) -> str:
+    return (
+        f"{_describe_terminal_gemini_issue(failure_detail)} while drafting "
+        f"segment {segment_index} of {total_segments}. Continuing with the local "
+        "fallback writer so the session can keep moving."
+    )
+
+
+def _describe_retryable_gemini_issue(failure_detail: GeminiFailureDetail) -> str:
+    if failure_detail.kind.value == "rate_limited":
+        return "Gemini hit a temporary rate limit"
+    if failure_detail.kind.value == "transient":
+        return "Gemini was temporarily unavailable"
+    if failure_detail.kind.value == "transport":
+        return "Gemini lost connectivity"
+    if failure_detail.kind.value == "invalid_response":
+        return "Gemini returned an invalid structured response"
+    return "Gemini failed"
+
+
+def _describe_terminal_gemini_issue(failure_detail: GeminiFailureDetail) -> str:
+    if failure_detail.kind.value == "quota_exhausted":
+        return "Gemini quota is exhausted"
+    if failure_detail.kind.value == "invalid_request":
+        return "Gemini rejected the current composition request"
+    if failure_detail.kind.value == "authentication":
+        return "Gemini rejected the backend credentials"
+    if failure_detail.kind.value == "blocked":
+        return "Gemini blocked the composition request"
+    return _describe_retryable_gemini_issue(failure_detail)
+
+
+def _format_retry_delay_seconds(value: float) -> str:
+    if value <= 0:
+        return "0s"
+    if value >= 10:
+        return f"{round(value)}s"
+    formatted = f"{value:.1f}".rstrip("0").rstrip(".")
+    return f"{formatted}s"
 
 
 def _read_mapping(value: object, key: str | None = None) -> Mapping[str, Any]:

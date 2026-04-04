@@ -741,6 +741,14 @@ def _build_composition_message(
     if interruption_request is not None:
         return interruption_request.message
 
+    status_message = _read_metadata_text(job, "status_message")
+    if status_message is not None and status in {
+        RealtimeJobStatus.QUEUED,
+        RealtimeJobStatus.IN_PROGRESS,
+        RealtimeJobStatus.PAUSED,
+    }:
+        return status_message
+
     if status == RealtimeJobStatus.QUEUED:
         if job is not None and job.job_kind == CompositionJobKind.REWRITE:
             return (
@@ -840,6 +848,13 @@ def _read_metadata_int(job: CompositionJob | None, key: str) -> int | None:
         return None
     value = job.metadata_json.get(key)
     return value if isinstance(value, int) and value >= 0 else None
+
+
+def _read_metadata_text(job: CompositionJob | None, key: str) -> str | None:
+    if job is None or not isinstance(job.metadata_json, dict):
+        return None
+    value = job.metadata_json.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _read_audio_config_int(job: AudioJob | None, key: str) -> int | None:

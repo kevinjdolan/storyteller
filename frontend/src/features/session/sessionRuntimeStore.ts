@@ -490,6 +490,11 @@ function applyJobProgressEvent(
       id: event.payload.job_id,
       status: event.payload.status,
       progress_percent: nextProgress,
+      status_message:
+        event.payload.message ??
+        snapshot.latest_composition_job?.status_message ??
+        snapshot.active_composition_job?.status_message ??
+        null,
       current_segment_index:
         event.payload.current_segment_index ??
         snapshot.latest_composition_job?.current_segment_index ??

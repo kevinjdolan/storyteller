@@ -4,10 +4,22 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from string import Template
-from typing import Any, Protocol
+from time import sleep as default_sleep
+from typing import Any, Callable, Protocol
 
 import httpx
 
+from app.ai.gemini_resilience import (
+    DEFAULT_GEMINI_PLANNING_RETRY_POLICY,
+    GeminiFailureDetail,
+    GeminiRetryNotice,
+    GeminiRetryPolicy,
+    build_blocked_failure,
+    build_invalid_response_failure,
+    classify_gemini_exception,
+    execute_with_retry,
+    safe_json_payload,
+)
 from app.models.chat_actions import DEFAULT_CHAT_TO_UI_ACTION_POLICIES
 from app.models.intent_parser import (
     INTENT_PARSER_PROMPT_VERSION,
@@ -231,6 +243,17 @@ class IntentParserError(RuntimeError):
 class IntentParserTransportError(IntentParserError):
     """Raised when the Gemini transport call fails or returns unusable data."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_response: dict[str, Any] | list[Any] | str | None = None,
+        failure_detail: GeminiFailureDetail | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_response = raw_response
+        self.failure_detail = failure_detail
+
 
 class IntentParserAdapter(Protocol):
     @property
@@ -248,19 +271,50 @@ class GeminiIntentParserAdapter:
         credential: str,
         model_id: str,
         base_url: str = DEFAULT_GEMINI_API_BASE_URL,
+        retry_policy: GeminiRetryPolicy = DEFAULT_GEMINI_PLANNING_RETRY_POLICY,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None = None,
         client: httpx.Client | None = None,
+        sleep_func: Callable[[float], None] = default_sleep,
     ) -> None:
         self._credential = credential
         self._model_id = model_id
         self._base_url = base_url.rstrip("/")
+        self._retry_policy = retry_policy
+        self._retry_notifier = retry_notifier
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=30.0)
+        self._sleep_func = sleep_func
 
     @property
     def model_id(self) -> str:
         return self._model_id
 
     def parse(self, invocation: IntentParserInvocation) -> IntentParserInvocationResult:
+        try:
+            execution = execute_with_retry(
+                lambda: self._parse_once(invocation),
+                policy=self._retry_policy,
+                classify_exception=lambda exc: classify_gemini_exception(
+                    exc,
+                    operation_name="intent parsing",
+                ),
+                on_retry=self._retry_notifier,
+                sleep_func=self._sleep_func,
+            )
+            return execution.value
+        except IntentParserTransportError:
+            raise
+        except Exception as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="intent parsing",
+            )
+            raise IntentParserTransportError(
+                failure_detail.message,
+                failure_detail=failure_detail,
+            ) from exc
+
+    def _parse_once(self, invocation: IntentParserInvocation) -> IntentParserInvocationResult:
         response = self._client.post(
             f"{self._base_url}/models/{self._model_id}:generateContent",
             headers={
@@ -290,8 +344,14 @@ class GeminiIntentParserAdapter:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="intent parsing",
+            )
             raise IntentParserTransportError(
-                f"Gemini intent parser request failed with status {exc.response.status_code}",
+                failure_detail.message,
+                raw_response=safe_json_payload(exc.response),
+                failure_detail=failure_detail,
             ) from exc
 
         raw_response = response.json()
@@ -390,13 +450,27 @@ def _sanitize_json_schema(value: Any) -> Any:
 def _extract_structured_output(raw_response: dict[str, Any]) -> IntentParserStructuredOutput:
     blocked_reason = raw_response.get("promptFeedback", {}).get("blockReason")
     if blocked_reason:
+        failure_detail = build_blocked_failure(
+            operation_name="intent parsing",
+            blocked_reason=str(blocked_reason),
+        )
         raise IntentParserTransportError(
-            f"Gemini intent parser request was blocked: {blocked_reason}",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     candidates = raw_response.get("candidates")
     if not isinstance(candidates, list) or not candidates:
-        raise IntentParserTransportError("Gemini intent parser returned no candidates")
+        failure_detail = build_invalid_response_failure(
+            operation_name="intent parsing",
+            detail="Gemini returned no candidates",
+        )
+        raise IntentParserTransportError(
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
+        )
 
     candidate = candidates[0]
     text_parts: list[str] = []
@@ -407,19 +481,39 @@ def _extract_structured_output(raw_response: dict[str, Any]) -> IntentParserStru
 
     if not text_parts:
         finish_reason = candidate.get("finishReason", "unknown")
+        failure_detail = build_invalid_response_failure(
+            operation_name="intent parsing",
+            detail=f"Gemini returned no text content (finish_reason={finish_reason})",
+        )
         raise IntentParserTransportError(
-            f"Gemini intent parser returned no text content (finish_reason={finish_reason})",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     raw_text = "".join(text_parts).strip()
     try:
         structured_payload = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        raise IntentParserTransportError("Gemini intent parser returned invalid JSON") from exc
+        failure_detail = build_invalid_response_failure(
+            operation_name="intent parsing",
+            detail="Gemini returned invalid JSON",
+        )
+        raise IntentParserTransportError(
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
+        ) from exc
 
     try:
         return IntentParserStructuredOutput.model_validate(structured_payload)
     except Exception as exc:  # pragma: no cover - converted to adapter error path
+        failure_detail = build_invalid_response_failure(
+            operation_name="intent parsing",
+            detail="Gemini returned JSON that did not match the expected structure",
+        )
         raise IntentParserTransportError(
-            "Gemini intent parser returned JSON that did not match the expected structure",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         ) from exc

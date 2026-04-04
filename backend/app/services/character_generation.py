@@ -200,6 +200,7 @@ class CharacterGenerationService:
                 return _build_heuristic_result(
                     context,
                     fallback_reason=str(exc),
+                    fallback_detail=getattr(exc, "failure_detail", None),
                     model_id=invocation.model_id,
                     prompt_version=invocation.prompt_version,
                 )
@@ -324,6 +325,7 @@ def _build_heuristic_result(
     context: CharacterGenerationPromptContext,
     *,
     fallback_reason: str | None = None,
+    fallback_detail: Any | None = None,
     adapter_raw_response: dict[str, Any] | list[Any] | str | None = None,
     model_id: str | None = None,
     prompt_version: str | None = None,
@@ -338,6 +340,8 @@ def _build_heuristic_result(
     }
     if fallback_reason is not None:
         raw_response["fallback_reason"] = fallback_reason
+    if hasattr(fallback_detail, "to_metadata"):
+        raw_response["fallback_classification"] = fallback_detail.to_metadata()
     if adapter_raw_response is not None:
         raw_response["adapter_raw_response"] = adapter_raw_response
 

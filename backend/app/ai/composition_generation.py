@@ -4,10 +4,22 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from string import Template
-from typing import Any, Protocol
+from time import sleep as default_sleep
+from typing import Any, Callable, Protocol
 
 import httpx
 
+from app.ai.gemini_resilience import (
+    DEFAULT_GEMINI_COMPOSITION_RETRY_POLICY,
+    GeminiFailureDetail,
+    GeminiRetryNotice,
+    GeminiRetryPolicy,
+    build_blocked_failure,
+    build_invalid_response_failure,
+    classify_gemini_exception,
+    execute_with_retry,
+    safe_json_payload,
+)
 from app.models import (
     COMPOSITION_SEGMENT_GENERATION_PROMPT_VERSION,
     CompositionSegmentGenerationInvocation,
@@ -49,6 +61,17 @@ class CompositionSegmentGenerationError(RuntimeError):
 class CompositionSegmentGenerationTransportError(CompositionSegmentGenerationError):
     """Raised when the Gemini segmented composition transport fails or returns invalid data."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_response: dict[str, Any] | list[Any] | str | None = None,
+        failure_detail: GeminiFailureDetail | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_response = raw_response
+        self.failure_detail = failure_detail
+
 
 class CompositionSegmentGenerationAdapter(Protocol):
     @property
@@ -69,19 +92,63 @@ class GeminiCompositionSegmentGenerationAdapter:
         credential: str,
         model_id: str,
         base_url: str = DEFAULT_GEMINI_API_BASE_URL,
+        retry_policy: GeminiRetryPolicy = DEFAULT_GEMINI_COMPOSITION_RETRY_POLICY,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None = None,
         client: httpx.Client | None = None,
+        sleep_func: Callable[[float], None] = default_sleep,
     ) -> None:
         self._credential = credential
         self._model_id = model_id
         self._base_url = base_url.rstrip("/")
+        self._retry_policy = retry_policy
+        self._retry_notifier = retry_notifier
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=60.0)
+        self._sleep_func = sleep_func
 
     @property
     def model_id(self) -> str:
         return self._model_id
 
     def generate(
+        self,
+        invocation: CompositionSegmentGenerationInvocation,
+    ) -> CompositionSegmentGenerationInvocationResult:
+        try:
+            execution = execute_with_retry(
+                lambda: self._generate_once(invocation),
+                policy=self._retry_policy,
+                classify_exception=lambda exc: classify_gemini_exception(
+                    exc,
+                    operation_name="composition segment generation",
+                ),
+                on_retry=self._retry_notifier,
+                sleep_func=self._sleep_func,
+            )
+            return execution.value
+        except CompositionSegmentGenerationTransportError:
+            raise
+        except Exception as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="composition segment generation",
+            )
+            raise CompositionSegmentGenerationTransportError(
+                failure_detail.message,
+                failure_detail=failure_detail,
+            ) from exc
+
+    def close(self) -> None:
+        if self._owns_client:
+            self._client.close()
+
+    def set_retry_notifier(
+        self,
+        retry_notifier: Callable[[GeminiRetryNotice], None] | None,
+    ) -> None:
+        self._retry_notifier = retry_notifier
+
+    def _generate_once(
         self,
         invocation: CompositionSegmentGenerationInvocation,
     ) -> CompositionSegmentGenerationInvocationResult:
@@ -114,9 +181,14 @@ class GeminiCompositionSegmentGenerationAdapter:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            failure_detail = classify_gemini_exception(
+                exc,
+                operation_name="composition segment generation",
+            )
             raise CompositionSegmentGenerationTransportError(
-                "Gemini composition segment generation request failed with status "
-                f"{exc.response.status_code}",
+                failure_detail.message,
+                raw_response=safe_json_payload(exc.response),
+                failure_detail=failure_detail,
             ) from exc
 
         raw_response = response.json()
@@ -126,10 +198,6 @@ class GeminiCompositionSegmentGenerationAdapter:
             structured_output=structured_output,
             raw_response=raw_response,
         )
-
-    def close(self) -> None:
-        if self._owns_client:
-            self._client.close()
 
 
 def render_composition_segment_generation_prompt(
@@ -203,14 +271,26 @@ def _extract_structured_output(
 ) -> CompositionSegmentGenerationStructuredOutput:
     blocked_reason = raw_response.get("promptFeedback", {}).get("blockReason")
     if blocked_reason:
+        failure_detail = build_blocked_failure(
+            operation_name="composition segment generation",
+            blocked_reason=str(blocked_reason),
+        )
         raise CompositionSegmentGenerationTransportError(
-            f"Gemini composition segment request was blocked: {blocked_reason}",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     candidates = raw_response.get("candidates")
     if not isinstance(candidates, list) or not candidates:
+        failure_detail = build_invalid_response_failure(
+            operation_name="composition segment generation",
+            detail="Gemini returned no candidates",
+        )
         raise CompositionSegmentGenerationTransportError(
-            "Gemini composition segment generation returned no candidates",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     candidate = candidates[0]
@@ -222,23 +302,39 @@ def _extract_structured_output(
 
     if not text_parts:
         finish_reason = candidate.get("finishReason", "unknown")
+        failure_detail = build_invalid_response_failure(
+            operation_name="composition segment generation",
+            detail=f"Gemini returned no text content (finish_reason={finish_reason})",
+        )
         raise CompositionSegmentGenerationTransportError(
-            "Gemini composition segment generation returned no text content "
-            f"(finish_reason={finish_reason})",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         )
 
     raw_text = "".join(text_parts).strip()
     try:
         structured_payload = json.loads(raw_text)
     except json.JSONDecodeError as exc:
+        failure_detail = build_invalid_response_failure(
+            operation_name="composition segment generation",
+            detail="Gemini returned invalid JSON",
+        )
         raise CompositionSegmentGenerationTransportError(
-            "Gemini composition segment generation returned invalid JSON",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         ) from exc
 
     try:
         return CompositionSegmentGenerationStructuredOutput.model_validate(structured_payload)
     except Exception as exc:  # pragma: no cover - normalized to adapter error
+        failure_detail = build_invalid_response_failure(
+            operation_name="composition segment generation",
+            detail="Gemini returned JSON that did not match the expected structure",
+        )
         raise CompositionSegmentGenerationTransportError(
-            "Gemini composition segment generation returned JSON that did not match the "
-            "expected structure",
+            failure_detail.message,
+            raw_response=raw_response,
+            failure_detail=failure_detail,
         ) from exc

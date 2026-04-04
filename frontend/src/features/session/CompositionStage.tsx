@@ -309,6 +309,7 @@ export function CompositionStage({
     composition.latestSegmentSummary ??
     compositionJob?.latest_segment_summary ??
     null
+  const statusMessage = compositionJob?.status_message ?? null
   const interruptionRequest = compositionJob?.interruption_request ?? null
   const latestPartialOutput =
     composition.latestPartialOutput ||
@@ -460,6 +461,7 @@ export function CompositionStage({
               })}
             </h3>
             <p>{buildConnectionCopy(connectionState, composition)}</p>
+            {statusMessage != null ? <p>{statusMessage}</p> : null}
           </div>
 
           <div className="composition-stage__progress-callout">
@@ -549,7 +551,8 @@ export function CompositionStage({
                 <p>
                   {reviewJob != null
                     ? 'Compare the proposed rewrite against the current manuscript before accepting it.'
-                    : latestSegmentSummary ??
+                    : statusMessage ??
+                      latestSegmentSummary ??
                       'The newest words stay in the foreground so you can follow the draft as it lands.'}
                 </p>
               </div>

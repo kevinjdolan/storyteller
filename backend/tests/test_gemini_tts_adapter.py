@@ -6,6 +6,7 @@ import json
 import httpx
 import pytest
 from app.ai import GeminiTextToSpeechAdapter, render_gemini_tts_prompt
+from app.ai.gemini_resilience import GeminiFailureKind, GeminiRetryNotice
 from app.ai.gemini_tts import NarrationSynthesisRequest, TextToSpeechTransportError
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
 
@@ -142,6 +143,89 @@ def test_gemini_tts_adapter_retries_retryable_failures_before_succeeding() -> No
 
     assert attempts["count"] == 2
     assert result.attempts_used == 2
+    adapter.close()
+
+
+def test_gemini_tts_adapter_emits_retry_notices_for_transient_failures() -> None:
+    attempts = {"count": 0}
+    notices: list[GeminiRetryNotice] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return httpx.Response(
+                503,
+                json={"error": {"message": "backend unavailable"}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {
+                            "parts": [
+                                {
+                                    "inlineData": {
+                                        "data": base64.b64encode(b"\x00\x00" * 32).decode("utf-8")
+                                    }
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+        )
+
+    adapter = GeminiTextToSpeechAdapter(
+        credential="test-key",
+        model_id="gemini-2.5-flash-preview-tts",
+        retry_backoff_seconds=0,
+        retry_notifier=notices.append,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    result = adapter.synthesize(_build_request())
+
+    assert result.attempts_used == 2
+    assert [(notice.failed_attempt, notice.next_attempt) for notice in notices] == [(1, 2)]
+    assert notices[0].failure.kind == GeminiFailureKind.TRANSIENT
+    assert notices[0].delay_seconds == 0
+    adapter.close()
+
+
+def test_gemini_tts_adapter_does_not_retry_quota_exhaustion() -> None:
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        return httpx.Response(
+            429,
+            json={
+                "error": {
+                    "status": "RESOURCE_EXHAUSTED",
+                    "message": (
+                        "You exceeded your current quota. Check plan and billing details."
+                    ),
+                }
+            },
+        )
+
+    adapter = GeminiTextToSpeechAdapter(
+        credential="test-key",
+        model_id="gemini-2.5-flash-preview-tts",
+        retry_backoff_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(TextToSpeechTransportError) as exc_info:
+        adapter.synthesize(_build_request())
+
+    assert attempts["count"] == 1
+    assert exc_info.value.failure_detail is not None
+    assert exc_info.value.failure_detail.kind == GeminiFailureKind.QUOTA_EXHAUSTED
+    assert exc_info.value.failure_detail.retryable is False
+    assert exc_info.value.failure_detail.user_action_required is True
     adapter.close()
 
 

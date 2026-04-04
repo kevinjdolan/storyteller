@@ -9,6 +9,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from app.ai import NarrationSynthesisResult
+from app.ai.gemini_resilience import (
+    GeminiFailureDetail,
+    GeminiFailureKind,
+    GeminiRetryNotice,
+)
 from app.db import (
     AssetKind,
     AssetStatus,
@@ -24,6 +29,7 @@ from app.db import (
     StorySession,
     make_engine,
 )
+from app.models import WorkflowStage
 from app.models.audio_settings import AudioMusicProfile, AudioSettingsView
 from app.services.assets import SessionAssetService
 from app.services.audio_jobs import (
@@ -49,6 +55,39 @@ from tests.support.audio_pipeline import (
     build_audio_ready_session,
     build_in_memory_object_storage,
 )
+
+
+class RetryNoticeTextToSpeechAdapter:
+    def __init__(self) -> None:
+        self.model_id = "test-gemini-tts"
+        self._retry_notifier = None
+        self.calls: list[object] = []
+
+    def set_retry_notifier(self, retry_notifier) -> None:
+        self._retry_notifier = retry_notifier
+
+    def synthesize(self, request):
+        self.calls.append(request)
+        if self._retry_notifier is not None:
+            self._retry_notifier(
+                GeminiRetryNotice(
+                    failure=GeminiFailureDetail(
+                        kind=GeminiFailureKind.RATE_LIMITED,
+                        message="Gemini hit a temporary rate limit.",
+                        retryable=True,
+                        user_action_required=False,
+                        status_code=429,
+                    ),
+                    failed_attempt=1,
+                    next_attempt=2,
+                    max_attempts=4,
+                    delay_seconds=1.0,
+                )
+            )
+        return _build_synthesis_result(7, sample_frames=24_000)
+
+    def close(self) -> None:
+        return None
 
 
 def _enable_sqlite_foreign_keys(engine) -> None:
@@ -316,6 +355,62 @@ def test_audio_job_service_resumes_after_mix_failure_without_rerendering_segment
     assert final_audio_asset.metadata_json["mix"]["applied"] is True
     assert final_audio_asset.metadata_json["generation"]["audio_job_id"] == result.job.id
     assert final_audio_asset.metadata_json["segment_count"] == 2
+
+
+def test_audio_job_service_records_retry_status_messages_before_render_succeeds(
+    tmp_path,
+) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    object_storage = build_in_memory_object_storage()
+
+    with session_factory() as session:
+        seed = build_audio_ready_session(
+            session,
+            chapter_texts=[
+                "Mira followed one quiet bell along the dock until the harbor settled.",
+            ],
+        )
+        result = AudioJobService(session, object_storage=object_storage).start_job(
+            seed.session_id,
+            settings=AudioSettingsView(include_background_music=False),
+            estimated_duration_seconds=90,
+            source_composition_job_id=seed.composition_job_id,
+        )
+
+    adapter = RetryNoticeTextToSpeechAdapter()
+    with session_factory() as session:
+        run_result = AudioJobService(
+            session,
+            object_storage=object_storage,
+            tts_adapter=adapter,
+        ).run_job(result.job.id)
+        runtime_job = session.get(AudioJob, result.job.id)
+        history = SessionEventLogService(session).list_session_history(seed.session_id)
+
+    retry_step = (
+        "Gemini hit a temporary rate limit while rendering segment 1 of 1. "
+        "Retrying in 1s (attempt 2 of 4)."
+    )
+    retry_stage_details = [
+        getattr(event.payload, "detail", None)
+        for event in history.events
+        if event.event_type == "workflow.stage_changed" and event.stage == WorkflowStage.AUDIO
+    ]
+    audio_progress_payloads = [
+        event.payload
+        for event in history.events
+        if event.event_type == "audio.progress.recorded"
+    ]
+
+    assert run_result["status"] == "completed"
+    assert len(adapter.calls) == 1
+    assert runtime_job is not None
+    assert runtime_job.config_json.get("provider_retry") is None
+    assert any(detail == retry_step for detail in retry_stage_details)
+    assert any(
+        payload is not None and getattr(payload, "current_step", None) == retry_step
+        for payload in audio_progress_payloads
+    )
 
 
 def test_final_audio_assembly_service_builds_master_and_supersedes_previous_asset(

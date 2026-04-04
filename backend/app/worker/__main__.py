@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from app.db import get_session_factory
 from app.main import configure_logging
+from app.services import GeminiCompositionSegmentWriter
 from app.settings import SettingsValidationError, get_settings
 from app.storage import build_object_storage_service
 from app.worker.default_handlers import build_default_job_handler_registry
@@ -53,6 +54,7 @@ def main() -> None:
             session_factory=get_session_factory(),
             registry=build_default_job_handler_registry(
                 composition_chunk_delay_seconds=0.12,
+                composition_writer=GeminiCompositionSegmentWriter.from_settings(),
                 object_storage=object_storage,
             ),
             worker_id=args.worker_id or f"worker-{socket.gethostname()}",
