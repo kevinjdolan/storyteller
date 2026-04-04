@@ -969,6 +969,7 @@ class SessionSnapshot(BaseModel):
     composition_segments: list[CompositionSegmentView] = Field(default_factory=list)
     audio_segments: list[NarrationSegmentView] = Field(default_factory=list)
     latest_story_asset: SessionAssetView | None = None
+    latest_story_export_asset: SessionAssetView | None = None
     latest_audio_asset: SessionAssetView | None = None
     audio_settings: AudioSettingsView
     continuity_bible: ContinuityBibleView | None = None

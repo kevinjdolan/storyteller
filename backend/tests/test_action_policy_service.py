@@ -260,6 +260,56 @@ def test_policy_requires_confirmation_for_pitch_refinement_and_resolves_source_p
     assert applied.evaluated_actions[0].decision == SessionActionDecision.ACCEPTED_WITH_SIDE_EFFECTS
 
 
+def test_policy_allows_story_docx_download_when_manuscript_is_ready_even_before_export_exists(
+    db_session,
+) -> None:
+    catalog = _seed_catalog(db_session)
+    seeded = _create_story_setup_session(
+        db_session,
+        catalog,
+        mark_composition_completed=True,
+        story_asset_kinds=[AssetKind.STORY_TEXT],
+    )
+    service = SessionService(db_session)
+    service.update_stage_state(
+        seeded["session_id"],
+        stage=WorkflowStage.AUDIO,
+        status=WorkflowStageState.COMPLETED,
+    )
+    service.update_stage_state(
+        seeded["session_id"],
+        stage=WorkflowStage.FINALIZE,
+        status=WorkflowStageState.COMPLETED,
+    )
+
+    request = SessionActionPolicyEvaluationRequest.model_validate(
+        {
+            "actions": [
+                {
+                    "action": {
+                        "schema_version": 1,
+                        "action_type": "download_asset",
+                        "target_stage": "finalize",
+                        "confidence": 0.94,
+                        "rationale": "The user asked to download the Word manuscript.",
+                        "requires_confirmation": False,
+                        "extracted_values": {
+                            "asset_kind": "story_docx",
+                        },
+                    }
+                }
+            ]
+        }
+    )
+
+    result = SessionActionPolicyService(db_session).evaluate_request(
+        seeded["session_id"],
+        request=request,
+    )
+
+    assert result.evaluated_actions[0].decision == SessionActionDecision.ACCEPTED
+
+
 def test_policy_treats_minor_character_refinement_as_non_invalidating(
     db_session,
 ) -> None:

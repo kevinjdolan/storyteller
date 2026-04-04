@@ -883,7 +883,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     if (snapshot == null || snapshot.latest_story_asset == null) {
       return null
     }
-    return buildSessionArtifactDownloadUrl(sessionId, 'story-docx')
+    return (
+      resolveSessionAssetDownloadUrl(snapshot.latest_story_export_asset) ??
+      buildSessionArtifactDownloadUrl(sessionId, 'story-docx')
+    )
   }
 
   function resolveFinalAudioDownloadUrl() {
