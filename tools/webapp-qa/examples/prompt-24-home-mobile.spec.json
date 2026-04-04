@@ -1,0 +1,30 @@
+{
+  "url": "http://frontend:8566",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='sessions-home-route']"
+    },
+    {
+      "action": "assertText",
+      "text": "Pick up where bedtime left off."
+    },
+    {
+      "action": "assertText",
+      "text": "Start a new session"
+    },
+    {
+      "action": "assertText",
+      "text": "Recent sessions"
+    },
+    {
+      "action": "screenshot",
+      "fullPage": false,
+      "outputPath": "../../.artifacts/webapp-qa/prompt-24-home-mobile.png"
+    }
+  ]
+}

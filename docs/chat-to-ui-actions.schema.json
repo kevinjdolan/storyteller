@@ -1,0 +1,4789 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "bundle_schema_version": 1,
+  "workflow_stages": [
+    "genre",
+    "tone",
+    "brief",
+    "pitches",
+    "characters",
+    "beats",
+    "story_setup",
+    "composition",
+    "audio",
+    "finalize"
+  ],
+  "default_policy_by_action": {
+    "navigate_to_stage": "auto_apply_candidate",
+    "select_genre": "confirm_first",
+    "select_tone": "confirm_first",
+    "update_story_brief": "auto_apply_candidate",
+    "regenerate_pitches": "confirm_first",
+    "refine_pitch": "confirm_first",
+    "select_pitch": "confirm_first",
+    "select_character_sheet": "confirm_first",
+    "refine_character_sheet": "confirm_first",
+    "regenerate_character_sheet": "confirm_first",
+    "accept_beat_sheet": "confirm_first",
+    "refine_beat_sheet": "confirm_first",
+    "regenerate_beat_sheet": "confirm_first",
+    "update_story_setup": "auto_apply_candidate",
+    "start_composition": "confirm_first",
+    "pause_job": "confirm_first",
+    "resume_job": "confirm_first",
+    "redirect_composition": "confirm_first",
+    "update_audio_settings": "auto_apply_candidate",
+    "start_audio_generation": "confirm_first",
+    "open_finalize_view": "auto_apply_candidate",
+    "download_asset": "auto_apply_candidate"
+  },
+  "schemas": {
+    "chat_to_ui_action": {
+      "$defs": {
+        "AcceptBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "accept_beat_sheet",
+              "default": "accept_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/AcceptBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "AcceptBeatSheetAction",
+          "type": "object"
+        },
+        "AcceptBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "beat_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Beat Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            }
+          },
+          "title": "AcceptBeatSheetValues",
+          "type": "object"
+        },
+        "CharacterChangeImpact": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "CharacterChangeImpact",
+          "type": "string"
+        },
+        "ChatToUIExtractedValues": {
+          "additionalProperties": false,
+          "properties": {},
+          "title": "ChatToUIExtractedValues",
+          "type": "object"
+        },
+        "ChatToUIJobKind": {
+          "enum": [
+            "composition",
+            "audio"
+          ],
+          "title": "ChatToUIJobKind",
+          "type": "string"
+        },
+        "CompositionStartMode": {
+          "enum": [
+            "fresh",
+            "continue",
+            "rewrite"
+          ],
+          "title": "CompositionStartMode",
+          "type": "string"
+        },
+        "DownloadAssetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "download_asset",
+              "default": "download_asset",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "finalize",
+              "default": "finalize",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/DownloadAssetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "DownloadAssetAction",
+          "type": "object"
+        },
+        "DownloadAssetKind": {
+          "enum": [
+            "story_docx",
+            "final_audio"
+          ],
+          "title": "DownloadAssetKind",
+          "type": "string"
+        },
+        "DownloadAssetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "asset_kind": {
+              "$ref": "#/$defs/DownloadAssetKind"
+            }
+          },
+          "required": [
+            "asset_kind"
+          ],
+          "title": "DownloadAssetValues",
+          "type": "object"
+        },
+        "FinalizeView": {
+          "enum": [
+            "reader",
+            "player"
+          ],
+          "title": "FinalizeView",
+          "type": "string"
+        },
+        "JobControlValues": {
+          "additionalProperties": false,
+          "properties": {
+            "job_kind": {
+              "$ref": "#/$defs/ChatToUIJobKind"
+            },
+            "job_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Job Id"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Reason"
+            }
+          },
+          "required": [
+            "job_kind"
+          ],
+          "title": "JobControlValues",
+          "type": "object"
+        },
+        "NavigateToStageAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "navigate_to_stage",
+              "default": "navigate_to_stage",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "$ref": "#/$defs/WorkflowStage"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/ChatToUIExtractedValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "NavigateToStageAction",
+          "type": "object"
+        },
+        "OpenFinalizeViewAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "open_finalize_view",
+              "default": "open_finalize_view",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "finalize",
+              "default": "finalize",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/OpenFinalizeViewValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "OpenFinalizeViewAction",
+          "type": "object"
+        },
+        "OpenFinalizeViewValues": {
+          "additionalProperties": false,
+          "properties": {
+            "view": {
+              "$ref": "#/$defs/FinalizeView"
+            }
+          },
+          "required": [
+            "view"
+          ],
+          "title": "OpenFinalizeViewValues",
+          "type": "object"
+        },
+        "PauseJobAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "pause_job",
+              "default": "pause_job",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "enum": [
+                "composition",
+                "audio"
+              ],
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/JobControlValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "PauseJobAction",
+          "type": "object"
+        },
+        "RedirectCompositionAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "redirect_composition",
+              "default": "redirect_composition",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "composition",
+              "default": "composition",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RedirectCompositionValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RedirectCompositionAction",
+          "type": "object"
+        },
+        "RedirectCompositionValues": {
+          "additionalProperties": false,
+          "properties": {
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "rewrite_from_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rewrite From Segment Index"
+            },
+            "preserve_completed_segments": {
+              "default": true,
+              "title": "Preserve Completed Segments",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RedirectCompositionValues",
+          "type": "object"
+        },
+        "RefineBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_beat_sheet",
+              "default": "refine_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefineBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefineBeatSheetAction",
+          "type": "object"
+        },
+        "RefineBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "beat_names": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Beat Names",
+              "type": "array"
+            },
+            "bedtime_goal": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bedtime Goal"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefineBeatSheetValues",
+          "type": "object"
+        },
+        "RefineCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_character_sheet",
+              "default": "refine_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefineCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefineCharacterSheetAction",
+          "type": "object"
+        },
+        "RefineCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "focus_character_names": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Focus Character Names",
+              "type": "array"
+            },
+            "change_summary": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Change Summary"
+            },
+            "change_impact": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CharacterChangeImpact"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefineCharacterSheetValues",
+          "type": "object"
+        },
+        "RefinePitchAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_pitch",
+              "default": "refine_pitch",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefinePitchValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefinePitchAction",
+          "type": "object"
+        },
+        "RefinePitchValues": {
+          "additionalProperties": false,
+          "properties": {
+            "pitch_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Id"
+            },
+            "generation_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Generation Key"
+            },
+            "pitch_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Index"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefinePitchValues",
+          "type": "object"
+        },
+        "RegenerateBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_beat_sheet",
+              "default": "regenerate_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegenerateBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegenerateBeatSheetAction",
+          "type": "object"
+        },
+        "RegenerateBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            },
+            "focus_beats": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Focus Beats",
+              "type": "array"
+            }
+          },
+          "title": "RegenerateBeatSheetValues",
+          "type": "object"
+        },
+        "RegenerateCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_character_sheet",
+              "default": "regenerate_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegenerateCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegenerateCharacterSheetAction",
+          "type": "object"
+        },
+        "RegenerateCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            }
+          },
+          "title": "RegenerateCharacterSheetValues",
+          "type": "object"
+        },
+        "RegeneratePitchesAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_pitches",
+              "default": "regenerate_pitches",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegeneratePitchesValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegeneratePitchesAction",
+          "type": "object"
+        },
+        "RegeneratePitchesValues": {
+          "additionalProperties": false,
+          "properties": {
+            "candidate_count": {
+              "anyOf": [
+                {
+                  "maximum": 6,
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Candidate Count"
+            },
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            },
+            "preserve_selected_pitch": {
+              "default": false,
+              "title": "Preserve Selected Pitch",
+              "type": "boolean"
+            }
+          },
+          "title": "RegeneratePitchesValues",
+          "type": "object"
+        },
+        "ResumeJobAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "resume_job",
+              "default": "resume_job",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "enum": [
+                "composition",
+                "audio"
+              ],
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/JobControlValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "ResumeJobAction",
+          "type": "object"
+        },
+        "SelectCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_character_sheet",
+              "default": "select_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectCharacterSheetAction",
+          "type": "object"
+        },
+        "SelectCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            }
+          },
+          "title": "SelectCharacterSheetValues",
+          "type": "object"
+        },
+        "SelectGenreAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_genre",
+              "default": "select_genre",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "genre",
+              "default": "genre",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectGenreValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectGenreAction",
+          "type": "object"
+        },
+        "SelectGenreValues": {
+          "additionalProperties": false,
+          "properties": {
+            "genre_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Id"
+            },
+            "genre_slug": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Slug"
+            },
+            "genre_label": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Label"
+            }
+          },
+          "title": "SelectGenreValues",
+          "type": "object"
+        },
+        "SelectPitchAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_pitch",
+              "default": "select_pitch",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectPitchValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectPitchAction",
+          "type": "object"
+        },
+        "SelectPitchValues": {
+          "additionalProperties": false,
+          "properties": {
+            "pitch_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Id"
+            },
+            "generation_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Generation Key"
+            },
+            "pitch_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Index"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            }
+          },
+          "title": "SelectPitchValues",
+          "type": "object"
+        },
+        "SelectToneAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_tone",
+              "default": "select_tone",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "tone",
+              "default": "tone",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectToneValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectToneAction",
+          "type": "object"
+        },
+        "SelectToneValues": {
+          "additionalProperties": false,
+          "properties": {
+            "tone_profile_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Id"
+            },
+            "tone_profile_slug": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Slug"
+            },
+            "tone_profile_label": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Label"
+            }
+          },
+          "title": "SelectToneValues",
+          "type": "object"
+        },
+        "StartAudioGenerationAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "start_audio_generation",
+              "default": "start_audio_generation",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "audio",
+              "default": "audio",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/StartAudioGenerationValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "StartAudioGenerationAction",
+          "type": "object"
+        },
+        "StartAudioGenerationValues": {
+          "additionalProperties": false,
+          "properties": {
+            "voice_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Voice Key"
+            },
+            "playback_speed": {
+              "anyOf": [
+                {
+                  "maximum": 2.0,
+                  "minimum": 0.5,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Playback Speed"
+            },
+            "include_background_music": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Include Background Music"
+            },
+            "music_profile": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Music Profile"
+            },
+            "regenerate_existing_audio": {
+              "default": false,
+              "title": "Regenerate Existing Audio",
+              "type": "boolean"
+            }
+          },
+          "title": "StartAudioGenerationValues",
+          "type": "object"
+        },
+        "StartCompositionAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "start_composition",
+              "default": "start_composition",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "composition",
+              "default": "composition",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/StartCompositionValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "StartCompositionAction",
+          "type": "object"
+        },
+        "StartCompositionValues": {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/CompositionStartMode",
+              "default": "fresh"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Instructions"
+            },
+            "restart_from_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Restart From Segment Index"
+            }
+          },
+          "title": "StartCompositionValues",
+          "type": "object"
+        },
+        "StoryBriefEditMode": {
+          "enum": [
+            "replace",
+            "append",
+            "merge"
+          ],
+          "title": "StoryBriefEditMode",
+          "type": "string"
+        },
+        "UpdateAudioSettingsAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_audio_settings",
+              "default": "update_audio_settings",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "audio",
+              "default": "audio",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateAudioSettingsValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateAudioSettingsAction",
+          "type": "object"
+        },
+        "UpdateAudioSettingsValues": {
+          "additionalProperties": false,
+          "properties": {
+            "voice_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Voice Key"
+            },
+            "playback_speed": {
+              "anyOf": [
+                {
+                  "maximum": 2.0,
+                  "minimum": 0.5,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Playback Speed"
+            },
+            "include_background_music": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Include Background Music"
+            },
+            "music_profile": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Music Profile"
+            },
+            "guidance_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance Notes"
+            }
+          },
+          "title": "UpdateAudioSettingsValues",
+          "type": "object"
+        },
+        "UpdateStoryBriefAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_story_brief",
+              "default": "update_story_brief",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "brief",
+              "default": "brief",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateStoryBriefValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateStoryBriefAction",
+          "type": "object"
+        },
+        "UpdateStoryBriefValues": {
+          "additionalProperties": false,
+          "properties": {
+            "story_idea": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Story Idea"
+            },
+            "desired_themes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Desired Themes"
+            },
+            "key_images": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Key Images"
+            },
+            "audience_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Audience Notes"
+            },
+            "must_have_elements": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Must Have Elements"
+            },
+            "raw_brief": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Raw Brief"
+            },
+            "normalized_summary": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Normalized Summary"
+            },
+            "planning_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Planning Notes"
+            },
+            "edit_mode": {
+              "$ref": "#/$defs/StoryBriefEditMode",
+              "default": "merge"
+            }
+          },
+          "title": "UpdateStoryBriefValues",
+          "type": "object"
+        },
+        "UpdateStorySetupAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_story_setup",
+              "default": "update_story_setup",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "story_setup",
+              "default": "story_setup",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateStorySetupValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateStorySetupAction",
+          "type": "object"
+        },
+        "UpdateStorySetupValues": {
+          "additionalProperties": false,
+          "properties": {
+            "target_word_count": {
+              "anyOf": [
+                {
+                  "maximum": 10000,
+                  "minimum": 100,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Word Count"
+            },
+            "target_runtime_minutes": {
+              "anyOf": [
+                {
+                  "maximum": 180,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Runtime Minutes"
+            },
+            "chapter_count": {
+              "anyOf": [
+                {
+                  "maximum": 24,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Count"
+            },
+            "chapter_style": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Style"
+            },
+            "guidance_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance Notes"
+            }
+          },
+          "title": "UpdateStorySetupValues",
+          "type": "object"
+        },
+        "WorkflowStage": {
+          "enum": [
+            "genre",
+            "tone",
+            "brief",
+            "pitches",
+            "characters",
+            "beats",
+            "story_setup",
+            "composition",
+            "audio",
+            "finalize"
+          ],
+          "title": "WorkflowStage",
+          "type": "string"
+        }
+      },
+      "discriminator": {
+        "mapping": {
+          "accept_beat_sheet": "#/$defs/AcceptBeatSheetAction",
+          "download_asset": "#/$defs/DownloadAssetAction",
+          "navigate_to_stage": "#/$defs/NavigateToStageAction",
+          "open_finalize_view": "#/$defs/OpenFinalizeViewAction",
+          "pause_job": "#/$defs/PauseJobAction",
+          "redirect_composition": "#/$defs/RedirectCompositionAction",
+          "refine_beat_sheet": "#/$defs/RefineBeatSheetAction",
+          "refine_character_sheet": "#/$defs/RefineCharacterSheetAction",
+          "refine_pitch": "#/$defs/RefinePitchAction",
+          "regenerate_beat_sheet": "#/$defs/RegenerateBeatSheetAction",
+          "regenerate_character_sheet": "#/$defs/RegenerateCharacterSheetAction",
+          "regenerate_pitches": "#/$defs/RegeneratePitchesAction",
+          "resume_job": "#/$defs/ResumeJobAction",
+          "select_character_sheet": "#/$defs/SelectCharacterSheetAction",
+          "select_genre": "#/$defs/SelectGenreAction",
+          "select_pitch": "#/$defs/SelectPitchAction",
+          "select_tone": "#/$defs/SelectToneAction",
+          "start_audio_generation": "#/$defs/StartAudioGenerationAction",
+          "start_composition": "#/$defs/StartCompositionAction",
+          "update_audio_settings": "#/$defs/UpdateAudioSettingsAction",
+          "update_story_brief": "#/$defs/UpdateStoryBriefAction",
+          "update_story_setup": "#/$defs/UpdateStorySetupAction"
+        },
+        "propertyName": "action_type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/NavigateToStageAction"
+        },
+        {
+          "$ref": "#/$defs/SelectGenreAction"
+        },
+        {
+          "$ref": "#/$defs/SelectToneAction"
+        },
+        {
+          "$ref": "#/$defs/UpdateStoryBriefAction"
+        },
+        {
+          "$ref": "#/$defs/RegeneratePitchesAction"
+        },
+        {
+          "$ref": "#/$defs/RefinePitchAction"
+        },
+        {
+          "$ref": "#/$defs/SelectPitchAction"
+        },
+        {
+          "$ref": "#/$defs/SelectCharacterSheetAction"
+        },
+        {
+          "$ref": "#/$defs/RefineCharacterSheetAction"
+        },
+        {
+          "$ref": "#/$defs/RegenerateCharacterSheetAction"
+        },
+        {
+          "$ref": "#/$defs/AcceptBeatSheetAction"
+        },
+        {
+          "$ref": "#/$defs/RefineBeatSheetAction"
+        },
+        {
+          "$ref": "#/$defs/RegenerateBeatSheetAction"
+        },
+        {
+          "$ref": "#/$defs/UpdateStorySetupAction"
+        },
+        {
+          "$ref": "#/$defs/StartCompositionAction"
+        },
+        {
+          "$ref": "#/$defs/PauseJobAction"
+        },
+        {
+          "$ref": "#/$defs/ResumeJobAction"
+        },
+        {
+          "$ref": "#/$defs/RedirectCompositionAction"
+        },
+        {
+          "$ref": "#/$defs/UpdateAudioSettingsAction"
+        },
+        {
+          "$ref": "#/$defs/StartAudioGenerationAction"
+        },
+        {
+          "$ref": "#/$defs/OpenFinalizeViewAction"
+        },
+        {
+          "$ref": "#/$defs/DownloadAssetAction"
+        }
+      ]
+    },
+    "chat_to_ui_action_batch": {
+      "$defs": {
+        "AcceptBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "accept_beat_sheet",
+              "default": "accept_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/AcceptBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "AcceptBeatSheetAction",
+          "type": "object"
+        },
+        "AcceptBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "beat_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Beat Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            }
+          },
+          "title": "AcceptBeatSheetValues",
+          "type": "object"
+        },
+        "CharacterChangeImpact": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "CharacterChangeImpact",
+          "type": "string"
+        },
+        "ChatToUIExtractedValues": {
+          "additionalProperties": false,
+          "properties": {},
+          "title": "ChatToUIExtractedValues",
+          "type": "object"
+        },
+        "ChatToUIJobKind": {
+          "enum": [
+            "composition",
+            "audio"
+          ],
+          "title": "ChatToUIJobKind",
+          "type": "string"
+        },
+        "CompositionStartMode": {
+          "enum": [
+            "fresh",
+            "continue",
+            "rewrite"
+          ],
+          "title": "CompositionStartMode",
+          "type": "string"
+        },
+        "DownloadAssetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "download_asset",
+              "default": "download_asset",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "finalize",
+              "default": "finalize",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/DownloadAssetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "DownloadAssetAction",
+          "type": "object"
+        },
+        "DownloadAssetKind": {
+          "enum": [
+            "story_docx",
+            "final_audio"
+          ],
+          "title": "DownloadAssetKind",
+          "type": "string"
+        },
+        "DownloadAssetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "asset_kind": {
+              "$ref": "#/$defs/DownloadAssetKind"
+            }
+          },
+          "required": [
+            "asset_kind"
+          ],
+          "title": "DownloadAssetValues",
+          "type": "object"
+        },
+        "FinalizeView": {
+          "enum": [
+            "reader",
+            "player"
+          ],
+          "title": "FinalizeView",
+          "type": "string"
+        },
+        "JobControlValues": {
+          "additionalProperties": false,
+          "properties": {
+            "job_kind": {
+              "$ref": "#/$defs/ChatToUIJobKind"
+            },
+            "job_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Job Id"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Reason"
+            }
+          },
+          "required": [
+            "job_kind"
+          ],
+          "title": "JobControlValues",
+          "type": "object"
+        },
+        "NavigateToStageAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "navigate_to_stage",
+              "default": "navigate_to_stage",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "$ref": "#/$defs/WorkflowStage"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/ChatToUIExtractedValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "NavigateToStageAction",
+          "type": "object"
+        },
+        "OpenFinalizeViewAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "open_finalize_view",
+              "default": "open_finalize_view",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "finalize",
+              "default": "finalize",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/OpenFinalizeViewValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "OpenFinalizeViewAction",
+          "type": "object"
+        },
+        "OpenFinalizeViewValues": {
+          "additionalProperties": false,
+          "properties": {
+            "view": {
+              "$ref": "#/$defs/FinalizeView"
+            }
+          },
+          "required": [
+            "view"
+          ],
+          "title": "OpenFinalizeViewValues",
+          "type": "object"
+        },
+        "PauseJobAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "pause_job",
+              "default": "pause_job",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "enum": [
+                "composition",
+                "audio"
+              ],
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/JobControlValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "PauseJobAction",
+          "type": "object"
+        },
+        "RedirectCompositionAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "redirect_composition",
+              "default": "redirect_composition",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "composition",
+              "default": "composition",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RedirectCompositionValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RedirectCompositionAction",
+          "type": "object"
+        },
+        "RedirectCompositionValues": {
+          "additionalProperties": false,
+          "properties": {
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "rewrite_from_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rewrite From Segment Index"
+            },
+            "preserve_completed_segments": {
+              "default": true,
+              "title": "Preserve Completed Segments",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RedirectCompositionValues",
+          "type": "object"
+        },
+        "RefineBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_beat_sheet",
+              "default": "refine_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefineBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefineBeatSheetAction",
+          "type": "object"
+        },
+        "RefineBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "beat_names": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Beat Names",
+              "type": "array"
+            },
+            "bedtime_goal": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bedtime Goal"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefineBeatSheetValues",
+          "type": "object"
+        },
+        "RefineCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_character_sheet",
+              "default": "refine_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefineCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefineCharacterSheetAction",
+          "type": "object"
+        },
+        "RefineCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            },
+            "focus_character_names": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Focus Character Names",
+              "type": "array"
+            },
+            "change_summary": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Change Summary"
+            },
+            "change_impact": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CharacterChangeImpact"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefineCharacterSheetValues",
+          "type": "object"
+        },
+        "RefinePitchAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "refine_pitch",
+              "default": "refine_pitch",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RefinePitchValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "RefinePitchAction",
+          "type": "object"
+        },
+        "RefinePitchValues": {
+          "additionalProperties": false,
+          "properties": {
+            "pitch_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Id"
+            },
+            "generation_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Generation Key"
+            },
+            "pitch_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Index"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            },
+            "instructions": {
+              "minLength": 1,
+              "title": "Instructions",
+              "type": "string"
+            }
+          },
+          "required": [
+            "instructions"
+          ],
+          "title": "RefinePitchValues",
+          "type": "object"
+        },
+        "RegenerateBeatSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_beat_sheet",
+              "default": "regenerate_beat_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "beats",
+              "default": "beats",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegenerateBeatSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegenerateBeatSheetAction",
+          "type": "object"
+        },
+        "RegenerateBeatSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            },
+            "focus_beats": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Focus Beats",
+              "type": "array"
+            }
+          },
+          "title": "RegenerateBeatSheetValues",
+          "type": "object"
+        },
+        "RegenerateCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_character_sheet",
+              "default": "regenerate_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegenerateCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegenerateCharacterSheetAction",
+          "type": "object"
+        },
+        "RegenerateCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            }
+          },
+          "title": "RegenerateCharacterSheetValues",
+          "type": "object"
+        },
+        "RegeneratePitchesAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "regenerate_pitches",
+              "default": "regenerate_pitches",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/RegeneratePitchesValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "RegeneratePitchesAction",
+          "type": "object"
+        },
+        "RegeneratePitchesValues": {
+          "additionalProperties": false,
+          "properties": {
+            "candidate_count": {
+              "anyOf": [
+                {
+                  "maximum": 6,
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Candidate Count"
+            },
+            "guidance": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance"
+            },
+            "preserve_selected_pitch": {
+              "default": false,
+              "title": "Preserve Selected Pitch",
+              "type": "boolean"
+            }
+          },
+          "title": "RegeneratePitchesValues",
+          "type": "object"
+        },
+        "ResumeJobAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "resume_job",
+              "default": "resume_job",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "enum": [
+                "composition",
+                "audio"
+              ],
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/JobControlValues"
+            }
+          },
+          "required": [
+            "target_stage",
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "ResumeJobAction",
+          "type": "object"
+        },
+        "SelectCharacterSheetAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_character_sheet",
+              "default": "select_character_sheet",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "characters",
+              "default": "characters",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectCharacterSheetValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectCharacterSheetAction",
+          "type": "object"
+        },
+        "SelectCharacterSheetValues": {
+          "additionalProperties": false,
+          "properties": {
+            "character_sheet_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Character Sheet Id"
+            },
+            "revision_number": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision Number"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            }
+          },
+          "title": "SelectCharacterSheetValues",
+          "type": "object"
+        },
+        "SelectGenreAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_genre",
+              "default": "select_genre",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "genre",
+              "default": "genre",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectGenreValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectGenreAction",
+          "type": "object"
+        },
+        "SelectGenreValues": {
+          "additionalProperties": false,
+          "properties": {
+            "genre_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Id"
+            },
+            "genre_slug": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Slug"
+            },
+            "genre_label": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Genre Label"
+            }
+          },
+          "title": "SelectGenreValues",
+          "type": "object"
+        },
+        "SelectPitchAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_pitch",
+              "default": "select_pitch",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "pitches",
+              "default": "pitches",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectPitchValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectPitchAction",
+          "type": "object"
+        },
+        "SelectPitchValues": {
+          "additionalProperties": false,
+          "properties": {
+            "pitch_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Id"
+            },
+            "generation_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Generation Key"
+            },
+            "pitch_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pitch Index"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            }
+          },
+          "title": "SelectPitchValues",
+          "type": "object"
+        },
+        "SelectToneAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "select_tone",
+              "default": "select_tone",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "tone",
+              "default": "tone",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/SelectToneValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "SelectToneAction",
+          "type": "object"
+        },
+        "SelectToneValues": {
+          "additionalProperties": false,
+          "properties": {
+            "tone_profile_id": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Id"
+            },
+            "tone_profile_slug": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Slug"
+            },
+            "tone_profile_label": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tone Profile Label"
+            }
+          },
+          "title": "SelectToneValues",
+          "type": "object"
+        },
+        "StartAudioGenerationAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "start_audio_generation",
+              "default": "start_audio_generation",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "audio",
+              "default": "audio",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/StartAudioGenerationValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "StartAudioGenerationAction",
+          "type": "object"
+        },
+        "StartAudioGenerationValues": {
+          "additionalProperties": false,
+          "properties": {
+            "voice_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Voice Key"
+            },
+            "playback_speed": {
+              "anyOf": [
+                {
+                  "maximum": 2.0,
+                  "minimum": 0.5,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Playback Speed"
+            },
+            "include_background_music": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Include Background Music"
+            },
+            "music_profile": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Music Profile"
+            },
+            "regenerate_existing_audio": {
+              "default": false,
+              "title": "Regenerate Existing Audio",
+              "type": "boolean"
+            }
+          },
+          "title": "StartAudioGenerationValues",
+          "type": "object"
+        },
+        "StartCompositionAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "start_composition",
+              "default": "start_composition",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "composition",
+              "default": "composition",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/StartCompositionValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation"
+          ],
+          "title": "StartCompositionAction",
+          "type": "object"
+        },
+        "StartCompositionValues": {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/CompositionStartMode",
+              "default": "fresh"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Instructions"
+            },
+            "restart_from_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Restart From Segment Index"
+            }
+          },
+          "title": "StartCompositionValues",
+          "type": "object"
+        },
+        "StoryBriefEditMode": {
+          "enum": [
+            "replace",
+            "append",
+            "merge"
+          ],
+          "title": "StoryBriefEditMode",
+          "type": "string"
+        },
+        "UpdateAudioSettingsAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_audio_settings",
+              "default": "update_audio_settings",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "audio",
+              "default": "audio",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateAudioSettingsValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateAudioSettingsAction",
+          "type": "object"
+        },
+        "UpdateAudioSettingsValues": {
+          "additionalProperties": false,
+          "properties": {
+            "voice_key": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Voice Key"
+            },
+            "playback_speed": {
+              "anyOf": [
+                {
+                  "maximum": 2.0,
+                  "minimum": 0.5,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Playback Speed"
+            },
+            "include_background_music": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Include Background Music"
+            },
+            "music_profile": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Music Profile"
+            },
+            "guidance_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance Notes"
+            }
+          },
+          "title": "UpdateAudioSettingsValues",
+          "type": "object"
+        },
+        "UpdateStoryBriefAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_story_brief",
+              "default": "update_story_brief",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "brief",
+              "default": "brief",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateStoryBriefValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateStoryBriefAction",
+          "type": "object"
+        },
+        "UpdateStoryBriefValues": {
+          "additionalProperties": false,
+          "properties": {
+            "story_idea": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Story Idea"
+            },
+            "desired_themes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Desired Themes"
+            },
+            "key_images": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Key Images"
+            },
+            "audience_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Audience Notes"
+            },
+            "must_have_elements": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Must Have Elements"
+            },
+            "raw_brief": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Raw Brief"
+            },
+            "normalized_summary": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Normalized Summary"
+            },
+            "planning_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Planning Notes"
+            },
+            "edit_mode": {
+              "$ref": "#/$defs/StoryBriefEditMode",
+              "default": "merge"
+            }
+          },
+          "title": "UpdateStoryBriefValues",
+          "type": "object"
+        },
+        "UpdateStorySetupAction": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action_type": {
+              "const": "update_story_setup",
+              "default": "update_story_setup",
+              "title": "Action Type",
+              "type": "string"
+            },
+            "target_stage": {
+              "const": "story_setup",
+              "default": "story_setup",
+              "title": "Target Stage",
+              "type": "string"
+            },
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rationale"
+            },
+            "requires_confirmation": {
+              "title": "Requires Confirmation",
+              "type": "boolean"
+            },
+            "extracted_values": {
+              "$ref": "#/$defs/UpdateStorySetupValues"
+            }
+          },
+          "required": [
+            "confidence",
+            "requires_confirmation",
+            "extracted_values"
+          ],
+          "title": "UpdateStorySetupAction",
+          "type": "object"
+        },
+        "UpdateStorySetupValues": {
+          "additionalProperties": false,
+          "properties": {
+            "target_word_count": {
+              "anyOf": [
+                {
+                  "maximum": 10000,
+                  "minimum": 100,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Word Count"
+            },
+            "target_runtime_minutes": {
+              "anyOf": [
+                {
+                  "maximum": 180,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Runtime Minutes"
+            },
+            "chapter_count": {
+              "anyOf": [
+                {
+                  "maximum": 24,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Count"
+            },
+            "chapter_style": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Style"
+            },
+            "guidance_notes": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Guidance Notes"
+            }
+          },
+          "title": "UpdateStorySetupValues",
+          "type": "object"
+        },
+        "WorkflowStage": {
+          "enum": [
+            "genre",
+            "tone",
+            "brief",
+            "pitches",
+            "characters",
+            "beats",
+            "story_setup",
+            "composition",
+            "audio",
+            "finalize"
+          ],
+          "title": "WorkflowStage",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "actions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "accept_beat_sheet": "#/$defs/AcceptBeatSheetAction",
+                "download_asset": "#/$defs/DownloadAssetAction",
+                "navigate_to_stage": "#/$defs/NavigateToStageAction",
+                "open_finalize_view": "#/$defs/OpenFinalizeViewAction",
+                "pause_job": "#/$defs/PauseJobAction",
+                "redirect_composition": "#/$defs/RedirectCompositionAction",
+                "refine_beat_sheet": "#/$defs/RefineBeatSheetAction",
+                "refine_character_sheet": "#/$defs/RefineCharacterSheetAction",
+                "refine_pitch": "#/$defs/RefinePitchAction",
+                "regenerate_beat_sheet": "#/$defs/RegenerateBeatSheetAction",
+                "regenerate_character_sheet": "#/$defs/RegenerateCharacterSheetAction",
+                "regenerate_pitches": "#/$defs/RegeneratePitchesAction",
+                "resume_job": "#/$defs/ResumeJobAction",
+                "select_character_sheet": "#/$defs/SelectCharacterSheetAction",
+                "select_genre": "#/$defs/SelectGenreAction",
+                "select_pitch": "#/$defs/SelectPitchAction",
+                "select_tone": "#/$defs/SelectToneAction",
+                "start_audio_generation": "#/$defs/StartAudioGenerationAction",
+                "start_composition": "#/$defs/StartCompositionAction",
+                "update_audio_settings": "#/$defs/UpdateAudioSettingsAction",
+                "update_story_brief": "#/$defs/UpdateStoryBriefAction",
+                "update_story_setup": "#/$defs/UpdateStorySetupAction"
+              },
+              "propertyName": "action_type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/NavigateToStageAction"
+              },
+              {
+                "$ref": "#/$defs/SelectGenreAction"
+              },
+              {
+                "$ref": "#/$defs/SelectToneAction"
+              },
+              {
+                "$ref": "#/$defs/UpdateStoryBriefAction"
+              },
+              {
+                "$ref": "#/$defs/RegeneratePitchesAction"
+              },
+              {
+                "$ref": "#/$defs/RefinePitchAction"
+              },
+              {
+                "$ref": "#/$defs/SelectPitchAction"
+              },
+              {
+                "$ref": "#/$defs/SelectCharacterSheetAction"
+              },
+              {
+                "$ref": "#/$defs/RefineCharacterSheetAction"
+              },
+              {
+                "$ref": "#/$defs/RegenerateCharacterSheetAction"
+              },
+              {
+                "$ref": "#/$defs/AcceptBeatSheetAction"
+              },
+              {
+                "$ref": "#/$defs/RefineBeatSheetAction"
+              },
+              {
+                "$ref": "#/$defs/RegenerateBeatSheetAction"
+              },
+              {
+                "$ref": "#/$defs/UpdateStorySetupAction"
+              },
+              {
+                "$ref": "#/$defs/StartCompositionAction"
+              },
+              {
+                "$ref": "#/$defs/PauseJobAction"
+              },
+              {
+                "$ref": "#/$defs/ResumeJobAction"
+              },
+              {
+                "$ref": "#/$defs/RedirectCompositionAction"
+              },
+              {
+                "$ref": "#/$defs/UpdateAudioSettingsAction"
+              },
+              {
+                "$ref": "#/$defs/StartAudioGenerationAction"
+              },
+              {
+                "$ref": "#/$defs/OpenFinalizeViewAction"
+              },
+              {
+                "$ref": "#/$defs/DownloadAssetAction"
+              }
+            ]
+          },
+          "title": "Actions",
+          "type": "array"
+        }
+      },
+      "title": "ChatToUIActionBatch",
+      "type": "object"
+    }
+  }
+}

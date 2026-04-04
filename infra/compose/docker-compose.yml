@@ -1,0 +1,177 @@
+name: storyteller
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: storyteller
+      POSTGRES_USER: storyteller
+      POSTGRES_PASSWORD: storyteller
+    ports:
+      - "8567:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U storyteller -d storyteller
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  gcs:
+    image: fsouza/fake-gcs-server:1.54.0
+    restart: unless-stopped
+    command:
+      - -scheme
+      - http
+      - -backend
+      - filesystem
+      - -filesystem-root
+      - /data
+      - -public-host
+      - localhost:8568
+      - -external-url
+      - http://localhost:8568
+    ports:
+      - "8568:4443"
+    volumes:
+      - gcs_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:4443/storage/v1/b >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  backend:
+    build:
+      context: ../../backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gcs:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ../../backend:/app
+      - ../../:/workspace:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      STORYTELLER_SECRETS_FILE: /workspace/secrets.yaml
+      STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
+      STORYTELLER_GCS_ENDPOINT: http://gcs:4443
+      STORYTELLER_GCS_PROJECT_ID: storyteller-local
+      STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
+      STORYTELLER_GCS_SESSIONS_BUCKET_NAME: storyteller-sessions
+      STORYTELLER_GCS_AUDIO_BUCKET_NAME: storyteller-audio
+      STORYTELLER_GCS_EXPORTS_BUCKET_NAME: storyteller-exports
+    ports:
+      - "8565:8565"
+    command: python -m app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          urllib.request.urlopen("http://127.0.0.1:8565/health")
+          sys.exit(0)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  worker:
+    build:
+      context: ../../backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gcs:
+        condition: service_healthy
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - ../../backend:/app
+      - ../../:/workspace:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      STORYTELLER_SECRETS_FILE: ""
+      STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
+      STORYTELLER_GEMINI_API_KEY: ${STORYTELLER_GEMINI_API_KEY:-worker-placeholder-key}
+      STORYTELLER_GCS_ENDPOINT: http://gcs:4443
+      STORYTELLER_GCS_PROJECT_ID: storyteller-local
+      STORYTELLER_GCS_PUBLIC_URL: http://localhost:8568
+      STORYTELLER_GCS_SESSIONS_BUCKET_NAME: storyteller-sessions
+      STORYTELLER_GCS_AUDIO_BUCKET_NAME: storyteller-audio
+      STORYTELLER_GCS_EXPORTS_BUCKET_NAME: storyteller-exports
+    command:
+      - python
+      - -m
+      - app.worker
+      - --poll-interval-seconds
+      - "2"
+      - --lease-duration-seconds
+      - "60"
+
+  frontend:
+    build:
+      context: ../../frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    working_dir: /app
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_DEV_PROXY_TARGET: http://backend:8565
+      VITE_SESSION_EVENTS_WS_URL: /api/v1/sessions/events/ws
+    volumes:
+      - ../../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "8566:8566"
+    command: npm run dev -- --host 0.0.0.0 --port 8566
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          require("http").get("http://127.0.0.1:8566", (response) => {
+            process.exit(response.statusCode === 200 ? 0 : 1);
+          }).on("error", () => process.exit(1));
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  browser:
+    build:
+      context: ../../tools/webapp-qa
+    depends_on:
+      frontend:
+        condition: service_healthy
+    working_dir: /workspace/tools/webapp-qa
+    environment:
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      TARGET_BASE_URL: http://frontend:8566
+    volumes:
+      - ../../:/workspace
+      - webapp_qa_node_modules:/workspace/tools/webapp-qa/node_modules
+    command: sleep infinity
+
+volumes:
+  frontend_node_modules:
+  postgres_data:
+  gcs_data:
+  webapp_qa_node_modules:

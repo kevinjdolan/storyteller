@@ -1,0 +1,29 @@
+{
+  "url": "http://localhost:8566",
+  "outputPath": "../../.artifacts/webapp-qa/prompt-20-home-route.png",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='app-card']"
+    },
+    {
+      "action": "assertText",
+      "text": "Past sessions come first"
+    },
+    {
+      "action": "assertText",
+      "text": "Open sample workspace"
+    },
+    {
+      "action": "assertText",
+      "text": "Past sessions now live on a real home route"
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}

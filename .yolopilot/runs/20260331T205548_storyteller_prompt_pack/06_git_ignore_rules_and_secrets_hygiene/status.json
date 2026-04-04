@@ -1,0 +1,85 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/06_git_ignore_rules_and_secrets_hygiene/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'git check-ignore secrets.example.yaml .env.example >/tmp/gitignore-positive.out 2>/tmp/gitignore-positive.err; status=$?; printf '\"'status=%s\\\\n' \\\"\"'$status\"; cat /tmp/gitignore-positive.out; cat /tmp/gitignore-positive.err'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 90,
+    "file_paths": [
+      ".githooks/pre-commit",
+      ".gitignore",
+      "README.md",
+      "docs/secrets-and-local-config.md",
+      "infra/persistence/README.md",
+      "scripts/README.md",
+      "scripts/check-secret-hygiene.sh",
+      "scripts/install-git-hooks.sh",
+      "prompts/06-gitignore-and-secrets-hygiene.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4762-680b-72f1-8bf9-e17bc7961152",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 1019264,
+      "input_tokens": 1071577,
+      "output_tokens": 20594,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "3ea427bba31754638071e3e18262886f6b366f0a",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "06-gitignore-and-secrets-hygiene.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-06-gitignore-and-secrets-hygiene",
+  "task_name_human": "06 \u2014 Git Ignore Rules and Secrets Hygiene",
+  "task_name_system": "06_git_ignore_rules_and_secrets_hygiene",
+  "timing": {
+    "duration_seconds": 415.0,
+    "finished_at": "2026-03-31T21:58:58-07:00",
+    "started_at": "2026-03-31T21:52:03-07:00"
+  }
+}

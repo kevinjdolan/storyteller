@@ -1,0 +1,143 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' base_prompt.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,220p' 68-autosave-drafts-and-partials.md\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"composition|asset record|asset_record|partial draft|draft asset|resume\\\" backend frontend docs tests -g '\"'!**/node_modules/**'\"'\"",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/tests/test_session_hydration.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"sed -n '1,260p' backend/tests/test_composition_jobs.py\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_asset_service.py backend/tests/test_session_hydration_service.py backend/tests/test_story_tools.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'rg -n \"ruff|mypy|pyright|pytest|npm run lint|pnpm|uv\" Makefile pyproject.toml backend/pyproject.toml package.json backend/requirements*.txt frontend/package.json README.md backend/README.md'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_session_api.py backend/tests/test_session_service.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose ps'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && python - <<'PY'\nfrom datetime import datetime, timezone\n\nfrom sqlalchemy.orm import sessionmaker\n\nfrom app.db import (\n    AssetKind,\n    AssetStatus,\n    Base,\n    BeatSheet,\n    CharacterSheet,\n    CompositionJob,\n    CompositionJobKind,\n    Genre,\n    JobStatus,\n    Pitch,\n    StoryBrief,\n    StoryOutline,\n    StorySession,\n    StorySetup,\n    ToneProfile,\n    make_engine,\n)\nfrom app.models import WorkflowStage, WorkflowStageState\nfrom app.services.assets import SessionAssetService\nfrom app.services.sessions import SessionService\nfrom app.settings import load_settings\nfrom app.storage import build_object_storage_service\n\nsettings = load_settings(\n    {\n        'STORYTELLER_SECRETS_FILE': '',\n        'STORYTELLER_ENVIRONMENT': 'development',\n        'STORYTELLER_DATABASE_URL': 'postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller',\n        'STORYTELLER_GCS_ENDPOINT': 'http://localhost:8568',\n        'STORYTELLER_GCS_PROJECT_ID': 'storyteller-local',\n        'STORYTELLER_GCS_PUBLIC_URL': 'http://localhost:8568',\n        'STORYTELLER_GCS_SESSIONS_BUCKET_NAME': 'storyteller-sessions',\n        'STORYTELLER_GCS_AUDIO_BUCKET_NAME': 'storyteller-audio',\n        'STORYTELLER_GCS_EXPORTS_BUCKET_NAME': 'storyteller-exports',\n        'STORYTELLER_GEMINI_API_KEY': 'browser-qa-placeholder',\n    },\n)\nengine = make_engine(settings.database_url)\nBase.metadata.create_all(engine)\nSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)\nobject_storage = build_object_storage_service(settings)\n\nnow = datetime.now(timezone.utc)\nrecovered_story_text = (\n    'Draft segment 1 settles the harbor in silver hush.\\\\n\\\\n'\n    'Draft segment 2 keeps the bell audible while the cove stays calm enough to resume after refresh.'\n)\n\nwith SessionLocal() as session:\n    service = SessionService(session)\n    genre = Genre(\n        slug='quest-fantasy',\n        label='Quest Fantasy',\n        description='A gentle harbor adventure.',\n    )\n    tone = ToneProfile(\n        genre=genre,\n        slug='hushed-wonder',\n        label='Hushed Wonder',\n        description='Soft and luminous.',\n    )\n    session.add_all([genre, tone])\n    session.flush()\n\n    snapshot = service.create_session(working_title='Prompt 68 Browser QA')\n    story_session = session.get(StorySession, snapshot.id)\n    assert story_session is not None\n    story_session.selected_genre = genre\n    story_session.selected_tone_profile = tone\n    session.flush()\n\n    for stage in (\n        WorkflowStage.GENRE,\n        WorkflowStage.TONE,\n        WorkflowStage.BRIEF,\n        WorkflowStage.PITCHES,\n        WorkflowStage.CHARACTERS,\n        WorkflowStage.BEATS,\n        WorkflowStage.STORY_SETUP,\n    ):\n        service.update_stage_state(\n            snapshot.id,\n            stage=stage,\n            status=WorkflowStageState.COMPLETED,\n            detail=f'Accepted {stage.value}.',\n        )\n\n    service.update_stage_state(\n        snapshot.id,\n        stage=WorkflowStage.COMPOSITION,\n        status=WorkflowStageState.IN_PROGRESS,\n        detail='Writing paused after an autosave checkpoint.',\n    )\n\n    brief = StoryBrief(\n        session_id=snapshot.id,\n        revision_number=1,\n        raw_brief='A harbor fox follows a silver clue and returns home calm.',\n        normalized_summary='A bedtime harbor mystery with a gentle emotional repair.',\n        planning_notes='Keep the midpoint safe and sleepy.',\n        is_active=True,\n        accepted_at=now,\n    )\n    session.add(brief)\n    session.flush()\n\n    pitch = Pitch(\n        session_id=snapshot.id,\n        story_brief_id=brief.id,\n        generation_key='browser-qa-batch',\n        pitch_index=1,\n        title='The Silver Bell Buoy',\n        logline='A harbor fox follows a bell across moonlit water.',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(pitch)\n    session.flush()\n\n    character_sheet = CharacterSheet(\n        session_id=snapshot.id,\n        pitch_id=pitch.id,\n        revision_number=1,\n        title='Mira and the Bell',\n        protagonist_name='Mira',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(character_sheet)\n    session.flush()\n\n    beat_sheet = BeatSheet(\n        session_id=snapshot.id,\n        character_sheet_id=character_sheet.id,\n        revision_number=1,\n        summary='A soft Save-the-Cat arc.',\n        beats=[\n            {\n                'key': 'opening_image',\n                'label': 'Opening Image',\n                'order': 1,\n                'summary': 'Mira watches the harbor settle under soft moonlight.',\n                'emotional_intent': 'Begin in stillness and wonder.',\n            },\n            {\n                'key': 'midpoint',\n                'label': 'Midpoint',\n                'order': 2,\n                'summary': 'Mira finds the hidden cove where the bell belongs.',\n                'emotional_intent': 'Lift wonder while keeping the surprise soft.',\n            },\n        ],\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(beat_sheet)\n    session.flush()\n\n    story_setup = StorySetup(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        revision_number=1,\n        target_word_count=1600,\n        target_runtime_minutes=11,\n        chapter_count=3,\n        approximate_scene_count=9,\n        chapter_style='three gentle chapters',\n        guidance_notes='End each chapter with a calmer image than it began.',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(story_setup)\n    session.flush()\n\n    story_outline = StoryOutline(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        story_setup_id=story_setup.id,\n        revision_number=1,\n        outline_kind='chapter',\n        summary='Three draftable chapters mapped from the beat sheet.',\n        cards=[\n            {\n                'card_key': 'chapter-1',\n                'card_type': 'chapter',\n                'position': 1,\n                'title': 'Chapter 1: Opening Harbor',\n                'summary': 'Set the moonlit harbor mood and launch Mira after the drifting bell.',\n                'beat_keys': ['opening_image'],\n                'beat_labels': ['Opening Image'],\n                'emotional_shift': 'Move from stillness toward gentle motion.',\n            },\n            {\n                'card_key': 'chapter-2',\n                'card_type': 'chapter',\n                'position': 2,\n                'title': 'Chapter 2: Lantern Cove',\n                'summary': 'Let Mira discover the quieter cove and keep the reveal soft.',\n                'beat_keys': ['midpoint'],\n                'beat_labels': ['Midpoint'],\n                'emotional_shift': 'Lift wonder without breaking the bedtime tone.',\n            },\n            {\n                'card_key': 'chapter-3',\n                'card_type': 'chapter',\n                'position': 3,\n                'title': 'Chapter 3: Harbor Rest',\n                'summary': 'Guide the harbor back into rest.',\n                'beat_keys': ['finale'],\n                'beat_labels': ['Finale'],\n                'emotional_shift': 'Turn temporary doubt into visible relief and belonging.',\n            },\n        ],\n        metadata_json={\n            'genre_label': 'Quest Fantasy',\n            'tone_label': 'Hushed Wonder',\n            'target_word_count': 1600,\n        },\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(story_outline)\n    session.flush()\n\n    composition_job = CompositionJob(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        story_setup_id=story_setup.id,\n        job_kind=CompositionJobKind.DRAFT,\n        status=JobStatus.PAUSED,\n        progress_percent=38,\n        current_segment_index=2,\n        metadata_json={\n            'total_segments': 3,\n            'start_segment_index': 1,\n            'story_outline_id': story_outline.id,\n            'story_outline_revision_number': 1,\n        },\n        started_at=now,\n    )\n    session.add(composition_job)\n    session.flush()\n    session.commit()\n\n    location = object_storage.paths.draft_text_snapshot(session_id=snapshot.id)\n    upload_metadata = object_storage.upload_text(\n        location,\n        recovered_story_text,\n        content_type='text/markdown; charset=utf-8',\n    )\n    SessionAssetService(session).upsert_asset_record(\n        session_id=snapshot.id,\n        asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,\n        storage_bucket=location.bucket,\n        object_path=location.key,\n        mime_type='text/markdown',\n        status=AssetStatus.READY,\n        composition_job_id=composition_job.id,\n        segment_index=2,\n        byte_size=upload_metadata.size_bytes,\n        metadata_json={\n            'orchestration_version': 'composition_draft_snapshot.v1',\n            'checkpoint_reason': 'browser_qa_seed',\n            'autosave_strategy': 'rolling_session_latest',\n            'job_kind': composition_job.job_kind.value,\n            'job_status': composition_job.status.value,\n            'current_segment_index': 2,\n            'total_segments': 3,\n            'progress_percent': 38,\n        },\n    )\n    print(snapshot.id)\n\nobject_storage.close()\nengine.dispose()\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && python - <<'PY'\nfrom datetime import datetime, timezone\n\nfrom sqlalchemy import select\nfrom sqlalchemy.orm import sessionmaker\n\nfrom app.db import (\n    AssetKind,\n    AssetStatus,\n    Base,\n    BeatSheet,\n    CharacterSheet,\n    CompositionJob,\n    CompositionJobKind,\n    Genre,\n    JobStatus,\n    Pitch,\n    StoryBrief,\n    StoryOutline,\n    StorySession,\n    StorySetup,\n    ToneProfile,\n    make_engine,\n)\nfrom app.models import WorkflowStage, WorkflowStageState\nfrom app.services.assets import SessionAssetService\nfrom app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog\nfrom app.services.sessions import SessionService\nfrom app.settings import load_settings\nfrom app.storage import build_object_storage_service\n\nsettings = load_settings(\n    {\n        'STORYTELLER_SECRETS_FILE': '',\n        'STORYTELLER_ENVIRONMENT': 'development',\n        'STORYTELLER_DATABASE_URL': 'postgresql+psycopg://storyteller:storyteller@localhost:8567/storyteller',\n        'STORYTELLER_GCS_ENDPOINT': 'http://localhost:8568',\n        'STORYTELLER_GCS_PROJECT_ID': 'storyteller-local',\n        'STORYTELLER_GCS_PUBLIC_URL': 'http://localhost:8568',\n        'STORYTELLER_GCS_SESSIONS_BUCKET_NAME': 'storyteller-sessions',\n        'STORYTELLER_GCS_AUDIO_BUCKET_NAME': 'storyteller-audio',\n        'STORYTELLER_GCS_EXPORTS_BUCKET_NAME': 'storyteller-exports',\n        'STORYTELLER_GEMINI_API_KEY': 'browser-qa-placeholder',\n    },\n)\nengine = make_engine(settings.database_url)\nBase.metadata.create_all(engine)\nSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)\nobject_storage = build_object_storage_service(settings)\n\nnow = datetime.now(timezone.utc)\nrecovered_story_text = (\n    'Draft segment 1 settles the harbor in silver hush.\\\\n\\\\n'\n    'Draft segment 2 keeps the bell audible while the cove stays calm enough to resume after refresh.'\n)\n\nwith SessionLocal() as session:\n    seed_catalog(session, load_catalog_document(CATALOG_FILE_PATH))\n    genre = session.execute(select(Genre).where(Genre.slug == 'quest-fantasy')).scalar_one()\n    tone = session.execute(\n        select(ToneProfile).where(ToneProfile.slug == 'hushed-wonder')\n    ).scalar_one()\n\n    service = SessionService(session)\n    snapshot = service.create_session(working_title='Prompt 68 Browser QA')\n    story_session = session.get(StorySession, snapshot.id)\n    assert story_session is not None\n    story_session.selected_genre = genre\n    story_session.selected_tone_profile = tone\n    session.flush()\n\n    for stage in (\n        WorkflowStage.GENRE,\n        WorkflowStage.TONE,\n        WorkflowStage.BRIEF,\n        WorkflowStage.PITCHES,\n        WorkflowStage.CHARACTERS,\n        WorkflowStage.BEATS,\n        WorkflowStage.STORY_SETUP,\n    ):\n        service.update_stage_state(\n            snapshot.id,\n            stage=stage,\n            status=WorkflowStageState.COMPLETED,\n            detail=f'Accepted {stage.value}.',\n        )\n\n    service.update_stage_state(\n        snapshot.id,\n        stage=WorkflowStage.COMPOSITION,\n        status=WorkflowStageState.IN_PROGRESS,\n        detail='Writing paused after an autosave checkpoint.',\n    )\n\n    brief = StoryBrief(\n        session_id=snapshot.id,\n        revision_number=1,\n        raw_brief='A harbor fox follows a silver clue and returns home calm.',\n        normalized_summary='A bedtime harbor mystery with a gentle emotional repair.',\n        planning_notes='Keep the midpoint safe and sleepy.',\n        is_active=True,\n        accepted_at=now,\n    )\n    session.add(brief)\n    session.flush()\n\n    pitch = Pitch(\n        session_id=snapshot.id,\n        story_brief_id=brief.id,\n        generation_key='browser-qa-batch',\n        pitch_index=1,\n        title='The Silver Bell Buoy',\n        logline='A harbor fox follows a bell across moonlit water.',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(pitch)\n    session.flush()\n\n    character_sheet = CharacterSheet(\n        session_id=snapshot.id,\n        pitch_id=pitch.id,\n        revision_number=1,\n        title='Mira and the Bell',\n        protagonist_name='Mira',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(character_sheet)\n    session.flush()\n\n    beat_sheet = BeatSheet(\n        session_id=snapshot.id,\n        character_sheet_id=character_sheet.id,\n        revision_number=1,\n        summary='A soft Save-the-Cat arc.',\n        beats=[\n            {\n                'key': 'opening_image',\n                'label': 'Opening Image',\n                'order': 1,\n                'summary': 'Mira watches the harbor settle under soft moonlight.',\n                'emotional_intent': 'Begin in stillness and wonder.',\n            },\n            {\n                'key': 'midpoint',\n                'label': 'Midpoint',\n                'order': 2,\n                'summary': 'Mira finds the hidden cove where the bell belongs.',\n                'emotional_intent': 'Lift wonder while keeping the surprise soft.',\n            },\n        ],\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(beat_sheet)\n    session.flush()\n\n    story_setup = StorySetup(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        revision_number=1,\n        target_word_count=1600,\n        target_runtime_minutes=11,\n        chapter_count=3,\n        approximate_scene_count=9,\n        chapter_style='three gentle chapters',\n        guidance_notes='End each chapter with a calmer image than it began.',\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(story_setup)\n    session.flush()\n\n    story_outline = StoryOutline(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        story_setup_id=story_setup.id,\n        revision_number=1,\n        outline_kind='chapter',\n        summary='Three draftable chapters mapped from the beat sheet.',\n        cards=[\n            {\n                'card_key': 'chapter-1',\n                'card_type': 'chapter',\n                'position': 1,\n                'title': 'Chapter 1: Opening Harbor',\n                'summary': 'Set the moonlit harbor mood and launch Mira after the drifting bell.',\n                'beat_keys': ['opening_image'],\n                'beat_labels': ['Opening Image'],\n                'emotional_shift': 'Move from stillness toward gentle motion.',\n            },\n            {\n                'card_key': 'chapter-2',\n                'card_type': 'chapter',\n                'position': 2,\n                'title': 'Chapter 2: Lantern Cove',\n                'summary': 'Let Mira discover the quieter cove and keep the reveal soft.',\n                'beat_keys': ['midpoint'],\n                'beat_labels': ['Midpoint'],\n                'emotional_shift': 'Lift wonder without breaking the bedtime tone.',\n            },\n            {\n                'card_key': 'chapter-3',\n                'card_type': 'chapter',\n                'position': 3,\n                'title': 'Chapter 3: Harbor Rest',\n                'summary': 'Guide the harbor back into rest.',\n                'beat_keys': ['finale'],\n                'beat_labels': ['Finale'],\n                'emotional_shift': 'Turn temporary doubt into visible relief and belonging.',\n            },\n        ],\n        metadata_json={\n            'genre_label': 'Quest Fantasy',\n            'tone_label': 'Hushed Wonder',\n            'target_word_count': 1600,\n        },\n        is_selected=True,\n        accepted_at=now,\n    )\n    session.add(story_outline)\n    session.flush()\n\n    composition_job = CompositionJob(\n        session_id=snapshot.id,\n        beat_sheet_id=beat_sheet.id,\n        story_setup_id=story_setup.id,\n        job_kind=CompositionJobKind.DRAFT,\n        status=JobStatus.PAUSED,\n        progress_percent=38,\n        current_segment_index=2,\n        metadata_json={\n            'total_segments': 3,\n            'start_segment_index': 1,\n            'story_outline_id': story_outline.id,\n            'story_outline_revision_number': 1,\n        },\n        started_at=now,\n    )\n    session.add(composition_job)\n    session.flush()\n    session.commit()\n\n    location = object_storage.paths.draft_text_snapshot(session_id=snapshot.id)\n    upload_metadata = object_storage.upload_text(\n        location,\n        recovered_story_text,\n        content_type='text/markdown; charset=utf-8',\n    )\n    SessionAssetService(session).upsert_asset_record(\n        session_id=snapshot.id,\n        asset_kind=AssetKind.DRAFT_TEXT_SNAPSHOT,\n        storage_bucket=location.bucket,\n        object_path=location.key,\n        mime_type='text/markdown',\n        status=AssetStatus.READY,\n        composition_job_id=composition_job.id,\n        segment_index=2,\n        byte_size=upload_metadata.size_bytes,\n        metadata_json={\n            'orchestration_version': 'composition_draft_snapshot.v1',\n            'checkpoint_reason': 'browser_qa_seed',\n            'autosave_strategy': 'rolling_session_latest',\n            'job_kind': composition_job.job_kind.value,\n            'job_status': composition_job.status.value,\n            'current_segment_index': 2,\n            'total_segments': 3,\n            'progress_percent': 38,\n        },\n    )\n    print(snapshot.id)\n\nobject_storage.close()\nengine.dispose()\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"CompositionJobService\\\\(db_session.*object_storage|object_storage=.*app.state|get_object_storage\\\" backend/app/api/v1/routes/sessions.py backend/app/api/dependencies.py backend/app/api -g '\"'!**/__pycache__/**'\"'\"",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 312,
+    "file_paths": [
+      "backend/app/storage/paths.py",
+      "backend/app/repositories/assets.py",
+      "backend/app/services/assets.py",
+      "backend/app/repositories/sessions.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/services/composition_jobs.py",
+      "docs/storage-buckets-and-prefixes.md",
+      "backend/tests/test_asset_service.py",
+      "backend/tests/test_session_hydration_service.py",
+      "backend/tests/test_story_tools.py",
+      ".artifacts/webapp-qa/prompt-68-refresh-resume.spec.json",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/68_autosave_drafts_and_partial_outputs/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4fc4-d918-7fa3-8226-eec0c198d4fb",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 13247360,
+      "input_tokens": 13765101,
+      "output_tokens": 52186,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "f9f204e449065e18b7b54ee39ab14e2545616170",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "68-autosave-drafts-and-partials.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_68_autosave_drafts_and_partial_outputs",
+  "task_name_human": "68 autosave drafts and partial outputs",
+  "task_name_system": "68_autosave_drafts_and_partial_outputs",
+  "timing": {
+    "duration_seconds": 1199.0,
+    "finished_at": "2026-04-02T13:16:31-07:00",
+    "started_at": "2026-04-02T12:56:32-07:00"
+  }
+}

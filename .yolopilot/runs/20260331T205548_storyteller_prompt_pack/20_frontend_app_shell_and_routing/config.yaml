@@ -1,0 +1,17 @@
+version: 1.0
+codex:
+  model: gpt-5.4
+  reasoning_effort: xhigh
+agent:
+  model_provider: gemini
+  model_low: gemini-3-flash-preview
+  model_medium: gemini-3-flash-preview
+  model_high: gemini-3-flash-preview
+conda: yolopilot
+codex_command: npx -y @openai/codex
+sandbox: danger-full-access
+max_retries: 5
+initial_retry_delay_seconds: 10
+input_cost_per_1m:
+cached_input_cost_per_1m:
+output_cost_per_1m:

@@ -1,0 +1,118 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/02_scaffold_the_react_frontend_with_vite/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'npm run test'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm run dev'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 181,
+    "file_paths": [
+      "frontend/.prettierignore",
+      "frontend/.prettierrc.json",
+      "frontend/Dockerfile",
+      "frontend/README.md",
+      "frontend/eslint.config.js",
+      "frontend/index.html",
+      "frontend/package.json",
+      "frontend/src/App.jsx",
+      "frontend/src/app/App.tsx",
+      "frontend/src/app/AppShell.tsx",
+      "frontend/src/app/router.tsx",
+      "frontend/src/features/home/HomeRoute.test.tsx",
+      "frontend/src/features/home/HomeRoute.tsx",
+      "frontend/src/features/system/useBackendStatus.ts",
+      "frontend/src/main.jsx",
+      "frontend/src/main.tsx",
+      "frontend/src/shared/api.ts",
+      "frontend/src/styles.css",
+      "frontend/src/styles/index.css",
+      "frontend/src/test/setup.ts",
+      "frontend/src/vite-env.d.ts",
+      "frontend/tsconfig.app.json",
+      "frontend/tsconfig.json",
+      "frontend/tsconfig.node.json",
+      "frontend/vite.config.js",
+      "frontend/vite.config.ts",
+      "frontend/vitest.config.ts",
+      "README.md",
+      "docs/architecture-overview.md",
+      "tools/webapp-qa/examples/homepage.spec.json",
+      "frontend/public/favicon.svg",
+      "prompts/02-vite-react-scaffold.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4739-69db-7442-a362-50ef89feff75",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 4475904,
+      "input_tokens": 4546000,
+      "output_tokens": 36184,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "345b0147d09eaa767f217aee86d68da926689d5b",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "02-vite-react-scaffold.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-02-vite-react-scaffold",
+  "task_name_human": "02 \u2014 Scaffold the React Frontend with Vite",
+  "task_name_system": "02_scaffold_the_react_frontend_with_vite",
+  "timing": {
+    "duration_seconds": 854.0,
+    "finished_at": "2026-03-31T21:21:30-07:00",
+    "started_at": "2026-03-31T21:07:16-07:00"
+  }
+}

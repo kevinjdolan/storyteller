@@ -12,7 +12,11 @@
     },
     {
       "action": "assertText",
-      "text": "Hello, world!"
+      "text": "Storyteller"
+    },
+    {
+      "action": "assertText",
+      "text": "Past sessions come first"
     },
     {
       "action": "assertText",

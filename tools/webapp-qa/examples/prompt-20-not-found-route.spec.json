@@ -1,0 +1,25 @@
+{
+  "url": "http://localhost:8566/does-not-exist",
+  "outputPath": "../../.artifacts/webapp-qa/prompt-20-not-found-route.png",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "steps": [
+    {
+      "action": "waitForSelector",
+      "selector": "[data-testid='not-found']"
+    },
+    {
+      "action": "assertText",
+      "text": "Page not found"
+    },
+    {
+      "action": "assertText",
+      "text": "/does-not-exist"
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}

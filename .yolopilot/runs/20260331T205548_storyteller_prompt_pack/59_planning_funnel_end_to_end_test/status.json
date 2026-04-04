@@ -1,0 +1,148 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'rg -n \"class SessionUsageSummaryView|UsageBucket\" backend/app/models/session.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python3 -m ruff check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'python3 -m pytest backend/tests/test_planning_funnel_e2e.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && python3 -m ruff format --check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff format --check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'backend/.venv/bin/python -m pytest backend/tests/test_planning_funnel_e2e.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'backend/.venv/bin/python -m pytest backend/tests/test_planning_funnel_e2e.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'backend/.venv/bin/python -m pytest backend/tests/test_planning_funnel_e2e.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"backend/.venv/bin/python - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom _pytest.monkeypatch import MonkeyPatch\nfrom fastapi.testclient import TestClient\nfrom backend.tests.test_planning_funnel_e2e import planning_funnel_api_client, _run_planning_funnel\nfrom backend.tests.test_planning_funnel_e2e import get_engine, get_session_factory, get_settings\nfrom backend.tests.test_planning_funnel_e2e import Base, create_app, seed_catalog, load_catalog_document, CATALOG_FILE_PATH\nfrom backend.tests.test_planning_funnel_e2e import (\n    PlanningFunnelBriefNormalizationAdapter,\n    PlanningFunnelPitchGenerationAdapter,\n    PlanningFunnelCharacterGenerationAdapter,\n    PlanningFunnelBeatSheetGenerationAdapter,\n)\n\nwith TemporaryDirectory() as tmp:\n    monkeypatch = MonkeyPatch()\n    database_path = Path(tmp) / 'planning-funnel.sqlite3'\n    monkeypatch.setenv('STORYTELLER_DATABASE_URL', f'sqlite+pysqlite:///{database_path}')\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\n    engine = get_engine(); Base.metadata.create_all(engine)\n    app = create_app()\n    app.state.brief_normalization_adapter = PlanningFunnelBriefNormalizationAdapter()\n    app.state.pitch_generation_adapter = PlanningFunnelPitchGenerationAdapter()\n    app.state.character_generation_adapter = PlanningFunnelCharacterGenerationAdapter()\n    app.state.beat_sheet_generation_adapter = PlanningFunnelBeatSheetGenerationAdapter()\n    db_session = get_session_factory()()\n    try:\n        seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))\n    finally:\n        db_session.close()\n    with TestClient(app) as client:\n        journey = _run_planning_funnel(client)\n        snapshot = journey.story_setup['snapshot']\n        print('current_plan_revision=', snapshot['current_plan_revision'])\n        print('plan_revisions=', snapshot['plan_revisions'])\n    monkeypatch.undo()\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && .venv/bin/python - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom _pytest.monkeypatch import MonkeyPatch\nfrom fastapi.testclient import TestClient\nfrom tests.test_planning_funnel_e2e import _run_planning_funnel\nfrom tests.test_planning_funnel_e2e import get_engine, get_session_factory, get_settings\nfrom tests.test_planning_funnel_e2e import Base, create_app, seed_catalog, load_catalog_document, CATALOG_FILE_PATH\nfrom tests.test_planning_funnel_e2e import (\n    PlanningFunnelBriefNormalizationAdapter,\n    PlanningFunnelPitchGenerationAdapter,\n    PlanningFunnelCharacterGenerationAdapter,\n    PlanningFunnelBeatSheetGenerationAdapter,\n)\n\nwith TemporaryDirectory() as tmp:\n    monkeypatch = MonkeyPatch()\n    database_path = Path(tmp) / 'planning-funnel.sqlite3'\n    monkeypatch.setenv('STORYTELLER_DATABASE_URL', f'sqlite+pysqlite:///{database_path}')\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\n    engine = get_engine(); Base.metadata.create_all(engine)\n    app = create_app()\n    app.state.brief_normalization_adapter = PlanningFunnelBriefNormalizationAdapter()\n    app.state.pitch_generation_adapter = PlanningFunnelPitchGenerationAdapter()\n    app.state.character_generation_adapter = PlanningFunnelCharacterGenerationAdapter()\n    app.state.beat_sheet_generation_adapter = PlanningFunnelBeatSheetGenerationAdapter()\n    db_session = get_session_factory()()\n    try:\n        seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))\n    finally:\n        db_session.close()\n    with TestClient(app) as client:\n        journey = _run_planning_funnel(client)\n        snapshot = journey.story_setup['snapshot']\n        print('current_plan_revision=', snapshot['current_plan_revision'])\n        print('plan_revisions=', snapshot['plan_revisions'])\n    monkeypatch.undo()\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && .venv/bin/python - <<'PY'\nimport os\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom _pytest.monkeypatch import MonkeyPatch\nfrom fastapi.testclient import TestClient\nfrom tests.test_planning_funnel_e2e import _run_planning_funnel\nfrom tests.test_planning_funnel_e2e import get_engine, get_session_factory, get_settings\nfrom tests.test_planning_funnel_e2e import Base, create_app, seed_catalog, load_catalog_document, CATALOG_FILE_PATH\nfrom tests.test_planning_funnel_e2e import (\n    PlanningFunnelBriefNormalizationAdapter,\n    PlanningFunnelPitchGenerationAdapter,\n    PlanningFunnelCharacterGenerationAdapter,\n    PlanningFunnelBeatSheetGenerationAdapter,\n)\n\nwith TemporaryDirectory() as tmp:\n    monkeypatch = MonkeyPatch()\n    defaults = {\n        'STORYTELLER_SECRETS_FILE': '',\n        'STORYTELLER_GEMINI_API_KEY': 'test-gemini-key',\n        'STORYTELLER_GCS_ENDPOINT': 'http://gcs:4443',\n        'STORYTELLER_GCS_PROJECT_ID': 'storyteller-local',\n        'STORYTELLER_GCS_PUBLIC_URL': 'http://localhost:8568',\n        'STORYTELLER_GCS_SESSIONS_BUCKET_NAME': 'storyteller-sessions',\n        'STORYTELLER_GCS_AUDIO_BUCKET_NAME': 'storyteller-audio',\n        'STORYTELLER_GCS_EXPORTS_BUCKET_NAME': 'storyteller-exports',\n    }\n    for name, value in defaults.items():\n        monkeypatch.setenv(name, value)\n    database_path = Path(tmp) / 'planning-funnel.sqlite3'\n    monkeypatch.setenv('STORYTELLER_DATABASE_URL', f'sqlite+pysqlite:///{database_path}')\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\n    engine = get_engine(); Base.metadata.create_all(engine)\n    app = create_app()\n    app.state.brief_normalization_adapter = PlanningFunnelBriefNormalizationAdapter()\n    app.state.pitch_generation_adapter = PlanningFunnelPitchGenerationAdapter()\n    app.state.character_generation_adapter = PlanningFunnelCharacterGenerationAdapter()\n    app.state.beat_sheet_generation_adapter = PlanningFunnelBeatSheetGenerationAdapter()\n    db_session = get_session_factory()()\n    try:\n        seed_catalog(db_session, load_catalog_document(CATALOG_FILE_PATH))\n    finally:\n        db_session.close()\n    with TestClient(app) as client:\n        journey = _run_planning_funnel(client)\n        snapshot = journey.story_setup['snapshot']\n        print('current_plan_revision=', snapshot['current_plan_revision'])\n        print('plan_revisions=', snapshot['plan_revisions'])\n        print('history event types=', [(e['event_type'], e.get('stage')) for e in journey.history['events']])\n    monkeypatch.undo()\n    get_settings.cache_clear(); get_engine.cache_clear(); get_session_factory.cache_clear()\nPY\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff format --check tests/test_planning_funnel_e2e.py'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T12:50:53.102601Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_planning_funnel_e2e.py:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 217,
+    "file_paths": [
+      "backend/tests/test_planning_funnel_e2e.py",
+      "docs/planning-funnel-e2e-test.md",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/59_planning_funnel_end_to_end_test/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4e37-3423-7b81-ad09-4bcc3c69ab29",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 7479808,
+      "input_tokens": 8135929,
+      "output_tokens": 34871,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T12:50:53.102601Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_planning_funnel_e2e.py:"
+  ],
+  "head_commit": "e5839ce1f5d514c3e12a26095fd855f53730e545",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "59-planning-funnel-e2e-test.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_59_planning_funnel_end_to_end_test",
+  "task_name_human": "59 planning funnel end to end test",
+  "task_name_system": "59_planning_funnel_end_to_end_test",
+  "timing": {
+    "duration_seconds": 794.0,
+    "finished_at": "2026-04-02T05:55:26-07:00",
+    "started_at": "2026-04-02T05:42:12-07:00"
+  }
+}

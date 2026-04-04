@@ -1,0 +1,118 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/11_postgresql_schema_and_database_migrations/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'backend/.venv/bin/python -m pip install -r backend/requirements.txt'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff check app tests'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m ruff check app tests --fix'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && STORYTELLER_SECRETS_FILE='' STORYTELLER_DATABASE_URL='postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller_prompt11' .venv/bin/alembic upgrade head\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'cd backend && .venv/bin/python -m pytest tests/test_migrations.py'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"cd backend && STORYTELLER_SECRETS_FILE='' STORYTELLER_DATABASE_URL='postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller_prompt11' .venv/bin/alembic upgrade head\"",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 174,
+    "file_paths": [
+      "backend/requirements.txt",
+      "backend/app/db/__init__.py",
+      "backend/app/db/base.py",
+      "backend/app/db/models.py",
+      "backend/app/db/session.py",
+      "backend/alembic.ini",
+      "backend/migrations/env.py",
+      "backend/migrations/script.py.mako",
+      "backend/migrations/versions/20260331_01_initial_storyteller_schema.py",
+      "backend/tests/test_db_models.py",
+      "backend/tests/test_migrations.py",
+      "backend/Dockerfile",
+      "backend/README.md",
+      "backend/migrations/README.md",
+      "docs/architecture-overview.md",
+      "docs/domain-model.md",
+      "prompts/11-postgres-schema-and-migrations.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d478c-27f0-7831-becb-be356b09c663",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 4752512,
+      "input_tokens": 4921249,
+      "output_tokens": 50794,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "d9e908af19b7a4af7331b6930b5a1cc3e4ffa7f6",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "11-postgres-schema-and-migrations.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-11-postgres-schema-and-migrations",
+  "task_name_human": "11 \u2014 PostgreSQL Schema and Database Migrations",
+  "task_name_system": "11_postgresql_schema_and_database_migrations",
+  "timing": {
+    "duration_seconds": 1065.0,
+    "finished_at": "2026-03-31T22:55:23-07:00",
+    "started_at": "2026-03-31T22:37:38-07:00"
+  }
+}

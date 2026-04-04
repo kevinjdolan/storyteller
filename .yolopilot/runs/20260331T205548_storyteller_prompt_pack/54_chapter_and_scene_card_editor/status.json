@@ -1,0 +1,143 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"rg -n \\\"Outline ready:\\\" frontend/src/features/session -g'*.test.ts' -g'*.test.tsx'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pnpm --dir frontend test --run StorySetupStage.test.tsx'",
+        "exit_code": 127,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'pytest backend/tests/test_outline_generation_service.py backend/tests/test_story_tools.py -q'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend test -- --run StorySetupStage.test.tsx'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'ruff check backend/app/models/story_outline.py backend/app/models/session.py backend/app/models/events.py backend/app/models/story_tools.py backend/app/models/__init__.py backend/app/services/outline_generation.py backend/app/services/story_outline_editor.py backend/app/services/story_tools.py backend/app/services/session_hydration.py backend/app/services/event_log.py backend/app/services/conversation_memory.py backend/tests/test_outline_generation_service.py backend/tests/test_story_tools.py --fix'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npm --prefix frontend run build'",
+        "exit_code": 2,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'docker compose ps --format json'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [
+      "2026-04-02T10:18:58.619273Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/session.py:",
+      "2026-04-02T10:20:51.669943Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_hydration.py:",
+      "2026-04-02T10:28:18.853333Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/chat/sessionChat.ts:",
+      "2026-04-02T10:30:57.778901Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_story_tools.py:",
+      "2026-04-02T10:33:50.223430Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/StorySetupStage.tsx:"
+    ],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 426,
+    "file_paths": [
+      "backend/app/models/story_outline.py",
+      "backend/app/models/session.py",
+      "backend/app/models/events.py",
+      "backend/app/services/story_outline_editor.py",
+      "backend/app/services/outline_generation.py",
+      "backend/app/services/session_hydration.py",
+      "backend/app/services/event_log.py",
+      "backend/app/models/story_tools.py",
+      "backend/app/services/story_tools.py",
+      "backend/app/models/__init__.py",
+      "frontend/src/api/sessions.ts",
+      "frontend/src/features/session/StorySetupStage.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "backend/app/services/conversation_memory.py",
+      "frontend/src/features/session/chat/sessionChat.ts",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/StorySetupStage.test.tsx",
+      "backend/tests/test_outline_generation_service.py",
+      "backend/tests/test_story_tools.py",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/54_chapter_and_scene_card_editor/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4dae-39df-7e02-88e9-42c3828bbec8",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 19345792,
+      "input_tokens": 19930567,
+      "output_tokens": 67837,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [
+    "2026-04-02T10:18:58.619273Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/models/session.py:",
+    "2026-04-02T10:20:51.669943Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/app/services/session_hydration.py:",
+    "2026-04-02T10:28:18.853333Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/chat/sessionChat.ts:",
+    "2026-04-02T10:30:57.778901Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/backend/tests/test_story_tools.py:",
+    "2026-04-02T10:33:50.223430Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/kevin/code/storyteller/frontend/src/features/session/StorySetupStage.tsx:"
+  ],
+  "head_commit": "6ae7c2fe56083f4f68b3f98cac4e589b1c79ed2c",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "54-chapter-scene-card-editor.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_54_chapter_and_scene_card_editor",
+  "task_name_human": "54 chapter and scene card editor",
+  "task_name_system": "54_chapter_and_scene_card_editor",
+  "timing": {
+    "duration_seconds": 1579.0,
+    "finished_at": "2026-04-02T03:38:54-07:00",
+    "started_at": "2026-04-02T03:12:35-07:00"
+  }
+}

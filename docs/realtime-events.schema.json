@@ -1,0 +1,1915 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storyteller Realtime Contracts",
+  "bundle_schema_version": 1,
+  "schemas": {
+    "session_subscription_request": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "action": {
+          "const": "subscribe",
+          "default": "subscribe",
+          "title": "Action",
+          "type": "string"
+        },
+        "session_id": {
+          "minLength": 1,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "tab_id": {
+          "minLength": 1,
+          "title": "Tab Id",
+          "type": "string"
+        },
+        "last_sequence_number": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Sequence Number"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        }
+      },
+      "required": [
+        "session_id",
+        "tab_id"
+      ],
+      "title": "SessionSubscriptionRequest",
+      "type": "object"
+    },
+    "session_subscription_ack": {
+      "$defs": {
+        "EventActorType": {
+          "enum": [
+            "user",
+            "assistant",
+            "system",
+            "service"
+          ],
+          "title": "EventActorType",
+          "type": "string"
+        },
+        "RealtimeReplayStrategy": {
+          "enum": [
+            "none",
+            "delta",
+            "hydrate"
+          ],
+          "title": "RealtimeReplayStrategy",
+          "type": "string"
+        },
+        "SessionEventActor": {
+          "additionalProperties": false,
+          "properties": {
+            "actor_type": {
+              "$ref": "#/$defs/EventActorType"
+            },
+            "actor_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Actor Id"
+            }
+          },
+          "required": [
+            "actor_type"
+          ],
+          "title": "SessionEventActor",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "session_id": {
+          "minLength": 1,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "channel": {
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "action": {
+          "const": "subscribed",
+          "default": "subscribed",
+          "title": "Action",
+          "type": "string"
+        },
+        "connection_id": {
+          "minLength": 1,
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "tab_id": {
+          "minLength": 1,
+          "title": "Tab Id",
+          "type": "string"
+        },
+        "accepted_at": {
+          "format": "date-time",
+          "title": "Accepted At",
+          "type": "string"
+        },
+        "replay_strategy": {
+          "$ref": "#/$defs/RealtimeReplayStrategy",
+          "default": "none"
+        },
+        "replay_from_sequence_number": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replay From Sequence Number"
+        },
+        "latest_sequence_number": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest Sequence Number"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "local_actor": {
+          "$ref": "#/$defs/SessionEventActor"
+        }
+      },
+      "required": [
+        "session_id",
+        "channel",
+        "connection_id",
+        "tab_id",
+        "accepted_at",
+        "local_actor"
+      ],
+      "title": "SessionSubscriptionAck",
+      "type": "object"
+    },
+    "session_event": {
+      "$defs": {
+        "ChatContentFormat": {
+          "enum": [
+            "plain_text",
+            "markdown"
+          ],
+          "title": "ChatContentFormat",
+          "type": "string"
+        },
+        "ChatMessageEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "message_id": {
+              "minLength": 1,
+              "title": "Message Id",
+              "type": "string"
+            },
+            "message_role": {
+              "$ref": "#/$defs/ChatMessageRole"
+            },
+            "content": {
+              "minLength": 1,
+              "title": "Content",
+              "type": "string"
+            },
+            "content_format": {
+              "$ref": "#/$defs/ChatContentFormat",
+              "default": "plain_text"
+            },
+            "source": {
+              "default": "chat",
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "message_role",
+            "content"
+          ],
+          "title": "ChatMessageEventPayload",
+          "type": "object"
+        },
+        "ChatMessageRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "chat.message",
+              "default": "chat.message",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/ChatMessageEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "ChatMessageRealtimeEvent",
+          "type": "object"
+        },
+        "ChatMessageRole": {
+          "enum": [
+            "user",
+            "assistant",
+            "system",
+            "tool"
+          ],
+          "title": "ChatMessageRole",
+          "type": "string"
+        },
+        "CompositionChunkEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "job_id": {
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            },
+            "segment_id": {
+              "minLength": 1,
+              "title": "Segment Id",
+              "type": "string"
+            },
+            "segment_index": {
+              "minimum": 1,
+              "title": "Segment Index",
+              "type": "integer"
+            },
+            "chunk_index": {
+              "minimum": 0,
+              "title": "Chunk Index",
+              "type": "integer"
+            },
+            "chunk_kind": {
+              "$ref": "#/$defs/CompositionChunkKind",
+              "default": "delta"
+            },
+            "text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Text"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "cumulative_character_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cumulative Character Count"
+            },
+            "cumulative_word_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cumulative Word Count"
+            },
+            "is_final_chunk": {
+              "default": false,
+              "title": "Is Final Chunk",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "job_id",
+            "segment_id",
+            "segment_index",
+            "chunk_index"
+          ],
+          "title": "CompositionChunkEventPayload",
+          "type": "object"
+        },
+        "CompositionChunkKind": {
+          "enum": [
+            "segment_start",
+            "delta",
+            "segment_summary"
+          ],
+          "title": "CompositionChunkKind",
+          "type": "string"
+        },
+        "CompositionChunkRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "composition.chunk",
+              "default": "composition.chunk",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "const": "composition",
+              "default": "composition",
+              "title": "Stage",
+              "type": "string"
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": false,
+              "default": false,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "const": "live",
+              "default": "live",
+              "title": "Delivery",
+              "type": "string"
+            },
+            "sequence_number": {
+              "default": null,
+              "title": "Sequence Number",
+              "type": "null"
+            },
+            "event_log_entry_id": {
+              "default": null,
+              "title": "Event Log Entry Id",
+              "type": "null"
+            },
+            "payload": {
+              "$ref": "#/$defs/CompositionChunkEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "payload"
+          ],
+          "title": "CompositionChunkRealtimeEvent",
+          "type": "object"
+        },
+        "CompositionInterruptionRequestView": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "request_kind": {
+              "title": "Request Kind",
+              "type": "string"
+            },
+            "state": {
+              "title": "State",
+              "type": "string"
+            },
+            "origin": {
+              "title": "Origin",
+              "type": "string"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Instructions"
+            },
+            "rewrite_from_segment_index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rewrite From Segment Index"
+            },
+            "requested_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Status"
+            },
+            "requested_segment_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Segment Id"
+            },
+            "requested_segment_index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Segment Index"
+            },
+            "requested_progress_percent": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Requested Progress Percent"
+            },
+            "resolution_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Resolution Summary"
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "resolved_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Resolved At"
+            }
+          },
+          "required": [
+            "id",
+            "request_kind",
+            "state",
+            "origin",
+            "message",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "CompositionInterruptionRequestView",
+          "type": "object"
+        },
+        "ErrorNotificationEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "code": {
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            },
+            "severity": {
+              "$ref": "#/$defs/ErrorSeverity",
+              "default": "error"
+            },
+            "message": {
+              "minLength": 1,
+              "title": "Message",
+              "type": "string"
+            },
+            "retryable": {
+              "default": false,
+              "title": "Retryable",
+              "type": "boolean"
+            },
+            "detail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Detail"
+            },
+            "job_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Job Id"
+            },
+            "job_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/JobKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "title": "ErrorNotificationEventPayload",
+          "type": "object"
+        },
+        "ErrorNotificationRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "error.notification",
+              "default": "error.notification",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/ErrorNotificationEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "ErrorNotificationRealtimeEvent",
+          "type": "object"
+        },
+        "ErrorSeverity": {
+          "enum": [
+            "warning",
+            "error"
+          ],
+          "title": "ErrorSeverity",
+          "type": "string"
+        },
+        "EventActorType": {
+          "enum": [
+            "user",
+            "assistant",
+            "system",
+            "service"
+          ],
+          "title": "EventActorType",
+          "type": "string"
+        },
+        "JobKind": {
+          "enum": [
+            "composition",
+            "audio"
+          ],
+          "title": "JobKind",
+          "type": "string"
+        },
+        "JobProgressEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "job_id": {
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            },
+            "job_kind": {
+              "$ref": "#/$defs/JobKind"
+            },
+            "status": {
+              "$ref": "#/$defs/RealtimeJobStatus"
+            },
+            "progress_percent": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Progress Percent"
+            },
+            "current_step": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Current Step"
+            },
+            "current_step_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Current Step Index"
+            },
+            "total_steps": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Total Steps"
+            },
+            "completed_segments": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Completed Segments"
+            },
+            "current_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Current Segment Index"
+            },
+            "total_segments": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Total Segments"
+            },
+            "segment_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Segment Id"
+            },
+            "segment_status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Segment Status"
+            },
+            "eta_seconds": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Eta Seconds"
+            },
+            "estimated_duration_seconds": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Duration Seconds"
+            },
+            "latest_asset_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Latest Asset Id"
+            },
+            "latest_asset_kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Latest Asset Kind"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Message"
+            },
+            "interruption_request": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompositionInterruptionRequestView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "job_id",
+            "job_kind",
+            "status"
+          ],
+          "title": "JobProgressEventPayload",
+          "type": "object"
+        },
+        "JobProgressRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "job.progress",
+              "default": "job.progress",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/JobProgressEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "JobProgressRealtimeEvent",
+          "type": "object"
+        },
+        "JobStatusEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "job_id": {
+              "minLength": 1,
+              "title": "Job Id",
+              "type": "string"
+            },
+            "job_kind": {
+              "$ref": "#/$defs/JobKind"
+            },
+            "previous_status": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RealtimeJobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "status": {
+              "$ref": "#/$defs/RealtimeJobStatus"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Message"
+            },
+            "stop_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop Reason"
+            },
+            "error_message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Error Message"
+            },
+            "current_segment_index": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Current Segment Index"
+            },
+            "total_segments": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Total Segments"
+            },
+            "latest_asset_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Latest Asset Id"
+            },
+            "latest_asset_kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Latest Asset Kind"
+            },
+            "interruption_request": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CompositionInterruptionRequestView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "job_id",
+            "job_kind",
+            "status"
+          ],
+          "title": "JobStatusEventPayload",
+          "type": "object"
+        },
+        "JobStatusRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "job.status",
+              "default": "job.status",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/JobStatusEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "JobStatusRealtimeEvent",
+          "type": "object"
+        },
+        "RealtimeDeliveryMode": {
+          "enum": [
+            "live",
+            "replay"
+          ],
+          "title": "RealtimeDeliveryMode",
+          "type": "string"
+        },
+        "RealtimeJobStatus": {
+          "enum": [
+            "queued",
+            "in_progress",
+            "paused",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "RealtimeJobStatus",
+          "type": "string"
+        },
+        "SessionEventActor": {
+          "additionalProperties": false,
+          "properties": {
+            "actor_type": {
+              "$ref": "#/$defs/EventActorType"
+            },
+            "actor_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Actor Id"
+            }
+          },
+          "required": [
+            "actor_type"
+          ],
+          "title": "SessionEventActor",
+          "type": "object"
+        },
+        "UIActionEchoEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "action": {
+              "minLength": 1,
+              "title": "Action",
+              "type": "string"
+            },
+            "result": {
+              "$ref": "#/$defs/UIActionEchoResult",
+              "default": "accepted"
+            },
+            "summary": {
+              "minLength": 1,
+              "title": "Summary",
+              "type": "string"
+            },
+            "control_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Control Id"
+            },
+            "value_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Value Summary"
+            },
+            "origin": {
+              "default": "workspace",
+              "title": "Origin",
+              "type": "string"
+            },
+            "detail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Detail"
+            },
+            "chat_message_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chat Message Id"
+            }
+          },
+          "required": [
+            "action",
+            "summary"
+          ],
+          "title": "UIActionEchoEventPayload",
+          "type": "object"
+        },
+        "UIActionEchoRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "ui.action_echo",
+              "default": "ui.action_echo",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/UIActionEchoEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "UIActionEchoRealtimeEvent",
+          "type": "object"
+        },
+        "UIActionEchoResult": {
+          "enum": [
+            "accepted",
+            "rejected"
+          ],
+          "title": "UIActionEchoResult",
+          "type": "string"
+        },
+        "WorkflowStage": {
+          "enum": [
+            "genre",
+            "tone",
+            "brief",
+            "pitches",
+            "characters",
+            "beats",
+            "story_setup",
+            "composition",
+            "audio",
+            "finalize"
+          ],
+          "title": "WorkflowStage",
+          "type": "string"
+        },
+        "WorkflowStageChangedEventPayload": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "previous_status": {
+              "$ref": "#/$defs/WorkflowStageState"
+            },
+            "status": {
+              "$ref": "#/$defs/WorkflowStageState"
+            },
+            "detail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Detail"
+            },
+            "invalidated_stages": {
+              "items": {
+                "$ref": "#/$defs/WorkflowStage"
+              },
+              "title": "Invalidated Stages",
+              "type": "array"
+            },
+            "current_stage": {
+              "$ref": "#/$defs/WorkflowStage"
+            },
+            "resume_stage": {
+              "$ref": "#/$defs/WorkflowStage"
+            },
+            "furthest_completed_stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "overall_status": {
+              "$ref": "#/$defs/WorkflowStageState"
+            }
+          },
+          "required": [
+            "previous_status",
+            "status",
+            "current_stage",
+            "resume_stage",
+            "overall_status"
+          ],
+          "title": "WorkflowStageChangedEventPayload",
+          "type": "object"
+        },
+        "WorkflowStageChangedRealtimeEvent": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "session_id": {
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            },
+            "channel": {
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            },
+            "event_id": {
+              "minLength": 1,
+              "title": "Event Id",
+              "type": "string"
+            },
+            "type": {
+              "const": "workflow.stage_changed",
+              "default": "workflow.stage_changed",
+              "title": "Type",
+              "type": "string"
+            },
+            "actor": {
+              "$ref": "#/$defs/SessionEventActor"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkflowStage"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "correlation_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Correlation Id"
+            },
+            "replayable": {
+              "const": true,
+              "default": true,
+              "title": "Replayable",
+              "type": "boolean"
+            },
+            "delivery": {
+              "$ref": "#/$defs/RealtimeDeliveryMode",
+              "default": "live"
+            },
+            "sequence_number": {
+              "minimum": 1,
+              "title": "Sequence Number",
+              "type": "integer"
+            },
+            "event_log_entry_id": {
+              "minLength": 1,
+              "title": "Event Log Entry Id",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/WorkflowStageChangedEventPayload"
+            }
+          },
+          "required": [
+            "session_id",
+            "channel",
+            "event_id",
+            "actor",
+            "created_at",
+            "sequence_number",
+            "event_log_entry_id",
+            "payload"
+          ],
+          "title": "WorkflowStageChangedRealtimeEvent",
+          "type": "object"
+        },
+        "WorkflowStageState": {
+          "enum": [
+            "draft",
+            "in_progress",
+            "completed",
+            "needs_regeneration"
+          ],
+          "title": "WorkflowStageState",
+          "type": "string"
+        }
+      },
+      "discriminator": {
+        "mapping": {
+          "chat.message": "#/$defs/ChatMessageRealtimeEvent",
+          "composition.chunk": "#/$defs/CompositionChunkRealtimeEvent",
+          "error.notification": "#/$defs/ErrorNotificationRealtimeEvent",
+          "job.progress": "#/$defs/JobProgressRealtimeEvent",
+          "job.status": "#/$defs/JobStatusRealtimeEvent",
+          "ui.action_echo": "#/$defs/UIActionEchoRealtimeEvent",
+          "workflow.stage_changed": "#/$defs/WorkflowStageChangedRealtimeEvent"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChatMessageRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/WorkflowStageChangedRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/UIActionEchoRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/CompositionChunkRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/JobProgressRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/JobStatusRealtimeEvent"
+        },
+        {
+          "$ref": "#/$defs/ErrorNotificationRealtimeEvent"
+        }
+      ]
+    }
+  }
+}

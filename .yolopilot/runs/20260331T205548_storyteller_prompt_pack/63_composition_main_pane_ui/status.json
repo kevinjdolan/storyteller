@@ -1,0 +1,106 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc \"curl -s http://127.0.0.1:8565/api/v1/sessions | jq '.sessions[:5] | map({id, display_title, current_stage, resume_stage})'\"",
+        "exit_code": 5,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker compose -f infra/compose/docker-compose.yml exec -T browser sh -lc 'cd /workspace/tools/webapp-qa && node --input-type=module - <<\\\"EOF\\\"\nimport puppeteer from \\\"puppeteer\\\";\n\nconst browser = await puppeteer.launch({headless:true,args:[\\\"--no-sandbox\\\",\\\"--disable-setuid-sandbox\\\"]});\nconst page = await browser.newPage();\nawait page.setViewport({ width: 1440, height: 960 });\nawait page.goto(\\\"http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=composition\\\", { waitUntil: \\\"networkidle2\\\", timeout: 20000 });\nawait page.waitForFunction(() => document.body.innerText.includes(\\\"Live manuscript\\\"), { timeout: 20000 });\nawait page.evaluate(() => {\n  const section = document.querySelector(\\\"[aria-label='Composition stage']\\\");\n  section?.scrollIntoView({ block: \\\"start\\\", behavior: \\\"instant\\\" });\n});\nawait new Promise((resolve) => setTimeout(resolve, 800));\nawait page.screenshot({ path: \\\"/workspace/.artifacts/webapp-qa/prompt-63-before-composition-viewport.png\\\" });\nconst manuscriptPanels = await page.\"'$$(\".composition-stage__panel\");\nif (manuscriptPanels[0]) {\n  await manuscriptPanels[0].screenshot({ path: \"/workspace/.artifacts/webapp-qa/prompt-63-before-manuscript-panel.png\" });\n}\nif (manuscriptPanels[1]) {\n  await manuscriptPanels[1].screenshot({ path: \"/workspace/.artifacts/webapp-qa/prompt-63-before-rewrite-panel.png\" });\n}\nawait browser.close();\nEOF'\"'\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc \"docker compose -f infra/compose/docker-compose.yml exec -T browser /bin/sh -lc \\\"cd /workspace/tools/webapp-qa && node --input-type=module <<'EOF'\nimport puppeteer from 'puppeteer';\n\nconst browser = await puppeteer.launch({\n  headless: true,\n  args: ['--no-sandbox', '--disable-setuid-sandbox'],\n});\nconst page = await browser.newPage();\nawait page.setViewport({ width: 1440, height: 960 });\nawait page.goto('http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=composition', {\n  waitUntil: 'networkidle2',\n  timeout: 20000,\n});\nawait page.waitForFunction(() => document.body.innerText.includes('Live manuscript'), { timeout: 20000 });\nawait page.evaluate(() => {\n  const section = document.querySelector(\\\"[aria-label='Composition stage']\\\");\n  section?.scrollIntoView({ block: 'start', behavior: 'instant' });\n});\nawait new Promise((resolve) => setTimeout(resolve, 800));\nawait page.screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-composition-viewport.png' });\nconst panels = await page.\"'$$('\"'.composition-stage__panel');\nif (panels[0]) {\n  await panels[0].screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-manuscript-panel.png' });\n}\nif (panels[1]) {\n  await panels[1].screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-rewrite-panel.png' });\n}\nawait browser.close();\nEOF\\\"\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/bash -c \"docker compose -f infra/compose/docker-compose.yml exec -T browser /bin/sh -lc \\\"cd /workspace/tools/webapp-qa && node --input-type=module <<'EOF'\nimport puppeteer from 'puppeteer';\n\nconst browser = await puppeteer.launch({\n  headless: true,\n  args: ['--no-sandbox', '--disable-setuid-sandbox'],\n});\nconst page = await browser.newPage();\nawait page.setViewport({ width: 1440, height: 960 });\nawait page.goto('http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=composition', {\n  waitUntil: 'networkidle2',\n  timeout: 20000,\n});\nawait page.waitForFunction(() => document.body.innerText.includes('Live manuscript'), { timeout: 20000 });\nawait page.evaluate(() => {\n  const section = document.querySelector(\"'`[aria-label=\"Composition stage\"]`);\n  section?.scrollIntoView({ block: '\"'start', behavior: 'instant' });\n});\nawait new Promise((resolve) => setTimeout(resolve, 800));\nawait page.screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-composition-viewport.png' });\nconst panels = await page.\"'$$('\"'.composition-stage__panel');\nif (panels[0]) {\n  await panels[0].screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-manuscript-panel.png' });\n}\nif (panels[1]) {\n  await panels[1].screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-before-rewrite-panel.png' });\n}\nawait browser.close();\nEOF\\\"\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/bash -c \"docker compose -f infra/compose/docker-compose.yml exec -T browser /bin/sh -lc 'cd /workspace/tools/webapp-qa && node --input-type=module' <<'EOF'\nimport puppeteer from 'puppeteer';\n\nconst browser = await puppeteer.launch({\n  headless: true,\n  args: ['--no-sandbox', '--disable-setuid-sandbox'],\n});\nconst page = await browser.newPage();\nawait page.setViewport({ width: 1440, height: 960 });\nawait page.goto('http://frontend:8566/sessions/8155bbd7-2de7-4d4c-a961-d35485225ed0?stage=composition', {\n  waitUntil: 'networkidle2',\n  timeout: 20000,\n});\nawait page.waitForFunction(() => document.body.innerText.includes('Pause writing') && document.body.innerText.includes('Earlier accepted manuscript'), { timeout: 20000 });\nawait page.evaluate(() => {\n  const target = document.querySelector('[data-testid=\\\"composition-main-pane\\\"]');\n  target?.scrollIntoView({ block: 'start' });\n});\nawait new Promise((resolve) => setTimeout(resolve, 700));\nawait page.screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-after-live-desktop-viewport.png' });\nconst archive = await page.\"'$('\"'[data-testid=\\\"composition-manuscript-archive\\\"]');\nif (archive) {\n  await archive.screenshot({ path: '/workspace/.artifacts/webapp-qa/prompt-63-after-live-archive.png' });\n}\nawait browser.close();\nEOF\"",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'npx prettier --check src/features/session/CompositionStage.tsx src/features/session/CompositionStage.test.tsx src/pages/session/SessionWorkspacePage.tsx src/styles/index.css'",
+        "exit_code": 1,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 236,
+    "file_paths": [
+      "frontend/src/features/session/CompositionStage.tsx",
+      "frontend/src/pages/session/SessionWorkspacePage.tsx",
+      "frontend/src/styles/index.css",
+      "frontend/src/features/session/CompositionStage.test.tsx",
+      ".yolopilot/runs/20260331T205548_storyteller_prompt_pack/63_composition_main_pane_ui/summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d4ec3-8891-72a2-9f3b-eded3b509350",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 9179520,
+      "input_tokens": 9478506,
+      "output_tokens": 48930,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "f5dbbdafe67b0f945557ff8e3fed64fb444fb479",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "63-composition-main-pane-ui.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "codex",
+  "task_branch": "yolopilot_init_38_session_replay_and_resume_hydration_63_composition_main_pane_ui",
+  "task_name_human": "63 composition main pane ui",
+  "task_name_system": "63_composition_main_pane_ui",
+  "timing": {
+    "duration_seconds": 1124.0,
+    "finished_at": "2026-04-02T08:34:13-07:00",
+    "started_at": "2026-04-02T08:15:29-07:00"
+  }
+}

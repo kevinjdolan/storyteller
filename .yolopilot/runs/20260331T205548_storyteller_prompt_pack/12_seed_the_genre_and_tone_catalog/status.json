@@ -1,0 +1,98 @@
+{
+  "artifacts": {
+    "codex_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/codex.log.jsonlines",
+    "config_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/config.yaml",
+    "prompt_enriched_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/prompt_enriched.md",
+    "prompt_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/prompt.md",
+    "status_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/status.json",
+    "summary_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/summary.md",
+    "yolopilot_log_file": "/Users/kevin/code/storyteller/.yolopilot/runs/20260331T205548_storyteller_prompt_pack/12_seed_the_genre_and_tone_catalog/yolopilot.log.jsonlines"
+  },
+  "attempt_count": 1,
+  "codex": {
+    "command_failures": [
+      {
+        "command": "/bin/zsh -lc 'cd backend && if [[ -x .venv/bin/python ]]; then .venv/bin/python -m pytest tests/test_catalog.py -q; else python3 -m pytest tests/test_catalog.py -q; fi'",
+        "exit_code": 1,
+        "status": "failed"
+      },
+      {
+        "command": "/bin/zsh -lc 'make backend-lint'",
+        "exit_code": 2,
+        "status": "failed"
+      }
+    ],
+    "error_messages": [],
+    "estimated_cost_usd": {
+      "cached_input_usd": null,
+      "input_usd": null,
+      "output_usd": null,
+      "total_usd": null
+    },
+    "event_count": 142,
+    "file_paths": [
+      "backend/app/data/genre_tone_catalog.yaml",
+      "backend/app/models/catalog.py",
+      "backend/app/db/models.py",
+      "backend/app/models/__init__.py",
+      "backend/app/seed_catalog.py",
+      "backend/app/services/catalog.py",
+      "backend/migrations/versions/20260331_02_add_tone_profile_planning_hints.py",
+      "backend/tests/test_catalog.py",
+      "backend/tests/test_db_models.py",
+      "backend/tests/test_migrations.py",
+      "Makefile",
+      "backend/README.md",
+      "backend/migrations/README.md",
+      "docs/README.md",
+      "docs/domain-model.md",
+      "docs/genre-tone-catalog.md",
+      "prompts/12-seed-genres-and-tones.summary.md"
+    ],
+    "retryable_error_messages": [],
+    "retryable_failure_detected": false,
+    "thread_id": "019d479c-66e9-7cc3-9e38-c72fbda37812",
+    "turn_completed_count": 1,
+    "turn_failed_count": 0,
+    "usage": {
+      "cached_input_tokens": 2909952,
+      "input_tokens": 3076410,
+      "output_tokens": 31628,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "codex_returncode": 0,
+  "config": {
+    "cached_input_cost_per_1m": null,
+    "codex_command": "npx -y @openai/codex",
+    "conda": "yolopilot",
+    "initial_retry_delay_seconds": 10,
+    "input_cost_per_1m": null,
+    "max_retries": 5,
+    "model": "gpt-5.4",
+    "output_cost_per_1m": null,
+    "reasoning_effort": "xhigh",
+    "sandbox": "danger-full-access",
+    "version": 0.0
+  },
+  "failure_messages": [],
+  "head_commit": "c6a66c1b92043dc0385586bfee12130403fda6a9",
+  "overall_status": "succeeded",
+  "retryable_failure": false,
+  "run_branch": "yolopilot-init-38-session-replay-and-resume-hydration",
+  "run_name_human": "Storyteller Prompt Pack",
+  "run_name_system": "storyteller_prompt_pack",
+  "schema_version": 1,
+  "source_name": "12-seed-genres-and-tones.md",
+  "status_detail": "Task completed successfully.",
+  "summary_exists": true,
+  "summary_source": "legacy_summary_file",
+  "task_branch": "yolopilot-init-12-seed-genres-and-tones",
+  "task_name_human": "12 \u2014 Seed the Genre and Tone Catalog",
+  "task_name_system": "12_seed_the_genre_and_tone_catalog",
+  "timing": {
+    "duration_seconds": 654.0,
+    "finished_at": "2026-03-31T23:06:17-07:00",
+    "started_at": "2026-03-31T22:55:23-07:00"
+  }
+}
