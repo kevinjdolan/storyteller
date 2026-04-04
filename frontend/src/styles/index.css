@@ -3179,7 +3179,9 @@ h4 {
 }
 
 .finalize-stage__reader,
-.finalize-stage__listen-card {
+.finalize-stage__listen-card,
+.finalize-stage__reader-guide,
+.finalize-stage__reader-frame {
   display: grid;
   gap: var(--space-4);
   padding: clamp(1rem, 1.8vw, 1.35rem);
@@ -3195,27 +3197,176 @@ h4 {
 }
 
 .finalize-stage__reader {
-  max-height: 38rem;
+  grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+  align-items: start;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.finalize-stage__reader-sidebar {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.finalize-stage__reader-guide {
+  position: sticky;
+  top: var(--space-4);
+}
+
+.finalize-stage__reader-guide-copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.finalize-stage__reader-guide-copy h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--color-ink-strong);
+}
+
+.finalize-stage__reader-guide-copy p:last-child {
+  margin: 0;
+  color: var(--color-ink-soft);
+}
+
+.finalize-stage__reader-stage-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.finalize-stage__toc {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.finalize-stage__toc-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finalize-stage__toc-button {
+  width: 100%;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(39, 69, 99, 0.1);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.74);
+  color: inherit;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.finalize-stage__toc-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(39, 69, 99, 0.18);
+}
+
+.finalize-stage__toc-button[aria-current='true'] {
+  border-color: rgba(39, 69, 99, 0.2);
+  background: rgba(240, 245, 249, 0.96);
+  box-shadow:
+    inset 0 0 0 1px rgba(39, 69, 99, 0.08),
+    0 16px 30px rgba(24, 32, 40, 0.08);
+}
+
+.finalize-stage__toc-button strong {
+  color: var(--color-ink-strong);
+  font-size: 0.95rem;
+}
+
+.finalize-stage__toc-button span,
+.finalize-stage__reader-current span {
+  color: var(--color-ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.finalize-stage__reader-frame {
+  gap: var(--space-3);
+  min-height: 40rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.finalize-stage__reader-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) 0;
+}
+
+.finalize-stage__reader-current {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.finalize-stage__reader-current strong {
+  color: var(--color-ink-strong);
+  font-size: 1rem;
+}
+
+.finalize-stage__reader-body {
+  max-height: 42rem;
   overflow: auto;
+  padding: 0 var(--space-5) var(--space-5);
+  scroll-behavior: smooth;
 }
 
 .finalize-stage__reader-copy {
+  max-width: 70ch;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--space-9);
+}
+
+.finalize-stage__reader-section {
   display: grid;
   gap: var(--space-4);
+  scroll-margin-top: var(--space-6);
+}
+
+.finalize-stage__reader-section + .finalize-stage__reader-section {
+  padding-top: var(--space-2);
+  border-top: 1px solid rgba(39, 69, 99, 0.08);
+}
+
+.finalize-stage__reader-section-header {
+  display: grid;
+  gap: var(--space-2);
 }
 
 .finalize-stage__reader-copy h4 {
   margin: 0;
   font-family: var(--font-family-display);
-  font-size: clamp(1.35rem, 1.8vw, 1.75rem);
+  font-size: clamp(1.55rem, 2vw, 2.05rem);
   color: var(--color-ink-strong);
+}
+
+.finalize-stage__reader-subheading {
+  margin: 0;
+  color: var(--color-brand);
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
 }
 
 .finalize-stage__reader-copy p {
   margin: 0;
   color: var(--color-ink-strong);
-  line-height: 1.9;
-  font-size: 1.02rem;
+  line-height: 1.92;
+  font-size: 1.06rem;
 }
 
 .finalize-stage__surface-note,
@@ -3717,6 +3868,22 @@ h4 {
   .finalize-stage__review-panel .summary-panel--sticky {
     position: static;
   }
+
+  .finalize-stage__reader {
+    grid-template-columns: 1fr;
+  }
+
+  .finalize-stage__reader-guide {
+    position: static;
+  }
+
+  .finalize-stage__reader-controls {
+    padding-inline: var(--space-4);
+  }
+
+  .finalize-stage__reader-body {
+    padding-inline: var(--space-4);
+  }
 }
 
 @media (max-width: 640px) {
@@ -3819,6 +3986,16 @@ h4 {
   .finalize-stage__artifact-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .finalize-stage__reader-stage-links,
+  .finalize-stage__reader-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .finalize-stage__reader-current {
+    text-align: left;
   }
 }
 

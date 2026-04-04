@@ -2339,30 +2339,30 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                   snapshot={snapshot}
                 />
               ) : selectedStage.stage === 'finalize' ? (
-              <FinalizeStage
-                onAcceptRewrite={async (jobId) =>
-                  applyCompositionRewriteAcceptance({
-                    jobId,
-                    previewStage: 'finalize',
-                  })
-                }
-                onDownloadAudio={() => {
-                  void startArtifactDownload({
-                    artifactKind: 'final_audio',
-                    controlId: 'finalize-download-audio',
-                    origin: 'workspace',
-                  })
-                }}
-                onDownloadStoryExport={() => {
-                  void startArtifactDownload({
-                    artifactKind: 'story_docx',
-                    controlId: 'finalize-download-story',
-                    origin: 'workspace',
-                  })
-                }}
-                onKeepExploringRewrite={(segmentIndex) => {
-                  setPreviewStage('composition')
-                  void persistUiAction({
+                <FinalizeStage
+                  onAcceptRewrite={async (jobId) =>
+                    applyCompositionRewriteAcceptance({
+                      jobId,
+                      previewStage: 'finalize',
+                    })
+                  }
+                  onDownloadAudio={() => {
+                    void startArtifactDownload({
+                      artifactKind: 'final_audio',
+                      controlId: 'finalize-download-audio',
+                      origin: 'workspace',
+                    })
+                  }}
+                  onDownloadStoryExport={() => {
+                    void startArtifactDownload({
+                      artifactKind: 'story_docx',
+                      controlId: 'finalize-download-story',
+                      origin: 'workspace',
+                    })
+                  }}
+                  onKeepExploringRewrite={(segmentIndex) => {
+                    setPreviewStage('composition')
+                    void persistUiAction({
                       action: 'navigate_to_stage',
                       stage: 'composition',
                       controlId: 'finalize-compare-explore-rewrite',
@@ -2376,6 +2376,16 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       previewStage: 'finalize',
                     })
                   }
+                  onReturnToAudioSettings={() => {
+                    setPreviewStage('audio')
+                    void persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'audio',
+                      controlId: 'finalize-reader-return-to-audio',
+                      origin: 'workspace',
+                      valueSummary: getWorkflowStageLabel('audio'),
+                    }).catch(() => {})
+                  }}
                   onRestoreSegmentVersion={async (segmentIndex, versionId) =>
                     applyCompositionSegmentVersionSelection({
                       segmentIndex,
@@ -2391,6 +2401,16 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
                       controlId: 'finalize-return-to-composition',
                       origin: 'workspace',
                       valueSummary: 'Composition',
+                    }).catch(() => {})
+                  }}
+                  onReturnToStorySetup={() => {
+                    setPreviewStage('story_setup')
+                    void persistUiAction({
+                      action: 'navigate_to_stage',
+                      stage: 'story_setup',
+                      controlId: 'finalize-reader-return-to-story-setup',
+                      origin: 'workspace',
+                      valueSummary: getWorkflowStageLabel('story_setup'),
                     }).catch(() => {})
                   }}
                   snapshot={snapshot}

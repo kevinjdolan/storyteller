@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type {
   AudioJobView,
   CompositionSegmentView,
@@ -32,11 +32,13 @@ type FinalizeStageProps = {
   onDownloadStoryExport: () => void
   onKeepExploringRewrite: (segmentIndex: number) => void
   onRejectRewrite: (jobId: string) => Promise<unknown>
+  onReturnToAudioSettings: () => void
   onRestoreSegmentVersion: (
     segmentIndex: number,
     versionId: string,
   ) => Promise<unknown>
   onReturnToComposition: () => void
+  onReturnToStorySetup: () => void
   snapshot: SessionSnapshot
 }
 
@@ -51,6 +53,14 @@ type StoryBlock =
       content: string
       kind: 'paragraph'
     }
+
+type ReaderSection = {
+  blocks: StoryBlock[]
+  id: string
+  kind: 'chapter' | 'section'
+  summary: string | null
+  title: string
+}
 
 type AudioReviewState =
   | 'planned'
@@ -255,6 +265,222 @@ function buildStoryBlocks(value: string): StoryBlock[] {
         content: block.replace(/\n+/gu, ' ').trim(),
       }
     })
+}
+
+function buildReaderSectionId(title: string, index: number) {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+
+  return `${slug.length > 0 ? slug : 'section'}-${index + 1}`
+}
+
+function isChapterLikeTitle(value: string | null | undefined) {
+  return value != null && /^\s*(chapter|part)\b/iu.test(value)
+}
+
+function resolveReaderSectionKind(
+  title: string,
+  options: {
+    preferChapters: boolean
+  },
+): ReaderSection['kind'] {
+  return options.preferChapters || isChapterLikeTitle(title)
+    ? 'chapter'
+    : 'section'
+}
+
+function buildReaderSectionTitle(options: {
+  index: number
+  preferChapters: boolean
+  title: string | null | undefined
+}) {
+  const candidateTitle = options.title?.trim()
+  if (candidateTitle != null && candidateTitle.length > 0) {
+    return candidateTitle
+  }
+
+  return options.preferChapters
+    ? `Chapter ${options.index + 1}`
+    : `Section ${options.index + 1}`
+}
+
+function truncateReaderSummary(value: string | null | undefined) {
+  const normalizedValue = value?.trim()
+  if (normalizedValue == null || normalizedValue.length === 0) {
+    return null
+  }
+
+  if (normalizedValue.length <= 96) {
+    return normalizedValue
+  }
+
+  return `${normalizedValue.slice(0, 93).trimEnd()}...`
+}
+
+function buildReaderSectionSummary(
+  blocks: StoryBlock[],
+  fallback: string | null | undefined = null,
+) {
+  const paragraphSummary = blocks.find(
+    (block) => block.kind === 'paragraph',
+  )?.content
+
+  return truncateReaderSummary(fallback ?? paragraphSummary ?? null)
+}
+
+function buildReaderSectionsFromStoryText(options: {
+  preferChapters: boolean
+  storyText: string
+}) {
+  const storyBlocks = buildStoryBlocks(options.storyText)
+  if (storyBlocks.length === 0) {
+    return [] as ReaderSection[]
+  }
+
+  const groupedSections: Array<{
+    blocks: StoryBlock[]
+    title: string | null
+  }> = []
+  let currentSection: {
+    blocks: StoryBlock[]
+    title: string | null
+  } | null = null
+
+  for (const block of storyBlocks) {
+    if (block.kind === 'heading') {
+      if (currentSection != null) {
+        groupedSections.push(currentSection)
+      }
+
+      currentSection = {
+        title: block.content,
+        blocks: [],
+      }
+      continue
+    }
+
+    if (currentSection == null) {
+      currentSection = {
+        title: null,
+        blocks: [],
+      }
+    }
+
+    currentSection.blocks.push(block)
+  }
+
+  if (currentSection != null) {
+    groupedSections.push(currentSection)
+  }
+
+  return groupedSections.map((section, index) => {
+    const title = buildReaderSectionTitle({
+      title: section.title,
+      index,
+      preferChapters: options.preferChapters,
+    })
+
+    return {
+      id: buildReaderSectionId(title, index),
+      kind: resolveReaderSectionKind(title, {
+        preferChapters: options.preferChapters,
+      }),
+      title,
+      summary: buildReaderSectionSummary(section.blocks),
+      blocks: section.blocks,
+    }
+  })
+}
+
+function buildReaderSectionsFromSegments(options: {
+  preferChapters: boolean
+  segments: CompositionSegmentView[]
+}) {
+  return options.segments
+    .map((segment, index) => {
+      const segmentText = resolveCurrentSegmentText(segment)
+      if (segmentText == null) {
+        return null
+      }
+
+      const segmentBlocks = buildStoryBlocks(segmentText)
+      if (segmentBlocks.length === 0) {
+        return null
+      }
+
+      const explicitTitle =
+        segmentBlocks[0]?.kind === 'heading' ? segmentBlocks[0].content : null
+      const contentBlocks =
+        explicitTitle != null ? segmentBlocks.slice(1) : segmentBlocks
+      const title = buildReaderSectionTitle({
+        title: explicitTitle ?? segment.outline_card_title,
+        index,
+        preferChapters: options.preferChapters,
+      })
+
+      return {
+        id: buildReaderSectionId(title, index),
+        kind: resolveReaderSectionKind(title, {
+          preferChapters: options.preferChapters,
+        }),
+        title,
+        summary: buildReaderSectionSummary(
+          contentBlocks,
+          segment.outline_card_summary ?? null,
+        ),
+        blocks: contentBlocks,
+      } satisfies ReaderSection
+    })
+    .filter((section): section is ReaderSection => section != null)
+}
+
+function buildReaderSections(
+  snapshot: SessionSnapshot,
+  displayStoryText: string | null,
+) {
+  const preferChapters = (snapshot.selected_story_setup?.chapter_count ?? 0) > 1
+  const textSections =
+    displayStoryText != null
+      ? buildReaderSectionsFromStoryText({
+          storyText: displayStoryText,
+          preferChapters,
+        })
+      : []
+  const segmentSections = buildReaderSectionsFromSegments({
+    segments: snapshot.composition_segments ?? [],
+    preferChapters,
+  })
+
+  if (textSections.length > 1) {
+    return textSections
+  }
+
+  if (segmentSections.length > 1) {
+    return segmentSections
+  }
+
+  if (textSections.length > 0) {
+    return textSections
+  }
+
+  return segmentSections
+}
+
+function buildReaderSectionLabel(section: ReaderSection, index: number) {
+  return section.kind === 'chapter'
+    ? `Chapter ${index + 1}`
+    : `Section ${index + 1}`
+}
+
+function buildReaderSectionDescription(section: ReaderSection, index: number) {
+  const detailBits = [
+    buildReaderSectionLabel(section, index),
+    section.summary,
+  ].filter((value): value is string => value != null && value.length > 0)
+
+  return detailBits.join(' • ')
 }
 
 function buildLengthTargetsCopy(snapshot: SessionSnapshot) {
@@ -604,9 +830,7 @@ function getArtifactBadgeTone(
   }
 }
 
-function formatArtifactStatusLabel(
-  status: SessionArtifactInventoryStatus,
-) {
+function formatArtifactStatusLabel(status: SessionArtifactInventoryStatus) {
   switch (status) {
     case 'ready':
       return 'Ready'
@@ -621,9 +845,7 @@ function formatArtifactStatusLabel(
   }
 }
 
-function resolveArtifactFilename(
-  item: SessionArtifactInventoryItemView,
-) {
+function resolveArtifactFilename(item: SessionArtifactInventoryItemView) {
   const accessFilename = item.asset?.access?.filename?.trim()
   if (accessFilename != null && accessFilename.length > 0) {
     return accessFilename
@@ -644,12 +866,16 @@ export function FinalizeStage({
   onDownloadStoryExport,
   onKeepExploringRewrite,
   onRejectRewrite,
+  onReturnToAudioSettings,
   onRestoreSegmentVersion,
   onReturnToComposition,
+  onReturnToStorySetup,
   snapshot,
 }: FinalizeStageProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionState, setActionState] = useState<ActionState>(null)
+  const readerViewportRef = useRef<HTMLDivElement | null>(null)
+  const readerSectionRefs = useRef<Record<string, HTMLElement | null>>({})
   const fallbackStoryText = useMemo(
     () => buildFallbackStoryText(snapshot),
     [snapshot],
@@ -691,13 +917,13 @@ export function FinalizeStage({
     displayAudioJob != null &&
     snapshot.latest_audio_asset.audio_job_id !== displayAudioJob.id
   const displayStoryText = storyAssetText ?? fallbackStoryText ?? null
-  const storyBlocks = useMemo(
-    () =>
-      displayStoryText != null
-        ? buildStoryBlocks(displayStoryText)
-        : ([] as StoryBlock[]),
-    [displayStoryText],
+  const readerSections = useMemo(
+    () => buildReaderSections(snapshot, displayStoryText),
+    [displayStoryText, snapshot],
   )
+  const [activeReaderSectionId, setActiveReaderSectionId] = useState<
+    string | null
+  >(readerSections[0]?.id ?? null)
   const usingFallbackStoryText =
     storyAssetText == null && fallbackStoryText != null
   const storyWordCount = useMemo(() => {
@@ -772,9 +998,7 @@ export function FinalizeStage({
   )
   const artifactInventoryByKey = useMemo(
     () =>
-      new Map(
-        artifactInventoryItems.map((item) => [item.key, item] as const),
-      ),
+      new Map(artifactInventoryItems.map((item) => [item.key, item] as const)),
     [artifactInventoryItems],
   )
   const inventoryRefreshedAt =
@@ -789,11 +1013,13 @@ export function FinalizeStage({
     storyTextInventoryItem,
     storyDocxInventoryItem,
     finalAudioInventoryItem,
-  ].filter(
-    (
-      item,
-    ): item is SessionArtifactInventoryItemView => item != null,
+  ].filter((item): item is SessionArtifactInventoryItemView => item != null)
+  const hasReaderNavigation = readerSections.length > 1
+  const activeReaderSectionIndex = Math.max(
+    readerSections.findIndex((section) => section.id === activeReaderSectionId),
+    0,
   )
+  const activeReaderSection = readerSections[activeReaderSectionIndex] ?? null
 
   function buildArtifactMeta(item: SessionArtifactInventoryItemView) {
     const metadata: string[] = []
@@ -803,7 +1029,11 @@ export function FinalizeStage({
       metadata.push(filename)
     }
 
-    if (item.key === 'story_text' && storyWordCount != null && storyWordCount > 0) {
+    if (
+      item.key === 'story_text' &&
+      storyWordCount != null &&
+      storyWordCount > 0
+    ) {
       metadata.push(`${storyWordCount.toLocaleString()} words`)
     }
 
@@ -830,9 +1060,7 @@ export function FinalizeStage({
     return metadata
   }
 
-  function buildArtifactAction(
-    item: SessionArtifactInventoryItemView,
-  ): {
+  function buildArtifactAction(item: SessionArtifactInventoryItemView): {
     label: string
     onClick: () => void
   } | null {
@@ -940,6 +1168,19 @@ export function FinalizeStage({
     }
   }, [finalStoryReady, snapshot.latest_story_asset])
 
+  useEffect(() => {
+    setActiveReaderSectionId((currentSectionId) => {
+      if (
+        currentSectionId != null &&
+        readerSections.some((section) => section.id === currentSectionId)
+      ) {
+        return currentSectionId
+      }
+
+      return readerSections[0]?.id ?? null
+    })
+  }, [readerSections])
+
   async function runAction(
     nextActionState: Exclude<ActionState, null>,
     operation: () => Promise<unknown>,
@@ -958,6 +1199,64 @@ export function FinalizeStage({
     } finally {
       setActionState(null)
     }
+  }
+
+  function updateActiveReaderSectionFromScroll() {
+    if (!hasReaderNavigation) {
+      return
+    }
+
+    const viewport = readerViewportRef.current
+    if (viewport == null || readerSections.length === 0) {
+      return
+    }
+
+    const viewportTop = viewport.getBoundingClientRect().top
+    let nextActiveSectionId = readerSections[0]?.id ?? null
+
+    for (const section of readerSections) {
+      const sectionNode = readerSectionRefs.current[section.id]
+      if (sectionNode == null) {
+        continue
+      }
+
+      if (sectionNode.getBoundingClientRect().top - viewportTop <= 120) {
+        nextActiveSectionId = section.id
+        continue
+      }
+
+      break
+    }
+
+    setActiveReaderSectionId((currentSectionId) =>
+      currentSectionId === nextActiveSectionId
+        ? currentSectionId
+        : nextActiveSectionId,
+    )
+  }
+
+  function registerReaderSection(
+    sectionId: string,
+    sectionNode: HTMLElement | null,
+  ) {
+    readerSectionRefs.current[sectionId] = sectionNode
+  }
+
+  function scrollReaderToSection(sectionId: string) {
+    setActiveReaderSectionId(sectionId)
+    readerSectionRefs.current[sectionId]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }
+
+  function stepReaderSection(direction: -1 | 1) {
+    const nextSection = readerSections[activeReaderSectionIndex + direction]
+    if (nextSection == null) {
+      return
+    }
+
+    scrollReaderToSection(nextSection.id)
   }
 
   return (
@@ -1130,14 +1429,179 @@ export function FinalizeStage({
                 ) : null}
 
                 <div className="finalize-stage__reader">
-                  <div className="finalize-stage__reader-copy">
-                    {storyBlocks.map((block, index) =>
-                      block.kind === 'heading' ? (
-                        <h4 key={`story-block-${index}`}>{block.content}</h4>
-                      ) : (
-                        <p key={`story-block-${index}`}>{block.content}</p>
-                      ),
-                    )}
+                  <aside className="finalize-stage__reader-sidebar">
+                    <section className="finalize-stage__reader-guide">
+                      <div className="finalize-stage__reader-guide-copy">
+                        <p className="eyebrow">
+                          {hasReaderNavigation
+                            ? 'Chapter guide'
+                            : 'Reading guide'}
+                        </p>
+                        <h4>
+                          {hasReaderNavigation
+                            ? 'Jump through the story without losing your place.'
+                            : 'The manuscript stays centered for a calm final read.'}
+                        </h4>
+                        <p>
+                          {hasReaderNavigation
+                            ? 'Use the contents rail to skip between chapters, then jump back into setup, audio, or composition if anything still needs tuning.'
+                            : 'Even a shorter story keeps quick paths back into story setup, audio settings, and composition from this finish-line view.'}
+                        </p>
+                      </div>
+
+                      <div className="finalize-stage__reader-stage-links">
+                        <Button
+                          onClick={() => {
+                            onReturnToStorySetup()
+                          }}
+                          size="compact"
+                          tone="ghost"
+                        >
+                          Story setup
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            onReturnToAudioSettings()
+                          }}
+                          size="compact"
+                          tone="ghost"
+                        >
+                          Audio settings
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            onReturnToComposition()
+                          }}
+                          size="compact"
+                          tone="ghost"
+                        >
+                          Composition
+                        </Button>
+                      </div>
+                    </section>
+
+                    {hasReaderNavigation ? (
+                      <nav
+                        aria-label="Story contents"
+                        className="finalize-stage__toc"
+                      >
+                        <ol className="finalize-stage__toc-list">
+                          {readerSections.map((section, index) => (
+                            <li key={section.id}>
+                              <button
+                                aria-current={
+                                  activeReaderSectionId === section.id
+                                    ? 'true'
+                                    : undefined
+                                }
+                                className="finalize-stage__toc-button"
+                                onClick={() => {
+                                  scrollReaderToSection(section.id)
+                                }}
+                                type="button"
+                              >
+                                <strong>{section.title}</strong>
+                                <span>
+                                  {buildReaderSectionDescription(
+                                    section,
+                                    index,
+                                  )}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      </nav>
+                    ) : null}
+                  </aside>
+
+                  <div className="finalize-stage__reader-frame">
+                    {hasReaderNavigation && activeReaderSection != null ? (
+                      <div className="finalize-stage__reader-controls">
+                        <Button
+                          disabled={activeReaderSectionIndex <= 0}
+                          onClick={() => {
+                            stepReaderSection(-1)
+                          }}
+                          size="compact"
+                          tone="ghost"
+                        >
+                          Previous chapter
+                        </Button>
+
+                        <div className="finalize-stage__reader-current">
+                          <span>
+                            {buildReaderSectionLabel(
+                              activeReaderSection,
+                              activeReaderSectionIndex,
+                            )}
+                          </span>
+                          <strong>{activeReaderSection.title}</strong>
+                        </div>
+
+                        <Button
+                          disabled={
+                            activeReaderSectionIndex >=
+                            readerSections.length - 1
+                          }
+                          onClick={() => {
+                            stepReaderSection(1)
+                          }}
+                          size="compact"
+                          tone="ghost"
+                        >
+                          Next chapter
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <div
+                      className="finalize-stage__reader-body"
+                      onScroll={updateActiveReaderSectionFromScroll}
+                      ref={readerViewportRef}
+                    >
+                      <div className="finalize-stage__reader-copy">
+                        {(readerSections.length > 0 ? readerSections : []).map(
+                          (section, sectionIndex) => (
+                            <section
+                              className="finalize-stage__reader-section"
+                              id={section.id}
+                              key={section.id}
+                              ref={(node) => {
+                                registerReaderSection(section.id, node)
+                              }}
+                            >
+                              <header className="finalize-stage__reader-section-header">
+                                {hasReaderNavigation ? (
+                                  <p className="eyebrow">
+                                    {buildReaderSectionLabel(
+                                      section,
+                                      sectionIndex,
+                                    )}
+                                  </p>
+                                ) : null}
+                                <h4>{section.title}</h4>
+                              </header>
+
+                              {section.blocks.map((block, blockIndex) =>
+                                block.kind === 'heading' ? (
+                                  <h5
+                                    className="finalize-stage__reader-subheading"
+                                    key={`${section.id}-block-${blockIndex}`}
+                                  >
+                                    {block.content}
+                                  </h5>
+                                ) : (
+                                  <p key={`${section.id}-block-${blockIndex}`}>
+                                    {block.content}
+                                  </p>
+                                ),
+                              )}
+                            </section>
+                          ),
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </>
@@ -1312,10 +1776,11 @@ export function FinalizeStage({
             label="Downloads and handoff"
             title="Artifact inventory"
           >
-            {artifactInventoryQuery.isLoading && artifactInventoryItems.length === 0 ? (
+            {artifactInventoryQuery.isLoading &&
+            artifactInventoryItems.length === 0 ? (
               <p className="finalize-stage__surface-note">
-                <InlineSpinner label="Loading artifact inventory" /> Loading
-                the current artifact statuses.
+                <InlineSpinner label="Loading artifact inventory" /> Loading the
+                current artifact statuses.
               </p>
             ) : null}
 
@@ -1363,9 +1828,7 @@ export function FinalizeStage({
                             onClick={action.onClick}
                             size="compact"
                             tone={
-                              item.key === 'story_text'
-                                ? 'ghost'
-                                : 'secondary'
+                              item.key === 'story_text' ? 'ghost' : 'secondary'
                             }
                           >
                             {action.label}

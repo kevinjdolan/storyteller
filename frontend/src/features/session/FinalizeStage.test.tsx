@@ -1,5 +1,13 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import type {
   SessionArtifactInventoryItemView,
   SessionArtifactInventoryView,
@@ -255,9 +263,27 @@ function createFetchMock(options?: {
   })
 }
 
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+const scrollIntoViewMock = vi.fn()
+
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoViewMock,
+  })
+})
+
 afterEach(() => {
+  scrollIntoViewMock.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+afterAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: originalScrollIntoView,
+  })
 })
 
 describe('FinalizeStage', () => {
@@ -278,8 +304,10 @@ describe('FinalizeStage', () => {
         onDownloadStoryExport={onDownloadStoryExport}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={onRejectRewrite}
+        onReturnToAudioSettings={vi.fn()}
         onRestoreSegmentVersion={onRestoreSegmentVersion}
         onReturnToComposition={onReturnToComposition}
+        onReturnToStorySetup={vi.fn()}
         snapshot={buildSnapshot()}
       />,
     )
@@ -322,11 +350,25 @@ describe('FinalizeStage', () => {
           status_detail: 'The compiled narration master is ready.',
         }),
       ]),
+      storyText: `# Chapter 1: Lantern Wake
+
+Mira carried the lantern home.
+
+# Chapter 2: Moonlit Crossing
+
+The harbor path glowed softly under the bridge.
+
+# Chapter 3: Quiet Return
+
+The oars slowed as the lake went still again.`,
     })
     vi.stubGlobal('fetch', fetchMock)
 
     const onDownloadAudio = vi.fn()
     const onDownloadStoryExport = vi.fn()
+    const onReturnToAudioSettings = vi.fn()
+    const onReturnToComposition = vi.fn()
+    const onReturnToStorySetup = vi.fn()
 
     renderWithAppProviders(
       <FinalizeStage
@@ -335,8 +377,10 @@ describe('FinalizeStage', () => {
         onDownloadStoryExport={onDownloadStoryExport}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={onReturnToAudioSettings}
         onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
-        onReturnToComposition={vi.fn()}
+        onReturnToComposition={onReturnToComposition}
+        onReturnToStorySetup={onReturnToStorySetup}
         snapshot={buildSnapshot({
           latest_composition_job: {
             ...baseSnapshot.latest_composition_job!,
@@ -399,12 +443,32 @@ describe('FinalizeStage', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Chapter 1' }),
+      await screen.findByRole('heading', { name: 'Chapter 1: Lantern Wake' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Story contents' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Chapter 2: Moonlit Crossing/ }),
     ).toBeInTheDocument()
     expect(screen.getByText('Quest Fantasy')).toBeInTheDocument()
     expect(
       screen.getByText('1,800 words • ~12 min • 3 chapters'),
     ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Chapter 2: Moonlit Crossing/ }),
+    )
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Story setup' }))
+    expect(onReturnToStorySetup).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Audio settings' }))
+    expect(onReturnToAudioSettings).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Composition' }))
+    expect(onReturnToComposition).toHaveBeenCalledTimes(1)
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Download Word document' }),
@@ -433,7 +497,8 @@ describe('FinalizeStage', () => {
         }),
         buildArtifactInventoryItem('final_audio', {
           status: 'generating',
-          status_detail: 'Rendering segment 3 of 5. 1 preview clip is already available.',
+          status_detail:
+            'Rendering segment 3 of 5. 1 preview clip is already available.',
           preview_asset_count: 1,
         }),
       ]),
@@ -447,8 +512,10 @@ describe('FinalizeStage', () => {
         onDownloadStoryExport={vi.fn()}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
         onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
         snapshot={buildSnapshot({
           latest_composition_job: {
             ...baseSnapshot.latest_composition_job!,
@@ -511,6 +578,148 @@ describe('FinalizeStage', () => {
     expect(screen.getByText('64%')).toBeInTheDocument()
   })
 
+  it('builds reader navigation from accepted composition segments when the manuscript has no chapter headings', async () => {
+    const fetchMock = createFetchMock({
+      storyText: `Mira carried the lantern down to the harbor.
+
+The bridge lights gathered under the oars.
+
+The bell settled once the lake grew still.`,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithAppProviders(
+      <FinalizeStage
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onDownloadAudio={vi.fn()}
+        onDownloadStoryExport={vi.fn()}
+        onKeepExploringRewrite={vi.fn()}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
+        snapshot={buildSnapshot({
+          latest_composition_job: {
+            ...baseSnapshot.latest_composition_job!,
+            pending_review: false,
+          },
+          composition_segments: [
+            {
+              segment_index: 1,
+              outline_card_title: 'Lantern wake',
+              outline_card_summary: 'Mira leaves the harbor with the lantern.',
+              current_version_id: 'segment-1-rev-1',
+              current_revision_number: 1,
+              is_stale: false,
+              versions: [
+                {
+                  id: 'segment-1-rev-1',
+                  composition_job_id: 'draft-job-1',
+                  job_kind: 'draft',
+                  segment_index: 1,
+                  revision_number: 1,
+                  status: 'completed',
+                  acceptance_state: 'accepted',
+                  is_current: true,
+                  is_stale: false,
+                  accepted_summary: 'The harbor remains calm as Mira leaves.',
+                  text_content: 'Mira carried the lantern down to the harbor.',
+                  word_count: 8,
+                  created_at: '2026-04-02T05:10:00Z',
+                  updated_at: '2026-04-02T05:12:00Z',
+                  completed_at: '2026-04-02T05:12:00Z',
+                },
+              ],
+            },
+            {
+              segment_index: 2,
+              outline_card_title: 'Moonlit crossing',
+              outline_card_summary: 'The bridge lights gather under the oars.',
+              current_version_id: 'segment-2-rev-1',
+              current_revision_number: 1,
+              is_stale: false,
+              versions: [
+                {
+                  id: 'segment-2-rev-1',
+                  composition_job_id: 'draft-job-1',
+                  job_kind: 'draft',
+                  segment_index: 2,
+                  revision_number: 1,
+                  status: 'completed',
+                  acceptance_state: 'accepted',
+                  is_current: true,
+                  is_stale: false,
+                  accepted_summary: 'The crossing stays gentle and luminous.',
+                  text_content: 'The bridge lights gathered under the oars.',
+                  word_count: 8,
+                  created_at: '2026-04-02T05:12:00Z',
+                  updated_at: '2026-04-02T05:14:00Z',
+                  completed_at: '2026-04-02T05:14:00Z',
+                },
+              ],
+            },
+            {
+              segment_index: 3,
+              outline_card_title: 'Quiet return',
+              outline_card_summary: 'The bell settles as the lake grows still.',
+              current_version_id: 'segment-3-rev-1',
+              current_revision_number: 1,
+              is_stale: false,
+              versions: [
+                {
+                  id: 'segment-3-rev-1',
+                  composition_job_id: 'draft-job-1',
+                  job_kind: 'draft',
+                  segment_index: 3,
+                  revision_number: 1,
+                  status: 'completed',
+                  acceptance_state: 'accepted',
+                  is_current: true,
+                  is_stale: false,
+                  accepted_summary: 'The lake goes still again.',
+                  text_content: 'The bell settled once the lake grew still.',
+                  word_count: 8,
+                  created_at: '2026-04-02T05:14:00Z',
+                  updated_at: '2026-04-02T05:16:00Z',
+                  completed_at: '2026-04-02T05:16:00Z',
+                },
+              ],
+            },
+          ],
+          latest_story_asset: {
+            id: 'story-asset-segment-navigation',
+            asset_kind: 'story_text',
+            status: 'ready',
+            access: {
+              download_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-segment-navigation/content?disposition=attachment',
+              filename: 'lanterns-over-juniper-lake.md',
+              stream_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-segment-navigation/content?disposition=inline',
+            },
+            public_url:
+              '/api/v1/sessions/session-finalize-1/assets/story-asset-segment-navigation/content?disposition=inline',
+            ready_at: '2026-04-02T05:28:00Z',
+          },
+        })}
+      />,
+    )
+
+    expect(
+      await screen.findAllByRole('heading', { name: 'Lantern wake' }),
+    ).toHaveLength(2)
+    const storyContents = screen.getByRole('navigation', {
+      name: 'Story contents',
+    })
+    expect(
+      within(storyContents).getByRole('button', { name: /Moonlit crossing/ }),
+    ).toBeInTheDocument()
+    expect(
+      within(storyContents).getByRole('button', { name: /Quiet return/ }),
+    ).toBeInTheDocument()
+  })
+
   it('handles failed narration without losing the finish-line review surface', async () => {
     const fetchMock = createFetchMock({
       inventory: buildArtifactInventory([
@@ -524,7 +733,8 @@ describe('FinalizeStage', () => {
         }),
         buildArtifactInventoryItem('final_audio', {
           status: 'failed',
-          status_detail: 'The worker could not merge the final narration master.',
+          status_detail:
+            'The worker could not merge the final narration master.',
         }),
       ]),
     })
@@ -537,8 +747,10 @@ describe('FinalizeStage', () => {
         onDownloadStoryExport={vi.fn()}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
         onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
         snapshot={buildSnapshot({
           latest_composition_job: {
             ...baseSnapshot.latest_composition_job!,
@@ -624,8 +836,10 @@ describe('FinalizeStage', () => {
         onDownloadStoryExport={onDownloadStoryExport}
         onKeepExploringRewrite={vi.fn()}
         onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
         onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
         onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
         snapshot={buildSnapshot({
           latest_composition_job: {
             ...baseSnapshot.latest_composition_job!,
@@ -698,10 +912,14 @@ describe('FinalizeStage', () => {
     ).toBeInTheDocument()
     expect(screen.getAllByText('Stale').length).toBeGreaterThanOrEqual(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Word document' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh Word document' }),
+    )
     expect(onDownloadStoryExport).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Download previous master' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Download previous master' }),
+    )
     expect(onDownloadAudio).toHaveBeenCalledTimes(1)
   })
 })
