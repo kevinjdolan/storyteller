@@ -199,6 +199,12 @@ from app.models.events import (
     parse_event_payload,
     serialize_event_payload,
 )
+from app.models.identity import (
+    LOCAL_DEVELOPMENT_IDENTITY,
+    LOCAL_DEVELOPMENT_OWNER_DISPLAY_NAME,
+    LOCAL_DEVELOPMENT_OWNER_ID,
+    RequestIdentity,
+)
 from app.models.intent_parser import (
     EXPLICIT_CHAT_COMMAND_MODEL_ID,
     EXPLICIT_CHAT_COMMAND_PROMPT_VERSION,
@@ -554,6 +560,9 @@ __all__ = [
     "GeneratedPitchCandidate",
     "INTENT_PARSER_PROMPT_VERSION",
     "INTENT_PARSER_SCHEMA_VERSION",
+    "LOCAL_DEVELOPMENT_IDENTITY",
+    "LOCAL_DEVELOPMENT_OWNER_DISPLAY_NAME",
+    "LOCAL_DEVELOPMENT_OWNER_ID",
     "IntentParserCandidateAction",
     "NarrationSegmentView",
     "IntentParserCandidateActionBatch",
@@ -597,6 +606,7 @@ __all__ = [
     "RealtimeEventType",
     "RealtimeReplayStrategy",
     "RecentSessionSummary",
+    "RequestIdentity",
     "RecordSessionUIActionRequest",
     "RedirectSessionCompositionRequest",
     "SaveSessionAudioSettingsRequest",

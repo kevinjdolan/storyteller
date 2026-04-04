@@ -22,6 +22,7 @@ from app.db import (
     utc_now,
 )
 from app.models import ChatMessageRole, SelectionKind, WorkflowStage, WorkflowStageState
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.services.assets import SessionAssetService
 from app.services.event_log import SessionEventLogService
 from app.services.jobs import BackgroundJobLeaseLostError, BackgroundJobService
@@ -95,6 +96,28 @@ EXPECTED_SESSION_MEMORY_COLUMNS = {
     "summary_text",
     "summary_data",
     "created_at",
+}
+EXPECTED_STORY_SESSION_COLUMNS = {
+    "id",
+    "owner_id",
+    "working_title",
+    "current_stage",
+    "resume_stage",
+    "furthest_completed_stage",
+    "overall_status",
+    "selected_genre_id",
+    "selected_tone_profile_id",
+    "audio_voice_key",
+    "audio_narration_style",
+    "audio_playback_speed",
+    "audio_include_background_music",
+    "audio_music_profile",
+    "audio_narration_volume",
+    "audio_music_volume",
+    "audio_guidance_notes",
+    "completed_at",
+    "created_at",
+    "updated_at",
 }
 EXPECTED_STORY_BRIEF_COLUMNS = {
     "id",
@@ -206,6 +229,7 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
+    assert EXPECTED_STORY_SESSION_COLUMNS <= _column_names(database_url, "story_sessions")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
     assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _column_names(
@@ -228,6 +252,7 @@ def test_postgres_migrations_upgrade_from_zero_to_head_and_back(
     command.upgrade(config, "head")
     assert EXPECTED_TABLES <= _table_names(database_url)
     assert EXPECTED_TONE_PROFILE_COLUMNS <= _column_names(database_url, "tone_profiles")
+    assert EXPECTED_STORY_SESSION_COLUMNS <= _column_names(database_url, "story_sessions")
     assert EXPECTED_BACKGROUND_JOB_COLUMNS <= _column_names(database_url, "background_jobs")
     assert EXPECTED_STORY_BRIEF_COLUMNS <= _column_names(database_url, "story_briefs")
     assert EXPECTED_COMPOSITION_SEGMENT_COLUMNS <= _column_names(
@@ -273,6 +298,7 @@ def test_session_creation_persists_stage_rows_and_initial_event_history(
         history = session_service.load_session_history(created.id)
 
     assert stored_session is not None
+    assert stored_session.owner_id == LOCAL_DEVELOPMENT_OWNER_ID
     assert stored_session.working_title == "Moonlit Mail Route"
     assert stored_session.current_stage == WorkflowStage.GENRE
     assert stored_session.resume_stage == WorkflowStage.GENRE
@@ -288,6 +314,7 @@ def test_session_creation_persists_stage_rows_and_initial_event_history(
         "working_title": "Moonlit Mail Route",
     }
     assert reloaded.display_title == "Moonlit Mail Route"
+    assert reloaded.owner_id == LOCAL_DEVELOPMENT_OWNER_ID
     assert reloaded.progress.completed_stages == 0
     assert history.latest_sequence_number == 1
 

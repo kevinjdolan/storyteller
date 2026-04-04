@@ -966,6 +966,7 @@ class RestoreSessionPlanRevisionRequest(BaseModel):
 
 class RecentSessionSummary(BaseModel):
     id: str
+    owner_id: str
     display_title: str
     working_title: str | None = None
     library_summary: SessionLibrarySummaryView
@@ -983,6 +984,7 @@ class RecentSessionSummary(BaseModel):
 
 class SessionSnapshot(BaseModel):
     id: str
+    owner_id: str
     display_title: str
     working_title: str | None = None
     current_stage: WorkflowStage

@@ -42,6 +42,7 @@ export type SessionLibrarySummary = {
 
 export type RecentSessionSummary = {
   id: string
+  owner_id?: string
   display_title: string
   working_title?: string | null
   library_summary?: SessionLibrarySummary | null

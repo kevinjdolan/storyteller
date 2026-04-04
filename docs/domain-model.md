@@ -18,6 +18,7 @@ The session snapshot returned to the UI should eventually include these fields, 
 | Field | Purpose |
 | --- | --- |
 | `id` | Stable UUID for the story session. |
+| `owner_id` | Stable owner identifier for the session, even in local single-user mode. |
 | `working_title` | Best current human-readable label for lists and search. |
 | `current_stage` | Stage the user is actively viewing or editing right now. |
 | `resume_stage` | Earliest stage that still needs work when a session is reopened. |
@@ -46,7 +47,7 @@ surface selected child IDs without forcing the first migration into a web of cir
 
 | Entity | Durable role | Key fields | Notes |
 | --- | --- | --- | --- |
-| `story_session` | Root aggregate for one bedtime-story project. | IDs, title, stage pointers, overall status, timestamps. | Owns the current accepted choices and job pointers. |
+| `story_session` | Root aggregate for one bedtime-story project. | IDs, `owner_id`, title, stage pointers, overall status, timestamps. | Owns the current accepted choices and job pointers. |
 | `workflow_stage_state` | Per-stage state for the session. | `session_id`, `stage`, `status`, `updated_at`, `last_event_id`. | Stored explicitly so resume does not depend on sparse child tables. |
 | `genre` | Curated genre catalog entry. | slug, label, description, bedtime-safety notes, arc notes. | Backend-owned reference data. |
 | `tone_profile` | Curated tone option linked to a genre. | `genre_id`, slug, label, descriptors, bedtime notes, default planning hints. | Tone choices are filtered by genre. |
@@ -84,6 +85,18 @@ Current code mirrors this contract in:
 - `frontend/src/features/session/workflowStages.ts`
 
 The backend remains the authority for validating transitions. The frontend should use the same literal IDs for rendering, navigation, and optimistic display only.
+
+## Ownership and Auth Shape
+
+The current product still runs in local single-user mode, but ownership is now
+explicit in the durable model.
+
+- Every session stores `owner_id`.
+- Local development uses one fixed request identity: `local-user`.
+- Session routes and realtime joins must verify that the requested session is
+  owned by the current identity before returning data.
+- Future auth can swap in a real authenticated principal without changing the
+  session aggregate or rewriting ownership as an afterthought.
 
 ## Stage State Semantics
 

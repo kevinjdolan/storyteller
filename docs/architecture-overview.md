@@ -69,6 +69,7 @@ The target backend should separate concerns explicitly:
 The system should persist the following concepts as first-class records:
 
 - Session
+- Session owner identity
 - Workflow stage
 - Event log
 - Selected genre
@@ -83,6 +84,25 @@ The system should persist the following concepts as first-class records:
 - Composition job and segments
 - Audio job and segments
 - Asset metadata
+
+## Current Identity Shape
+
+Prompt 90 keeps authentication intentionally small in local development while
+avoiding a dead end for future multi-user work.
+
+- Requests currently resolve to one fixed backend-owned identity:
+  `local-user`.
+- `story_sessions.owner_id` is now durable and is part of the aggregate shape,
+  so ownership is not implied by process state or browser storage.
+- Session HTTP routes and the session websocket stream check that the requested
+  `session_id` belongs to the current request identity before returning data or
+  accepting mutations.
+- The event log can continue to use user actors while real auth is absent
+  because the current local principal is explicit and stable.
+
+That means later auth work can focus on replacing the request-identity resolver
+with a real authenticated principal and, if needed, introducing a richer user
+table or identity-provider mapping without rewriting session ownership itself.
 
 ## Current Repository State
 

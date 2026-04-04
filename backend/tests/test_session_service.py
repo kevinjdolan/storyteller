@@ -39,6 +39,7 @@ from app.models import (
     WorkflowStage,
     WorkflowStageState,
 )
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.sessions import (
     InvalidStageTransitionError,
@@ -283,6 +284,7 @@ def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> No
     snapshot = service.create_session(working_title="  Starlight Ferry  ")
 
     assert snapshot.display_title == "Starlight Ferry"
+    assert snapshot.owner_id == LOCAL_DEVELOPMENT_OWNER_ID
     assert snapshot.working_title == "Starlight Ferry"
     assert snapshot.current_stage == WorkflowStage.GENRE
     assert snapshot.resume_stage == WorkflowStage.GENRE
@@ -294,6 +296,7 @@ def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> No
 
     stored_session = db_session.get(StorySession, snapshot.id)
     assert stored_session is not None
+    assert stored_session.owner_id == LOCAL_DEVELOPMENT_OWNER_ID
     assert len(stored_session.workflow_stage_states) == len(WorkflowStage)
 
     event_rows = (
@@ -317,6 +320,34 @@ def test_create_session_initializes_stage_rows_and_ui_snapshot(db_session) -> No
     assert history.events[0].summary == "Created session: Starlight Ferry."
     assert history.events[0].payload is not None
     assert history.events[0].payload.working_title == "Starlight Ferry"
+
+
+def test_load_session_snapshot_rejects_foreign_owned_session(db_session) -> None:
+    foreign_session = StorySession(
+        owner_id="storybook-neighbor",
+        working_title="Foreign Harbor",
+    )
+    db_session.add(foreign_session)
+    db_session.commit()
+
+    with pytest.raises(SessionNotFoundError):
+        SessionService(db_session).load_session_snapshot(foreign_session.id)
+
+
+def test_list_recent_sessions_only_returns_local_owned_sessions(db_session) -> None:
+    service = SessionService(db_session)
+    visible = service.create_session(working_title="Visible Session")
+
+    hidden = StorySession(
+        owner_id="storybook-neighbor",
+        working_title="Hidden Session",
+    )
+    db_session.add(hidden)
+    db_session.commit()
+
+    recent = service.list_recent_sessions(limit=10)
+
+    assert [session.id for session in recent] == [visible.id]
 
 
 def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_session) -> None:

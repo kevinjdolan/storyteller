@@ -61,6 +61,14 @@ The repo is intended to run locally with Docker Compose. At the current scaffold
 - `infra/compose/` holds the canonical Compose file for local orchestration
 - `tools/webapp-qa/` contains the browser automation container used for local UI verification
 
+Current auth stance in local development:
+
+- There is no sign-in screen or bearer-token flow yet.
+- The backend resolves every local request as one fixed principal: `local-user`.
+- Every `story_session` row now stores an `owner_id`, and local session routes only return or mutate rows owned by that principal.
+- This keeps local development friction-free while preserving the durable ownership seam needed for a future real multi-user auth layer.
+- Future auth should replace the request-identity resolver, not the session model or session route shape.
+
 Bootstrap a new clone with:
 
 ```bash

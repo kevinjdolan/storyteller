@@ -31,13 +31,14 @@ from app.models.events import (
     parse_event_payload,
     serialize_event_payload,
 )
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.models.intent_parser import ParsedChatIntentResponse
 from app.repositories import EventLogRepository
 from app.services.conversation_memory import SessionMemoryService
 
 DEFAULT_LOCAL_USER_ACTOR = SessionEventActor(
     actor_type=EventActorType.USER,
-    actor_id="local-user",
+    actor_id=LOCAL_DEVELOPMENT_OWNER_ID,
 )
 DEFAULT_ASSISTANT_ACTOR = SessionEventActor(
     actor_type=EventActorType.ASSISTANT,

@@ -7,6 +7,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.db.session import get_session_factory
+from app.models.events import EventActorType, SessionEventActor
+from app.models.identity import LOCAL_DEVELOPMENT_IDENTITY, RequestIdentity
 from app.models.realtime import RealtimeDeliveryMode, SessionSubscriptionRequest
 from app.services.session_realtime import (
     CompositionChunkCursor,
@@ -22,6 +24,7 @@ _SESSION_EVENTS_POLL_INTERVAL_SECONDS = 0.08
 @router.websocket("/events/ws")
 async def session_events_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
+    identity = _resolve_websocket_identity(websocket)
 
     try:
         subscription = SessionSubscriptionRequest.model_validate(
@@ -36,8 +39,16 @@ async def session_events_websocket(websocket: WebSocket) -> None:
     session_factory = get_session_factory()
     try:
         with session_factory() as session:
-            SessionService(session).load_session_snapshot(subscription.session_id)
-            realtime = SessionRealtimeService(session)
+            SessionService(session, owner_id=identity.subject).load_session_snapshot(
+                subscription.session_id
+            )
+            realtime = SessionRealtimeService(
+                session,
+                local_actor=SessionEventActor(
+                    actor_type=EventActorType.USER,
+                    actor_id=identity.subject,
+                ),
+            )
             state = realtime.build_subscription(
                 session_id=subscription.session_id,
                 connection_id=f"conn-{uuid4()}",
@@ -69,7 +80,13 @@ async def session_events_websocket(websocket: WebSocket) -> None:
             return
 
         with session_factory() as session:
-            realtime = SessionRealtimeService(session)
+            realtime = SessionRealtimeService(
+                session,
+                local_actor=SessionEventActor(
+                    actor_type=EventActorType.USER,
+                    actor_id=identity.subject,
+                ),
+            )
             live_events = realtime.list_realtime_events(
                 subscription.session_id,
                 after_sequence_number=last_sequence_number,
@@ -86,3 +103,11 @@ async def session_events_websocket(websocket: WebSocket) -> None:
 
         for event in chunk_events:
             await websocket.send_json(event.model_dump(mode="json"))
+
+
+def _resolve_websocket_identity(websocket: WebSocket) -> RequestIdentity:
+    identity = getattr(websocket.app.state, "request_identity", None)
+    if isinstance(identity, RequestIdentity):
+        return identity
+
+    return LOCAL_DEVELOPMENT_IDENTITY

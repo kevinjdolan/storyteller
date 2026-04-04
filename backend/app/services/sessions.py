@@ -57,6 +57,7 @@ from app.models import (
     get_workflow_stage_definition,
     resolve_resume_stage,
 )
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
 from app.services.artifact_inventory import SessionArtifactInventoryService
 from app.services.audio_settings import (
@@ -178,9 +179,11 @@ class SessionService:
         self,
         session: Session,
         *,
+        owner_id: str | None = LOCAL_DEVELOPMENT_OWNER_ID,
         brief_normalization_service: BriefNormalizationService | None = None,
     ):
         self._session = session
+        self._owner_id = owner_id
         self._sessions = StorySessionRepository(session)
         self._stage_states = WorkflowStageStateRepository(session)
         self._event_log = SessionEventLogService(session)
@@ -194,7 +197,10 @@ class SessionService:
         working_title: str | None = None,
         actor: SessionEventActor | None = None,
     ) -> SessionSnapshot:
-        story_session = self._sessions.create(working_title=_normalize_optional_text(working_title))
+        story_session = self._sessions.create(
+            owner_id=self._owner_id or LOCAL_DEVELOPMENT_OWNER_ID,
+            working_title=_normalize_optional_text(working_title),
+        )
         stage_map = self._stage_states.ensure_for_session(story_session)
         self._apply_rollups(story_session, stage_map)
         self._event_log.record_session_created(
@@ -207,7 +213,10 @@ class SessionService:
 
     def load_session_snapshot(self, session_id: str) -> SessionSnapshot:
         try:
-            return SessionHydrationService(self._session).load_session_snapshot(session_id)
+            return SessionHydrationService(
+                self._session,
+                owner_id=self._owner_id,
+            ).load_session_snapshot(session_id)
         except SessionHydrationNotFoundError as exc:
             raise SessionNotFoundError(f"session {session_id!r} was not found") from exc
 
@@ -224,6 +233,7 @@ class SessionService:
 
         sessions = self._sessions.list_recent_library_records(
             limit=limit,
+            owner_id=self._owner_id,
             query=query,
             status_filter=status_filter,
             genre_slug=genre_slug,
@@ -252,7 +262,7 @@ class SessionService:
         if limit is not None and limit <= 0:
             raise ValueError("limit must be greater than zero")
 
-        if not self._sessions.exists(session_id):
+        if not self._sessions.exists(session_id, owner_id=self._owner_id):
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
         return self._event_log.list_session_history(
@@ -272,7 +282,7 @@ class SessionService:
             raise ValueError("recent_limit must be greater than zero")
         if leaderboard_limit <= 0:
             raise ValueError("leaderboard_limit must be greater than zero")
-        if not self._sessions.exists(session_id):
+        if not self._sessions.exists(session_id, owner_id=self._owner_id):
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
         return SessionModelUsageService(self._session).load_session_diagnostics(
@@ -296,10 +306,13 @@ class SessionService:
         if usage_leaderboard_limit <= 0:
             raise ValueError("usage_leaderboard_limit must be greater than zero")
 
-        if not self._sessions.exists(session_id):
+        if not self._sessions.exists(session_id, owner_id=self._owner_id):
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
-        hydration = SessionHydrationService(self._session).hydrate_session(
+        hydration = SessionHydrationService(
+            self._session,
+            owner_id=self._owner_id,
+        ).hydrate_session(
             session_id,
             history_limit=history_limit,
         )
@@ -333,7 +346,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionEventView:
-        if not self._sessions.exists(session_id):
+        if not self._sessions.exists(session_id, owner_id=self._owner_id):
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
         event = self._event_log.record_ui_action(
@@ -358,7 +371,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -451,7 +464,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -556,7 +569,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         provided_fields: set[str] | None = None,
     ) -> SessionStoryBriefResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -739,11 +752,11 @@ class SessionService:
         payload: SaveSessionAudioSettingsRequest,
         actor: SessionEventActor | None = None,
     ) -> SessionAudioSettingsResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
-        aggregate = self._sessions.get_aggregate(session_id)
+        aggregate = self._sessions.get_aggregate(session_id, owner_id=self._owner_id)
         if aggregate is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -925,7 +938,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         pitch_generation_service: PitchGenerationService | None = None,
     ) -> SessionPitchGenerationResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -1115,7 +1128,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         pitch_generation_service: PitchGenerationService | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -1347,7 +1360,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -1451,7 +1464,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         character_generation_service: CharacterGenerationService | None = None,
     ) -> SessionCharacterSheetGenerationResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -1658,7 +1671,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         character_generation_service: CharacterGenerationService | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -1945,7 +1958,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -2073,7 +2086,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         beat_sheet_generation_service: BeatSheetGenerationService | None = None,
     ) -> SessionBeatSheetGenerationResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -2270,7 +2283,7 @@ class SessionService:
         actor: SessionEventActor | None = None,
         beat_sheet_generation_service: BeatSheetGenerationService | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -2518,7 +2531,7 @@ class SessionService:
         payload: EditSessionBeatSheetRequest,
         actor: SessionEventActor | None = None,
     ) -> SessionBeatSheetUpdateResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -2743,7 +2756,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -2867,7 +2880,7 @@ class SessionService:
         origin: str = "workspace",
         actor: SessionEventActor | None = None,
     ) -> SessionSelectionResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -3088,7 +3101,7 @@ class SessionService:
         payload: SessionContextUpdateRequest,
         actor: SessionEventActor | None = None,
     ) -> SessionContextUpdateResponse:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 
@@ -3176,7 +3189,7 @@ class SessionService:
         detail: str | None = None,
         actor: SessionEventActor | None = None,
     ) -> SessionSnapshot:
-        story_session = self._sessions.get_for_update(session_id)
+        story_session = self._sessions.get_for_update(session_id, owner_id=self._owner_id)
         if story_session is None:
             raise SessionNotFoundError(f"session {session_id!r} was not found")
 

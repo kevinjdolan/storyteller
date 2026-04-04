@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router as api_router
 from app.api.v1.router import router as api_v1_router
+from app.models.identity import LOCAL_DEVELOPMENT_IDENTITY
 from app.settings import AppSettings, SettingsValidationError, get_settings
 from app.storage import build_object_storage_service
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
     app.state.object_storage = object_storage
     app.state.storage_paths = object_storage.paths
+    app.state.request_identity = LOCAL_DEVELOPMENT_IDENTITY
 
     logger.info(
         "Starting %s in %s mode on %s:%s",

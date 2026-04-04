@@ -12,11 +12,14 @@ from app.models.events import (
     AudioProgressEventPayload,
     ChatMessageRecordedEventPayload,
     CompositionProgressEventPayload,
+    EventActorType,
+    SessionEventActor,
     SessionEventType,
     SessionEventView,
     UIActionRecordedEventPayload,
     WorkflowStageChangedEventPayload,
 )
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.models.realtime import (
     ChatContentFormat,
     ChatMessageEventPayload,
@@ -41,7 +44,6 @@ from app.models.realtime import (
 )
 from app.services.composition_streaming import split_text_for_streaming
 from app.services.event_log import (
-    DEFAULT_LOCAL_USER_ACTOR,
     DEFAULT_SYSTEM_ACTOR,
     SessionEventLogService,
 )
@@ -94,9 +96,18 @@ class CompositionStreamState:
 
 
 class SessionRealtimeService:
-    def __init__(self, session: Session):
+    def __init__(
+        self,
+        session: Session,
+        *,
+        local_actor: SessionEventActor | None = None,
+    ):
         self._session = session
         self._events = SessionEventLogService(session)
+        self._local_actor = local_actor or SessionEventActor(
+            actor_type=EventActorType.USER,
+            actor_id=LOCAL_DEVELOPMENT_OWNER_ID,
+        )
 
     def build_subscription(
         self,
@@ -135,7 +146,7 @@ class SessionRealtimeService:
             replay_from_sequence_number=replay_from_sequence_number,
             latest_sequence_number=latest_sequence_number,
             request_id=request_id,
-            local_actor=DEFAULT_LOCAL_USER_ACTOR,
+            local_actor=self._local_actor,
             accepted_at=utc_now(),
         )
         return SessionRealtimeSubscription(

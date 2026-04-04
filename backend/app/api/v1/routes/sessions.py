@@ -23,6 +23,7 @@ from app.api.dependencies import (
     get_intent_parser_adapter,
     get_object_storage_service,
     get_pitch_generation_adapter,
+    require_owned_session_access,
 )
 from app.db import CompositionDownstreamMode, CompositionJob
 from app.models import (
@@ -126,7 +127,11 @@ from app.services.story_tools import StoryWorkflowToolServiceError
 from app.settings import AppSettings
 from app.storage import ObjectNotFoundError, ObjectStorageService, StorageError
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
+router = APIRouter(
+    prefix="/sessions",
+    tags=["sessions"],
+    dependencies=[Depends(require_owned_session_access)],
+)
 
 
 def _require_debug_inspector_enabled(settings: AppSettings) -> None:

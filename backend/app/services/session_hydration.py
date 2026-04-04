@@ -67,6 +67,7 @@ from app.models import (
     resolve_resume_stage,
 )
 from app.models.composition_interruptions import build_composition_interruption_message
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.repositories import SessionAggregate, StorySessionRepository
 from app.services.agent_context import build_session_agent_context_summary
 from app.services.asset_access import build_session_asset_access_view
@@ -103,16 +104,18 @@ class SessionHydrationService:
         self,
         session: Session,
         *,
+        owner_id: str | None = LOCAL_DEVELOPMENT_OWNER_ID,
         object_storage: ObjectStorageService | None = None,
     ):
         self._session = session
+        self._owner_id = owner_id
         self._sessions = StorySessionRepository(session)
         self._memory = SessionMemoryService(session)
         self._events = SessionEventLogService(session)
         self._object_storage = object_storage
 
     def load_session_snapshot(self, session_id: str) -> SessionSnapshot:
-        aggregate = self._sessions.get_aggregate(session_id)
+        aggregate = self._sessions.get_aggregate(session_id, owner_id=self._owner_id)
         if aggregate is None:
             raise SessionHydrationNotFoundError(f"session {session_id!r} was not found")
 
@@ -133,7 +136,7 @@ class SessionHydrationService:
         if history_limit <= 0:
             raise ValueError("history_limit must be greater than zero")
 
-        aggregate = self._sessions.get_aggregate(session_id)
+        aggregate = self._sessions.get_aggregate(session_id, owner_id=self._owner_id)
         if aggregate is None:
             raise SessionHydrationNotFoundError(f"session {session_id!r} was not found")
 
@@ -274,6 +277,7 @@ def build_recent_session_summary(
     )
     return RecentSessionSummary(
         id=story_session.id,
+        owner_id=story_session.owner_id,
         display_title=display_title,
         working_title=story_session.working_title,
         library_summary=build_session_library_summary(
@@ -366,6 +370,7 @@ def build_session_snapshot(
     )
     snapshot = SessionSnapshot(
         id=story_session.id,
+        owner_id=story_session.owner_id,
         display_title=display_title,
         working_title=story_session.working_title,
         library_summary=build_session_library_summary(

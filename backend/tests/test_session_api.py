@@ -53,6 +53,7 @@ from app.models import (
     WorkflowStage,
     WorkflowStageState,
 )
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.services.catalog import CATALOG_FILE_PATH, load_catalog_document, seed_catalog
 from app.services.model_usage import ModelUsageContext, SessionModelUsageService
 from app.services.session_realtime import CompositionChunkCursor, SessionRealtimeService
@@ -61,6 +62,7 @@ from app.settings import get_settings
 from docx import Document
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from starlette.websockets import WebSocketDisconnect
 from tests.support.in_memory_storage import InMemoryObjectStorage
 
 
@@ -644,10 +646,57 @@ def test_list_recent_sessions_endpoint_returns_sessions_with_latest_first(
         "Older Session",
     ]
     assert payload[0]["overall_status"] == "in_progress"
+    assert payload[0]["owner_id"] == LOCAL_DEVELOPMENT_OWNER_ID
     assert payload[0]["current_stage"] == "tone"
     assert payload[0]["progress"]["completed_stages"] == 1
     assert payload[1]["overall_status"] == "draft"
     assert payload[1]["progress"]["completed_stages"] == 0
+
+
+def test_list_recent_sessions_endpoint_hides_foreign_owned_sessions(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    try:
+        visible = SessionService(db_session).create_session(working_title="Visible Session")
+        db_session.add(
+            StorySession(
+                owner_id="storybook-neighbor",
+                working_title="Hidden Session",
+            )
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.get("/api/v1/sessions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [session["id"] for session in payload] == [visible.id]
+
+
+def test_session_snapshot_endpoint_returns_404_for_foreign_owned_session(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    try:
+        foreign_session = StorySession(
+            owner_id="storybook-neighbor",
+            working_title="Hidden Session",
+        )
+        db_session.add(foreign_session)
+        db_session.commit()
+        foreign_session_id = foreign_session.id
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(f"/api/v1/sessions/{foreign_session_id}")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": f"session {foreign_session_id!r} was not found",
+    }
 
 
 def test_list_recent_sessions_endpoint_supports_filters_and_completed_story_metadata(
@@ -2731,10 +2780,44 @@ def test_session_events_websocket_replays_composition_job_status(
 
     assert ack["action"] == "subscribed"
     assert ack["channel"] == f"session:{session_id}"
+    assert ack["local_actor"] == {
+        "actor_type": "user",
+        "actor_id": LOCAL_DEVELOPMENT_OWNER_ID,
+    }
     assert replayed_job_status is not None
     assert replayed_job_status["delivery"] == "replay"
     assert replayed_job_status["payload"]["status"] == "queued"
     assert replayed_job_status["payload"]["total_segments"] == 3
+
+
+def test_session_events_websocket_rejects_foreign_owned_session(
+    session_api_client: TestClient,
+) -> None:
+    db_session = get_session_factory()()
+    try:
+        foreign_session = StorySession(
+            owner_id="storybook-neighbor",
+            working_title="Hidden Session",
+        )
+        db_session.add(foreign_session)
+        db_session.commit()
+        foreign_session_id = foreign_session.id
+    finally:
+        db_session.close()
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with session_api_client.websocket_connect("/api/v1/sessions/events/ws") as websocket:
+            websocket.send_json(
+                {
+                    "schema_version": 1,
+                    "action": "subscribe",
+                    "session_id": foreign_session_id,
+                    "tab_id": "tab-foreign",
+                }
+            )
+            websocket.receive_json()
+
+    assert exc_info.value.code == 1008
 
 
 def test_session_realtime_service_streams_composition_chunk_deltas(
@@ -3330,6 +3413,7 @@ def test_create_session_endpoint_returns_a_fresh_snapshot(
     assert response.status_code == 201
     payload = response.json()
 
+    assert payload["owner_id"] == LOCAL_DEVELOPMENT_OWNER_ID
     assert payload["display_title"] == "Moonlit Harbor"
     assert payload["working_title"] == "Moonlit Harbor"
     assert payload["resume_stage"] == "genre"

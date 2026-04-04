@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from fastapi import Request
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.ai import (
@@ -18,6 +18,8 @@ from app.ai import (
     PitchGenerationAdapter,
 )
 from app.db.session import get_session_factory
+from app.models.identity import LOCAL_DEVELOPMENT_IDENTITY, RequestIdentity
+from app.repositories import StorySessionRepository
 from app.settings import AppSettings, get_settings
 from app.storage import ObjectStorageService, build_object_storage_service
 
@@ -36,6 +38,32 @@ def get_app_settings(request: Request) -> AppSettings:
     if settings is None:
         settings = get_settings()
     return settings
+
+
+def get_request_identity(request: Request) -> RequestIdentity:
+    identity = getattr(request.app.state, "request_identity", None)
+    if identity is None:
+        identity = LOCAL_DEVELOPMENT_IDENTITY
+        request.app.state.request_identity = identity
+    return identity
+
+
+def require_owned_session_access(
+    request: Request,
+    db_session: Session = Depends(get_db_session),
+    identity: RequestIdentity = Depends(get_request_identity),
+) -> RequestIdentity:
+    session_id = request.path_params.get("session_id")
+    if not session_id:
+        return identity
+
+    if StorySessionRepository(db_session).exists(session_id, owner_id=identity.subject):
+        return identity
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"session {session_id!r} was not found",
+    )
 
 
 def get_object_storage_service(request: Request) -> ObjectStorageService:

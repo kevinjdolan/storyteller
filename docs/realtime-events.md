@@ -305,8 +305,9 @@ Local development is still single-user and permissive for now.
 
 - The backend treats the current browser as `local-user`.
 - No bearer-token requirement is assumed for the initial local socket handshake.
-- The server must still verify that the requested session exists before
-  accepting the subscription.
+- `story_sessions.owner_id` stores that durable local owner explicitly.
+- The server must still verify that the requested session exists and is owned by
+  the current request identity before accepting the subscription.
 - Future real auth should keep the same channel model and simply replace the
   local identity assumption with session ownership checks before joining
   `session:{session_id}`.

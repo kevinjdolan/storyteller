@@ -82,13 +82,23 @@ class StorySessionRepository:
     def __init__(self, session: Session):
         self._session = session
 
-    def create(self, *, working_title: str | None = None) -> StorySession:
-        story_session = StorySession(working_title=working_title)
+    def create(
+        self,
+        *,
+        owner_id: str,
+        working_title: str | None = None,
+    ) -> StorySession:
+        story_session = StorySession(owner_id=owner_id, working_title=working_title)
         self._session.add(story_session)
         self._session.flush()
         return story_session
 
-    def get_by_id(self, session_id: str) -> StorySession | None:
+    def get_by_id(
+        self,
+        session_id: str,
+        *,
+        owner_id: str | None = None,
+    ) -> StorySession | None:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)
             .options(
@@ -100,22 +110,35 @@ class StorySessionRepository:
             )
             .where(StorySession.id == session_id)
         )
+        stmt = _filter_for_owner(stmt, owner_id)
         return self._session.execute(stmt).scalar_one_or_none()
 
-    def exists(self, session_id: str) -> bool:
+    def exists(self, session_id: str, *, owner_id: str | None = None) -> bool:
         stmt = select(StorySession.id).where(StorySession.id == session_id).limit(1)
+        stmt = _filter_for_owner(stmt, owner_id)
         return self._session.execute(stmt).scalar_one_or_none() is not None
 
-    def get_for_update(self, session_id: str) -> StorySession | None:
+    def get_for_update(
+        self,
+        session_id: str,
+        *,
+        owner_id: str | None = None,
+    ) -> StorySession | None:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)
             .options(selectinload(StorySession.workflow_stage_states))
             .where(StorySession.id == session_id)
         )
+        stmt = _filter_for_owner(stmt, owner_id)
         return self._session.execute(stmt).scalar_one_or_none()
 
-    def get_aggregate(self, session_id: str) -> SessionAggregate | None:
-        story_session = self.get_by_id(session_id)
+    def get_aggregate(
+        self,
+        session_id: str,
+        *,
+        owner_id: str | None = None,
+    ) -> SessionAggregate | None:
+        story_session = self.get_by_id(session_id, owner_id=owner_id)
         if story_session is None:
             return None
 
@@ -193,7 +216,12 @@ class StorySessionRepository:
     def get_selected_continuity_bible(self, session_id: str) -> ContinuityBible | None:
         return self._get_selected_continuity_bible(session_id)
 
-    def list_recent(self, *, limit: int = 20) -> list[StorySession]:
+    def list_recent(
+        self,
+        *,
+        limit: int = 20,
+        owner_id: str | None = None,
+    ) -> list[StorySession]:
         stmt: Select[tuple[StorySession]] = (
             select(StorySession)
             .options(
@@ -204,12 +232,14 @@ class StorySessionRepository:
             .order_by(StorySession.updated_at.desc(), StorySession.created_at.desc())
             .limit(limit)
         )
+        stmt = _filter_for_owner(stmt, owner_id)
         return list(self._session.execute(stmt).scalars().all())
 
     def list_recent_library_records(
         self,
         *,
         limit: int = 20,
+        owner_id: str | None = None,
         query: str | None = None,
         status_filter: str | None = None,
         genre_slug: str | None = None,
@@ -227,6 +257,7 @@ class StorySessionRepository:
             )
             .order_by(StorySession.updated_at.desc(), StorySession.created_at.desc())
         )
+        stmt = _filter_for_owner(stmt, owner_id)
 
         if status_filter is not None and status_filter != "all":
             if status_filter == "active":
@@ -284,7 +315,6 @@ class StorySessionRepository:
             )
             for story_session in sessions
         ]
-
     def _load_library_assets(
         self,
         session_ids: list[str],
@@ -591,6 +621,16 @@ class StorySessionRepository:
         return self._session.execute(stmt).scalar_one_or_none()
 
 
+def _filter_for_owner(
+    stmt: Select,
+    owner_id: str | None,
+) -> Select:
+    if owner_id is None:
+        return stmt
+
+    return stmt.where(StorySession.owner_id == owner_id)
+
+
 def _tokenize_library_query(query: str | None) -> list[str]:
     normalized_query = (query or "").strip()
     if not normalized_query:
@@ -612,7 +652,10 @@ def _select_selected_pitch(pitches: list[Pitch]) -> Pitch | None:
     selected_pitches = [row for row in pitches if row.is_selected]
     if not selected_pitches:
         return None
-    return max(selected_pitches, key=lambda row: (row.accepted_at or row.updated_at, row.created_at))
+    return max(
+        selected_pitches,
+        key=lambda row: (row.accepted_at or row.updated_at, row.created_at),
+    )
 
 
 def _select_selected_story_setup(story_setups: list[StorySetup]) -> StorySetup | None:

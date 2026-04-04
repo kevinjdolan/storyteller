@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utc_now
 from app.models.events import EventActorType
+from app.models.identity import LOCAL_DEVELOPMENT_OWNER_ID
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
 
@@ -203,6 +204,11 @@ class ToneProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "story_sessions"
 
+    owner_id: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+        default=LOCAL_DEVELOPMENT_OWNER_ID,
+    )
     working_title: Mapped[str | None] = mapped_column(String(255))
     current_stage: Mapped[WorkflowStage] = mapped_column(
         WORKFLOW_STAGE_ENUM,
@@ -326,6 +332,7 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     __table_args__ = (
+        Index("ix_story_sessions_owner_id_updated_at", "owner_id", "updated_at"),
         Index("ix_story_sessions_overall_status_updated_at", "overall_status", "updated_at"),
         Index("ix_story_sessions_resume_stage", "resume_stage"),
         Index("ix_story_sessions_current_stage", "current_stage"),
