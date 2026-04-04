@@ -60,6 +60,7 @@ alembic upgrade head
 alembic downgrade base
 python -m app.seed_catalog
 python -m app.storage.smoke_test
+python -m app.maintenance.artifact_cleanup
 ```
 
 ## Database migrations
@@ -182,6 +183,7 @@ Core entrypoints:
 - `build_object_storage_service(settings)`: build the runtime storage client from backend settings
 - `object_storage.paths`: predictable bucket/key builders for draft, audio, export, and debug paths
 - `python -m app.storage.smoke_test`: write and read a sample object through the configured backend
+- `python -m app.maintenance.artifact_cleanup`: dry-run or apply conservative artifact cleanup
 
 The bucket and prefix conventions are documented in
 [docs/storage-buckets-and-prefixes.md](/Users/kevin/code/storyteller/docs/storage-buckets-and-prefixes.md).
@@ -190,10 +192,14 @@ To verify the local fake GCS server from the repository root:
 
 ```bash
 make backend-storage-smoke
+make backend-artifact-cleanup-dry-run
 ```
 
 That target defaults to `http://127.0.0.1:8568` so it can talk to the local emulator from the host
 shell even when the main Compose backend container uses `http://gcs:4443` internally.
+
+Artifact lifecycle rules and the cleanup policy are documented in
+[docs/artifact-retention-policy.md](/Users/kevin/code/storyteller/docs/artifact-retention-policy.md).
 
 ## Health routes
 

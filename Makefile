@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-integration-test backend-seed-catalog backend-storage-smoke
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-integration-test backend-seed-catalog backend-storage-smoke backend-artifact-cleanup-dry-run backend-artifact-cleanup-apply
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -83,6 +83,32 @@ backend-storage-smoke: ## Round-trip a sample object through the configured stor
 	export STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}"; \
 	export STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}"; \
 	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.storage.smoke_test; elif command -v python3 >/dev/null 2>&1; then python3 -m app.storage.smoke_test; else python -m app.storage.smoke_test; fi
+
+backend-artifact-cleanup-dry-run: ## Preview expired temporary artifacts without deleting anything
+	@cd backend && \
+	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
+	export STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller}"; \
+	export STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}"; \
+	export STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}"; \
+	export STORYTELLER_GCS_PUBLIC_URL="$${STORYTELLER_GCS_PUBLIC_URL:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}"; \
+	export STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}"; \
+	export STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}"; \
+	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.maintenance.artifact_cleanup; elif command -v python3 >/dev/null 2>&1; then python3 -m app.maintenance.artifact_cleanup; else python -m app.maintenance.artifact_cleanup; fi
+
+backend-artifact-cleanup-apply: ## Delete expired temporary artifacts after reviewing the dry run
+	@cd backend && \
+	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
+	export STORYTELLER_DATABASE_URL="$${STORYTELLER_DATABASE_URL:-postgresql+psycopg://storyteller:storyteller@127.0.0.1:8567/storyteller}"; \
+	export STORYTELLER_GEMINI_API_KEY="$${STORYTELLER_GEMINI_API_KEY:-test-key}"; \
+	export STORYTELLER_GCS_ENDPOINT="$${STORYTELLER_GCS_ENDPOINT:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_PROJECT_ID="$${STORYTELLER_GCS_PROJECT_ID:-storyteller-local}"; \
+	export STORYTELLER_GCS_PUBLIC_URL="$${STORYTELLER_GCS_PUBLIC_URL:-http://127.0.0.1:8568}"; \
+	export STORYTELLER_GCS_SESSIONS_BUCKET_NAME="$${STORYTELLER_GCS_SESSIONS_BUCKET_NAME:-storyteller-sessions}"; \
+	export STORYTELLER_GCS_AUDIO_BUCKET_NAME="$${STORYTELLER_GCS_AUDIO_BUCKET_NAME:-storyteller-audio}"; \
+	export STORYTELLER_GCS_EXPORTS_BUCKET_NAME="$${STORYTELLER_GCS_EXPORTS_BUCKET_NAME:-storyteller-exports}"; \
+	if [[ -x .venv/bin/python ]]; then .venv/bin/python -m app.maintenance.artifact_cleanup --apply; elif command -v python3 >/dev/null 2>&1; then python3 -m app.maintenance.artifact_cleanup --apply; else python -m app.maintenance.artifact_cleanup --apply; fi
 
 format: ## Format frontend and backend source files
 	@$(MAKE) frontend-format

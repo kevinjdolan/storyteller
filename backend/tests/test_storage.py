@@ -81,6 +81,20 @@ class FakeGCSJsonAPI:
             return httpx.Response(status_code=200, json=metadata)
 
         metadata_prefix = "/storage/v1/b/"
+        if request.method == "DELETE" and path.startswith(metadata_prefix) and "/o/" in path:
+            remainder = path[len(metadata_prefix) :]
+            bucket_name, encoded_key = remainder.split("/o/", 1)
+            object_key = unquote(encoded_key)
+            removed = self.objects.pop((unquote(bucket_name), object_key), None)
+
+            if removed is None:
+                return httpx.Response(
+                    status_code=404,
+                    json={"error": {"message": f"object {object_key} not found"}},
+                )
+
+            return httpx.Response(status_code=204)
+
         if request.method == "GET" and path.startswith(metadata_prefix) and "/o/" in path:
             remainder = path[len(metadata_prefix) :]
             bucket_name, encoded_key = remainder.split("/o/", 1)
@@ -213,3 +227,27 @@ def test_storage_service_raises_clear_error_for_missing_objects() -> None:
         client.close()
 
     assert location.uri in str(exc_info.value)
+
+
+def test_storage_service_deletes_objects_through_gcs_json_api() -> None:
+    fake_gcs = FakeGCSJsonAPI()
+    settings = build_test_settings()
+    client = httpx.Client(
+        base_url=settings.gcs_endpoint,
+        transport=httpx.MockTransport(fake_gcs.handle),
+    )
+    object_storage = build_object_storage_service(settings, client=client)
+
+    try:
+        object_storage.ensure_runtime_buckets()
+        location = object_storage.paths.draft_text_snapshot(session_id="session-delete")
+        object_storage.upload_text(location, "delete me")
+
+        deleted = object_storage.delete_object(location)
+        deleted_missing = object_storage.delete_object(location)
+    finally:
+        object_storage.close()
+        client.close()
+
+    assert deleted is True
+    assert deleted_missing is False

@@ -38,6 +38,8 @@ class ObjectStorageBackend(Protocol):
 
     def download_bytes(self, location: StorageObjectLocation) -> bytes: ...
 
+    def delete_object(self, location: StorageObjectLocation) -> bool: ...
+
     def close(self) -> None: ...
 
 
@@ -114,6 +116,17 @@ class GCSStorageBackend:
             self._raise_storage_error("download object", response)
 
         return response.content
+
+    def delete_object(self, location: StorageObjectLocation) -> bool:
+        response = self._client.delete(self._object_metadata_path(location))
+
+        if response.status_code == 404:
+            return False
+
+        if response.status_code not in {200, 204}:
+            self._raise_storage_error("delete object", response)
+
+        return True
 
     def close(self) -> None:
         if self._owns_client:
@@ -198,6 +211,17 @@ class ObjectStorageService:
         encoding: str = "utf-8",
     ) -> str:
         return self.download_bytes(location).decode(encoding)
+
+    def delete_object(
+        self,
+        location: StorageObjectLocation,
+        *,
+        missing_ok: bool = True,
+    ) -> bool:
+        deleted = self._backend.delete_object(location)
+        if deleted or missing_ok:
+            return deleted
+        raise ObjectNotFoundError(location)
 
     def close(self) -> None:
         self._backend.close()

@@ -72,6 +72,19 @@ class InMemoryObjectStorage:
             raise ObjectNotFoundError(location)
         return bytes(stored["data"])
 
+    def delete_object(
+        self,
+        location: StorageObjectLocation,
+        *,
+        missing_ok: bool = True,
+    ) -> bool:
+        removed = self._objects.pop((location.bucket, location.key), None)
+        if removed is not None:
+            return True
+        if missing_ok:
+            return False
+        raise ObjectNotFoundError(location)
+
     def download_text(
         self,
         location: StorageObjectLocation,

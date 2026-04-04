@@ -67,6 +67,9 @@ payload = object_storage.download_text(location)
 The storage service creates buckets on demand before upload, so business logic does not need bucket-
 bootstrap code in composition, export, or audio workflows.
 
+Cleanup policy and the maintenance command surface for expiring temporary blobs are documented in
+[docs/artifact-retention-policy.md](/Users/kevin/code/storyteller/docs/artifact-retention-policy.md).
+
 ## Local Emulator Smoke Test
 
 The repo exposes a CLI round-trip check through:
