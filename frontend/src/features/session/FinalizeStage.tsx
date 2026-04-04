@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import type {
   AudioJobView,
   CompositionSegmentView,
+  SessionArtifactInventoryItemView,
+  SessionArtifactInventoryStatus,
   SessionAssetView,
   SessionSnapshot,
 } from '../../api/sessions.ts'
@@ -21,6 +23,7 @@ import {
   fetchSessionAssetText,
   resolveSessionAssetStreamUrl,
 } from './sessionArtifacts.ts'
+import { useSessionArtifactInventoryQuery } from './sessionQueries.ts'
 import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
 
 type FinalizeStageProps = {
@@ -584,6 +587,57 @@ function buildFinalizeHeroDescription(options: {
   return 'This stage stays useful even when only part of the finish line is ready, so reading, listening, and export status never disappear behind a loading gap.'
 }
 
+function getArtifactBadgeTone(
+  status: SessionArtifactInventoryStatus,
+): BadgeTone {
+  switch (status) {
+    case 'ready':
+      return 'success'
+    case 'generating':
+      return 'accent'
+    case 'failed':
+      return 'danger'
+    case 'stale':
+      return 'warning'
+    default:
+      return 'neutral'
+  }
+}
+
+function formatArtifactStatusLabel(
+  status: SessionArtifactInventoryStatus,
+) {
+  switch (status) {
+    case 'ready':
+      return 'Ready'
+    case 'generating':
+      return 'Generating'
+    case 'failed':
+      return 'Failed'
+    case 'stale':
+      return 'Stale'
+    default:
+      return 'Missing'
+  }
+}
+
+function resolveArtifactFilename(
+  item: SessionArtifactInventoryItemView,
+) {
+  const accessFilename = item.asset?.access?.filename?.trim()
+  if (accessFilename != null && accessFilename.length > 0) {
+    return accessFilename
+  }
+
+  const objectPath = item.asset?.object_path?.trim()
+  if (objectPath == null || objectPath.length === 0) {
+    return null
+  }
+
+  const objectPathParts = objectPath.split('/').filter(Boolean)
+  return objectPathParts.at(-1) ?? null
+}
+
 export function FinalizeStage({
   onAcceptRewrite,
   onDownloadAudio,
@@ -611,6 +665,7 @@ export function FinalizeStage({
   >('idle')
   const [storyTextError, setStoryTextError] = useState<string | null>(null)
   const tabSetId = useId()
+  const artifactInventoryQuery = useSessionArtifactInventoryQuery(snapshot.id)
 
   const compositionSegments = snapshot.composition_segments ?? []
   const reviewJob = snapshot.latest_composition_job?.pending_review
@@ -711,6 +766,136 @@ export function FinalizeStage({
     snapshot.completed_at != null
       ? `Completed ${formatTimestamp(snapshot.completed_at) ?? 'recently'}`
       : `Updated ${formatTimestamp(snapshot.updated_at) ?? 'recently'}`
+  const artifactInventoryItems = useMemo(
+    () => artifactInventoryQuery.data?.items ?? [],
+    [artifactInventoryQuery.data],
+  )
+  const artifactInventoryByKey = useMemo(
+    () =>
+      new Map(
+        artifactInventoryItems.map((item) => [item.key, item] as const),
+      ),
+    [artifactInventoryItems],
+  )
+  const inventoryRefreshedAt =
+    formatTimestamp(artifactInventoryQuery.data?.generated_at) ?? null
+  const storyTextInventoryItem =
+    artifactInventoryByKey.get('story_text') ?? null
+  const storyDocxInventoryItem =
+    artifactInventoryByKey.get('story_docx') ?? null
+  const finalAudioInventoryItem =
+    artifactInventoryByKey.get('final_audio') ?? null
+  const artifactPanelItems = [
+    storyTextInventoryItem,
+    storyDocxInventoryItem,
+    finalAudioInventoryItem,
+  ].filter(
+    (
+      item,
+    ): item is SessionArtifactInventoryItemView => item != null,
+  )
+
+  function buildArtifactMeta(item: SessionArtifactInventoryItemView) {
+    const metadata: string[] = []
+
+    const filename = resolveArtifactFilename(item)
+    if (filename != null) {
+      metadata.push(filename)
+    }
+
+    if (item.key === 'story_text' && storyWordCount != null && storyWordCount > 0) {
+      metadata.push(`${storyWordCount.toLocaleString()} words`)
+    }
+
+    if (item.key === 'final_audio') {
+      const runtimeLabel = formatDurationLabel(item.asset?.duration_seconds)
+      if (runtimeLabel != null) {
+        metadata.push(`Runtime ${runtimeLabel}`)
+      }
+
+      if (item.preview_asset_count > 0 && item.status !== 'ready') {
+        metadata.push(
+          item.preview_asset_count === 1
+            ? '1 preview clip ready'
+            : `${item.preview_asset_count} preview clips ready`,
+        )
+      }
+    }
+
+    const publishedAtLabel = formatTimestamp(item.asset?.ready_at)
+    if (publishedAtLabel != null) {
+      metadata.push(`Published ${publishedAtLabel}`)
+    }
+
+    return metadata
+  }
+
+  function buildArtifactAction(
+    item: SessionArtifactInventoryItemView,
+  ): {
+    label: string
+    onClick: () => void
+  } | null {
+    if (item.key === 'story_text') {
+      if (displayStoryText == null) {
+        return null
+      }
+
+      return {
+        label: 'Open reader',
+        onClick: () => {
+          setActiveTab('read')
+        },
+      }
+    }
+
+    if (item.key === 'story_docx') {
+      if (finalStoryReady || item.status === 'ready') {
+        return {
+          label:
+            item.status === 'stale'
+              ? 'Refresh Word document'
+              : item.status === 'missing'
+                ? 'Generate Word document'
+                : item.status === 'failed'
+                  ? 'Retry Word document'
+                  : 'Download Word document',
+          onClick: () => {
+            onDownloadStoryExport()
+          },
+        }
+      }
+
+      return null
+    }
+
+    if (item.status === 'ready' || item.status === 'stale') {
+      return {
+        label:
+          item.status === 'stale'
+            ? 'Download previous master'
+            : 'Download narration',
+        onClick: () => {
+          onDownloadAudio()
+        },
+      }
+    }
+
+    if (
+      item.status === 'generating' ||
+      item.status === 'failed' ||
+      item.preview_asset_count > 0
+    ) {
+      return {
+        label: 'Open listener',
+        onClick: () => {
+          setActiveTab('listen')
+        },
+      }
+    }
+
+    return null
+  }
 
   useEffect(() => {
     let isActive = true
@@ -848,24 +1033,11 @@ export function FinalizeStage({
         </CardGrid>
 
         <div className="cta-row">
-          <Button
-            disabled={!finalStoryReady}
-            onClick={() => {
-              onDownloadStoryExport()
-            }}
-            tone="secondary"
-          >
-            Download Word document
-          </Button>
-          <Button
-            disabled={!finalAudioReady}
-            onClick={() => {
-              onDownloadAudio()
-            }}
-            tone="secondary"
-          >
-            Download narration
-          </Button>
+          {inventoryRefreshedAt != null ? (
+            <p className="finalize-stage__surface-note">
+              Artifact inventory refreshed {inventoryRefreshedAt}.
+            </p>
+          ) : null}
           <Button
             onClick={() => {
               onReturnToComposition()
@@ -967,18 +1139,6 @@ export function FinalizeStage({
                       ),
                     )}
                   </div>
-                </div>
-
-                <div className="cta-row finalize-stage__surface-actions">
-                  <Button
-                    disabled={!finalStoryReady}
-                    onClick={() => {
-                      onDownloadStoryExport()
-                    }}
-                    tone="secondary"
-                  >
-                    Download story export
-                  </Button>
                 </div>
               </>
             ) : storyTextState === 'loading' ? (
@@ -1084,17 +1244,6 @@ export function FinalizeStage({
                     ))}
                   </div>
                 ) : null}
-
-                <div className="cta-row finalize-stage__surface-actions">
-                  <Button
-                    onClick={() => {
-                      onDownloadAudio()
-                    }}
-                    tone="secondary"
-                  >
-                    Download narration master
-                  </Button>
-                </div>
               </div>
             ) : audioRenderState === 'planned' ? (
               <EmptyStateBlock
@@ -1156,6 +1305,78 @@ export function FinalizeStage({
                 <dd>{completionSummary}</dd>
               </div>
             </dl>
+          </SummaryPanel>
+
+          <SummaryPanel
+            description="One panel keeps the manuscript, packaged export, and narration master in sync, including stale or missing handoff states."
+            label="Downloads and handoff"
+            title="Artifact inventory"
+          >
+            {artifactInventoryQuery.isLoading && artifactInventoryItems.length === 0 ? (
+              <p className="finalize-stage__surface-note">
+                <InlineSpinner label="Loading artifact inventory" /> Loading
+                the current artifact statuses.
+              </p>
+            ) : null}
+
+            {artifactInventoryQuery.isError ? (
+              <FeedbackBanner
+                description="The finalize review surfaces are still available, but the packaged artifact inventory could not be refreshed right now."
+                title="Artifact inventory unavailable"
+                tone="warning"
+              />
+            ) : null}
+
+            {artifactPanelItems.length > 0 ? (
+              <div className="finalize-stage__artifact-list">
+                {artifactPanelItems.map((item) => {
+                  const metadata = buildArtifactMeta(item)
+                  const action = buildArtifactAction(item)
+
+                  return (
+                    <section
+                      className="finalize-stage__artifact"
+                      data-status={item.status}
+                      key={item.key}
+                    >
+                      <div className="finalize-stage__artifact-header">
+                        <div className="finalize-stage__artifact-copy">
+                          <h4>{item.label}</h4>
+                          <p>{item.status_detail}</p>
+                        </div>
+                        <Badge tone={getArtifactBadgeTone(item.status)}>
+                          {formatArtifactStatusLabel(item.status)}
+                        </Badge>
+                      </div>
+
+                      {metadata.length > 0 ? (
+                        <div className="finalize-stage__artifact-meta">
+                          {metadata.map((value) => (
+                            <span key={value}>{value}</span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {action != null ? (
+                        <div className="finalize-stage__artifact-actions">
+                          <Button
+                            onClick={action.onClick}
+                            size="compact"
+                            tone={
+                              item.key === 'story_text'
+                                ? 'ghost'
+                                : 'secondary'
+                            }
+                          >
+                            {action.label}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </section>
+                  )
+                })}
+              </div>
+            ) : null}
           </SummaryPanel>
 
           {reviewJob != null ? (

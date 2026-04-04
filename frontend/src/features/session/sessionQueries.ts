@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createSession,
+  fetchSessionArtifactInventory,
   fetchSessionHydration,
   fetchRecentSessions,
   fetchSessionHistory,
@@ -20,6 +21,9 @@ export const sessionQueryKeys = {
   histories: () => [...sessionQueryKeys.all, 'history'] as const,
   history: (sessionId: string) =>
     [...sessionQueryKeys.histories(), sessionId] as const,
+  artifactInventories: () => [...sessionQueryKeys.all, 'artifact-inventory'] as const,
+  artifactInventory: (sessionId: string) =>
+    [...sessionQueryKeys.artifactInventories(), sessionId] as const,
 }
 
 export function useRecentSessionsQuery(limit = 20) {
@@ -54,6 +58,15 @@ export function useSessionHistoryQuery(sessionId: string) {
     queryFn: () => fetchSessionHistory(sessionId),
     enabled: sessionId.length > 0,
     staleTime: 60_000,
+  })
+}
+
+export function useSessionArtifactInventoryQuery(sessionId: string) {
+  return useQuery({
+    queryKey: sessionQueryKeys.artifactInventory(sessionId),
+    queryFn: () => fetchSessionArtifactInventory(sessionId),
+    enabled: sessionId.length > 0,
+    staleTime: 10_000,
   })
 }
 

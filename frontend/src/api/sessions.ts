@@ -545,6 +545,32 @@ export type SessionAssetAccessView = {
   stream_path?: string | null
 }
 
+export type SessionArtifactInventoryStatus =
+  | 'missing'
+  | 'generating'
+  | 'ready'
+  | 'failed'
+  | 'stale'
+
+export type SessionArtifactInventoryItemView = {
+  key: 'story_text' | 'story_docx' | 'final_audio'
+  label: string
+  artifact_kind: string
+  status: SessionArtifactInventoryStatus
+  status_detail: string
+  asset?: SessionAssetView | null
+  preview_assets: SessionAssetView[]
+  preview_asset_count: number
+  download_path?: string | null
+  stream_path?: string | null
+}
+
+export type SessionArtifactInventoryView = {
+  session_id: string
+  generated_at: string
+  items: SessionArtifactInventoryItemView[]
+}
+
 export type SessionEventActorType = 'user' | 'assistant' | 'system' | 'service'
 
 export type SessionEventActor = {
@@ -943,6 +969,12 @@ export function fetchSessionHydration(sessionId: string) {
 
 export function fetchSessionHistory(sessionId: string) {
   return getJson<SessionHistory>(`/api/v1/sessions/${sessionId}/history`)
+}
+
+export function fetchSessionArtifactInventory(sessionId: string) {
+  return getJson<SessionArtifactInventoryView>(
+    `/api/v1/sessions/${sessionId}/artifacts`,
+  )
 }
 
 export function recordSessionUiAction(
