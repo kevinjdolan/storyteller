@@ -401,6 +401,25 @@ class SessionAssetView(BaseModel):
     updated_at: datetime
 
 
+class SessionArtifactInventoryItemView(BaseModel):
+    key: Literal["story_text", "story_docx", "final_audio"]
+    label: str
+    artifact_kind: str
+    status: Literal["missing", "generating", "ready", "failed", "stale"]
+    status_detail: str
+    asset: SessionAssetView | None = None
+    preview_assets: list[SessionAssetView] = Field(default_factory=list)
+    preview_asset_count: int = Field(default=0, ge=0)
+    download_path: str | None = None
+    stream_path: str | None = None
+
+
+class SessionArtifactInventoryView(BaseModel):
+    session_id: str
+    generated_at: datetime
+    items: list[SessionArtifactInventoryItemView] = Field(default_factory=list)
+
+
 class NarrationSegmentView(BaseModel):
     id: str
     audio_job_id: str
@@ -1007,4 +1026,5 @@ SessionSelectionResponse.model_rebuild()
 SessionStoryBriefResponse.model_rebuild()
 SessionStoryOutlineResponse.model_rebuild()
 SessionStorySetupResponse.model_rebuild()
+SessionArtifactInventoryView.model_rebuild()
 SessionHydrationView.model_rebuild()

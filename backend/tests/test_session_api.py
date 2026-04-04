@@ -1060,6 +1060,64 @@ def test_post_story_docx_artifact_generates_export_metadata(
         db_session.close()
 
 
+def test_get_session_artifact_inventory_endpoint_reports_missing_and_failed_assets(
+    session_api_client: TestClient,
+) -> None:
+    create_response = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Lantern Harbor"},
+    )
+    created = create_response.json()
+
+    db_session = get_session_factory()()
+    try:
+        db_session.add(
+            SessionAsset(
+                session_id=created["id"],
+                asset_kind=AssetKind.STORY_TEXT,
+                status=AssetStatus.READY,
+                storage_bucket="storyteller-exports",
+                object_path="sessions/story-api/story/current.md",
+                mime_type="text/markdown",
+            )
+        )
+        db_session.add(
+            AudioJob(
+                session_id=created["id"],
+                status=JobStatus.FAILED,
+                voice_key="moonbeam",
+                error_message="The worker could not publish the merged narration master.",
+            )
+        )
+        db_session.commit()
+    finally:
+        db_session.close()
+
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}/artifacts")
+
+    assert response.status_code == 200
+    payload = response.json()
+    items = {item["key"]: item for item in payload["items"]}
+
+    assert payload["session_id"] == created["id"]
+    assert items["story_text"]["status"] == "ready"
+    assert items["story_text"]["download_path"].endswith(
+        f"/api/v1/sessions/{created['id']}/artifacts/story-text?disposition=attachment"
+    )
+
+    assert items["story_docx"]["status"] == "missing"
+    assert items["story_docx"]["download_path"].endswith(
+        f"/api/v1/sessions/{created['id']}/artifacts/story-docx?disposition=attachment"
+    )
+
+    assert items["final_audio"]["status"] == "failed"
+    assert (
+        items["final_audio"]["status_detail"]
+        == "The worker could not publish the merged narration master."
+    )
+    assert items["final_audio"]["download_path"] is None
+
+
 def test_get_session_history_endpoint_returns_durable_timeline(
     session_api_client: TestClient,
 ) -> None:

@@ -4,6 +4,11 @@ from app.services.action_policy import (
     SessionActionPolicyService,
     SessionActionPolicyServiceError,
 )
+from app.services.artifact_inventory import (
+    SessionArtifactInventoryError,
+    SessionArtifactInventoryNotFoundError,
+    SessionArtifactInventoryService,
+)
 from app.services.asset_access import (
     SessionArtifactAccessError,
     SessionArtifactAccessService,
@@ -112,6 +117,12 @@ from app.services.sessions import (
     SessionServiceError,
     UnsupportedSessionContextUpdateError,
 )
+from app.services.story_exports import (
+    DOCX_MIME_TYPE,
+    StoryDocxExportService,
+    StoryExportError,
+    StoryExportUnavailableError,
+)
 from app.services.story_tools import (
     StoryWorkflowActionRouter,
     StoryWorkflowToolDefinition,
@@ -121,12 +132,6 @@ from app.services.story_tools import (
     get_story_workflow_tool_prompt_catalog,
     get_story_workflow_tool_registry,
     get_story_workflow_tool_schema_bundle,
-)
-from app.services.story_exports import (
-    DOCX_MIME_TYPE,
-    StoryDocxExportService,
-    StoryExportError,
-    StoryExportUnavailableError,
 )
 
 __all__ = [
@@ -174,6 +179,9 @@ __all__ = [
     "SessionArtifactAccessError",
     "SessionArtifactAccessService",
     "SessionArtifactHandle",
+    "SessionArtifactInventoryError",
+    "SessionArtifactInventoryNotFoundError",
+    "SessionArtifactInventoryService",
     "SessionArtifactNotFoundError",
     "SessionArtifactUnavailableError",
     "SessionIntentParserService",

@@ -54,6 +54,7 @@ from app.models import (
     SelectSessionToneRequest,
     SessionActionPolicyEvaluation,
     SessionActionPolicyEvaluationRequest,
+    SessionArtifactInventoryView,
     SessionAudioSettingsResponse,
     SessionBeatSheetGenerationResponse,
     SessionBeatSheetUpdateResponse,
@@ -86,6 +87,8 @@ from app.services import (
     SessionActionPolicyService,
     SessionArtifactAccessService,
     SessionArtifactHandle,
+    SessionArtifactInventoryNotFoundError,
+    SessionArtifactInventoryService,
     SessionArtifactNotFoundError,
     SessionArtifactUnavailableError,
     SessionIntentParserService,
@@ -247,6 +250,24 @@ def get_named_session_artifact(
         disposition=disposition,
         byte_range=byte_range,
     )
+
+
+@router.get(
+    "/{session_id}/artifacts",
+    response_model=SessionArtifactInventoryView,
+    summary="Load the current artifact inventory for a session",
+)
+def get_session_artifact_inventory(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+) -> SessionArtifactInventoryView:
+    try:
+        return SessionArtifactInventoryService(db_session).load_inventory(session_id)
+    except SessionArtifactInventoryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(
