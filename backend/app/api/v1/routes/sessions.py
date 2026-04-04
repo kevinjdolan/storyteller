@@ -74,6 +74,7 @@ from app.models import (
     SessionStoryOutlineResponse,
     SessionStorySetupResponse,
     SessionUsageDiagnosticsView,
+    StartAudioGenerationToolInput,
     StartSessionCompositionRequest,
     StoryWorkflowToolName,
     WorkflowStage,
@@ -608,6 +609,47 @@ def save_session_audio_settings(
             detail=str(exc),
         ) from exc
     except SessionAudioSettingsSaveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{session_id}/audio/generate",
+    response_model=SessionSelectionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Queue a durable audio job for a story session",
+)
+def start_session_audio_generation(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    payload: StartAudioGenerationToolInput | None = None,
+) -> SessionSelectionResponse:
+    session_service = SessionService(db_session)
+
+    try:
+        StoryWorkflowToolService(db_session).execute(
+            tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
+            session_id=session_id,
+            arguments=(
+                payload.model_dump(mode="json", exclude_unset=True)
+                if payload is not None
+                else {}
+            ),
+        )
+        snapshot = session_service.load_session_snapshot(session_id)
+        event = _resolve_latest_audio_stage_event(
+            session_service=session_service,
+            session_id=session_id,
+        )
+        return SessionSelectionResponse(snapshot=snapshot, event=event)
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except StoryWorkflowToolServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
@@ -1700,6 +1742,20 @@ def _resolve_latest_composition_stage_event(
             return event
 
     raise RuntimeError("composition operation did not produce a replayable event")
+
+
+def _resolve_latest_audio_stage_event(
+    *,
+    session_service: SessionService,
+    session_id: str,
+) -> SessionEventView:
+    history = session_service.load_session_history(session_id, limit=20)
+
+    for event in reversed(history.events):
+        if event.stage == WorkflowStage.AUDIO:
+            return event
+
+    raise RuntimeError("audio operation did not produce a replayable event")
 
 
 def _resolve_composition_job_view(
