@@ -89,8 +89,9 @@ The system should persist the following concepts as first-class records:
 The repository currently contains an initial scaffold:
 
 - `frontend/`: Vite React TypeScript app
-- `backend/`: FastAPI app with an app factory, versioned routers, settings loader, models, services, and database placeholders
-- `backend/migrations/`: reserved home for database schema history
+- `backend/`: FastAPI app with an app factory, versioned routers, settings loader, workflow models,
+  SQLAlchemy metadata, and migration-aware database helpers
+- `backend/migrations/`: Alembic home for database schema history
 - `backend/app/worker/`: reserved home for background job runners
 - `infra/compose/docker-compose.yml`: local frontend, backend, PostgreSQL, file-backed GCS emulator, and browser QA services
 - `infra/persistence/`: notes for persistent local infrastructure data
