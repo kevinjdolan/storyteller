@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from string import Template
@@ -28,6 +29,7 @@ from app.models.intent_parser import (
     IntentParserPromptContext,
     IntentParserStructuredOutput,
 )
+from app.observability import log_event
 
 PROMPTS_ROOT = Path(__file__).resolve().parent / "prompts"
 DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -234,6 +236,7 @@ _ACTION_CATALOG = (
         "common_fields": ["asset_kind"],
     },
 )
+logger = logging.getLogger(__name__)
 
 
 class IntentParserError(RuntimeError):
@@ -290,6 +293,16 @@ class GeminiIntentParserAdapter:
         return self._model_id
 
     def parse(self, invocation: IntentParserInvocation) -> IntentParserInvocationResult:
+        log_event(
+            logger,
+            logging.INFO,
+            "ai.request.started",
+            "Gemini intent parsing started.",
+            operation="intent_parsing",
+            model_id=self._model_id,
+            prompt_version=invocation.prompt_version,
+        )
+        retry_notifier = self._build_retry_notifier(invocation.prompt_version)
         try:
             execution = execute_with_retry(
                 lambda: self._parse_once(invocation),
@@ -298,16 +311,36 @@ class GeminiIntentParserAdapter:
                     exc,
                     operation_name="intent parsing",
                 ),
-                on_retry=self._retry_notifier,
+                on_retry=retry_notifier,
                 sleep_func=self._sleep_func,
             )
+            log_event(
+                logger,
+                logging.INFO,
+                "ai.request.succeeded",
+                "Gemini intent parsing succeeded.",
+                operation="intent_parsing",
+                model_id=self._model_id,
+                prompt_version=invocation.prompt_version,
+                attempts_used=execution.attempts_used,
+            )
             return execution.value
-        except IntentParserTransportError:
+        except IntentParserTransportError as exc:
+            self._log_failure(
+                prompt_version=invocation.prompt_version,
+                failure_detail=exc.failure_detail,
+                error_message=str(exc),
+            )
             raise
         except Exception as exc:
             failure_detail = classify_gemini_exception(
                 exc,
                 operation_name="intent parsing",
+            )
+            self._log_failure(
+                prompt_version=invocation.prompt_version,
+                failure_detail=failure_detail,
+                error_message=failure_detail.message,
             )
             raise IntentParserTransportError(
                 failure_detail.message,
@@ -365,6 +398,50 @@ class GeminiIntentParserAdapter:
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
+
+    def _build_retry_notifier(
+        self,
+        prompt_version: str,
+    ) -> Callable[[GeminiRetryNotice], None]:
+        def notifier(notice: GeminiRetryNotice) -> None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "ai.request.retry_scheduled",
+                "Gemini intent parsing retry scheduled.",
+                operation="intent_parsing",
+                model_id=self._model_id,
+                prompt_version=prompt_version,
+                failure_kind=notice.failure.kind.value,
+                failed_attempt=notice.failed_attempt,
+                next_attempt=notice.next_attempt,
+                max_attempts=notice.max_attempts,
+                delay_seconds=round(notice.delay_seconds, 3),
+            )
+            if self._retry_notifier is not None:
+                self._retry_notifier(notice)
+
+        return notifier
+
+    def _log_failure(
+        self,
+        *,
+        prompt_version: str,
+        failure_detail: GeminiFailureDetail | None,
+        error_message: str,
+    ) -> None:
+        log_event(
+            logger,
+            logging.ERROR,
+            "ai.request.failed",
+            "Gemini intent parsing failed.",
+            operation="intent_parsing",
+            model_id=self._model_id,
+            prompt_version=prompt_version,
+            failure_kind=failure_detail.kind.value if failure_detail is not None else None,
+            retryable=failure_detail.retryable if failure_detail is not None else None,
+            error_message=error_message,
+        )
 
 
 def render_intent_parser_prompt(context: IntentParserPromptContext) -> str:

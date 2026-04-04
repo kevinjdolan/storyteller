@@ -9,6 +9,7 @@ from typing import Callable, TypeVar
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.observability import bound_log_context, log_event
 from app.services import (
     BackgroundJobLeaseLostError,
     BackgroundJobRecord,
@@ -87,86 +88,99 @@ class JobWorker:
 
         handler = self._registry.get(claim.job_type)
         if handler is None:
-            self._mark_job_failed(
-                claim,
-                error_message=f"No handler registered for job type {claim.job_type!r}.",
-            )
+            with bound_log_context(
+                worker_id=self._worker_id,
+                background_job_id=claim.id,
+                background_job_type=claim.job_type,
+                session_id=claim.session_id,
+            ):
+                self._mark_job_failed(
+                    claim,
+                    error_message=f"No handler registered for job type {claim.job_type!r}.",
+                )
             return True
 
-        logger.info(
-            "Worker %s claimed job %s (%s) attempt %s",
-            self._worker_id,
-            claim.id,
-            claim.job_type,
-            claim.attempt_count,
-        )
-
-        context = JobExecutionContext(
-            claim=claim,
+        with bound_log_context(
             worker_id=self._worker_id,
-            _heartbeat_callback=lambda: self._with_job_service(
-                lambda service: service.heartbeat_job(
-                    claim,
-                    lease_duration=self._lease_duration,
+            background_job_id=claim.id,
+            background_job_type=claim.job_type,
+            session_id=claim.session_id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "worker.job.claimed",
+                "Worker claimed a durable background job.",
+                attempt_count=claim.attempt_count,
+            )
+
+            context = JobExecutionContext(
+                claim=claim,
+                worker_id=self._worker_id,
+                _heartbeat_callback=lambda: self._with_job_service(
+                    lambda service: service.heartbeat_job(
+                        claim,
+                        lease_duration=self._lease_duration,
+                    )
+                ),
+                _session_factory=self._session_factory,
+            )
+
+            try:
+                result_summary = handler(claim.payload, context)
+            except BackgroundJobLeaseLostError:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "worker.job.lease_lost",
+                    "Worker lost its durable job lease while running the handler.",
                 )
-            ),
-            _session_factory=self._session_factory,
-        )
-
-        try:
-            result_summary = handler(claim.payload, context)
-        except BackgroundJobLeaseLostError:
-            logger.warning(
-                "Worker %s lost its lease while running job %s",
-                self._worker_id,
-                claim.id,
-            )
-            return True
-        except Exception as exc:  # pragma: no cover - exercised in tests via failure record
-            logger.exception(
-                "Worker %s failed job %s (%s)",
-                self._worker_id,
-                claim.id,
-                claim.job_type,
-            )
-            self._mark_job_failed(
-                claim,
-                error_message=_format_exception_message(exc),
-                result_summary={
-                    "exception_type": exc.__class__.__name__,
-                    "worker_id": self._worker_id,
-                },
-            )
-            return True
-
-        try:
-            completed = self._with_job_service(
-                lambda service: service.complete_job(
+                return True
+            except Exception as exc:  # pragma: no cover - exercised in tests via failure record
+                logger.exception("Worker handler failed.")
+                self._mark_job_failed(
                     claim,
-                    result_summary=result_summary,
+                    error_message=_format_exception_message(exc),
+                    result_summary={
+                        "exception_type": exc.__class__.__name__,
+                        "worker_id": self._worker_id,
+                    },
                 )
-            )
-        except BackgroundJobLeaseLostError:
-            logger.warning(
-                "Worker %s lost its lease before completing job %s",
-                self._worker_id,
-                claim.id,
-            )
-            return True
+                return True
 
-        logger.info(
-            "Worker %s completed job %s with status %s",
-            self._worker_id,
-            completed.id,
-            completed.status.value,
-        )
+            try:
+                completed = self._with_job_service(
+                    lambda service: service.complete_job(
+                        claim,
+                        result_summary=result_summary,
+                    )
+                )
+            except BackgroundJobLeaseLostError:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "worker.job.lease_lost",
+                    "Worker lost its durable job lease before completion.",
+                )
+                return True
+
+            log_event(
+                logger,
+                logging.INFO,
+                "worker.job.completed",
+                "Worker completed a durable background job.",
+                status=completed.status.value,
+            )
         return True
 
     def run_forever(self) -> None:
-        logger.info(
-            "Worker %s listening for jobs. Registered handlers: %s",
-            self._worker_id,
-            ", ".join(self._registry.registered_job_types()) or "none",
+        log_event(
+            logger,
+            logging.INFO,
+            "worker.lifecycle.started",
+            "Worker is listening for jobs.",
+            worker_id=self._worker_id,
+            registered_job_types=self._registry.registered_job_types(),
         )
         while True:
             try:
@@ -199,18 +213,21 @@ class JobWorker:
                 )
             )
         except BackgroundJobLeaseLostError:
-            logger.warning(
-                "Worker %s lost its lease before failing job %s",
-                self._worker_id,
-                claim.id,
+            log_event(
+                logger,
+                logging.WARNING,
+                "worker.job.lease_lost",
+                "Worker lost its durable job lease before marking failure.",
             )
             return
 
-        logger.info(
-            "Worker %s marked job %s as %s",
-            self._worker_id,
-            failed.id,
-            failed.status.value,
+        log_event(
+            logger,
+            logging.INFO,
+            "worker.job.failed",
+            "Worker marked a durable background job as failed.",
+            status=failed.status.value,
+            error_message=error_message,
         )
 
     def _with_job_service(self, operation: Callable[[BackgroundJobService], object]) -> object:

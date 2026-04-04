@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import re
 from collections.abc import Mapping, Sequence
@@ -54,6 +55,7 @@ from app.models import (
     WorkflowStageState,
 )
 from app.models.composition_interruptions import build_composition_interruption_message
+from app.observability import bound_log_context, log_event, pop_log_context, push_log_context
 from app.services.assets import SessionAssetService
 from app.services.composition_prompt_assembly import CompositionPromptAssemblyService
 from app.services.composition_streaming import (
@@ -80,6 +82,7 @@ _COMPOSITION_SUMMARY_FINAL_CHECKPOINT = "segment-complete"
 _COMPOSITION_SUMMARY_METADATA_KEY = "emitted_summary_checkpoints"
 _DRAFT_SNAPSHOT_CHUNK_CADENCE = 2
 _SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]")
+logger = logging.getLogger(__name__)
 
 
 class CompositionJobServiceError(Exception):
@@ -606,9 +609,7 @@ class CompositionJobService:
             requested_downstream_mode=downstream_regeneration_mode,
             total_outline_segments=total_outline_segments,
         )
-        total_segments = (
-            rewrite_plan.effective_end_segment_index - start_segment_index + 1
-        )
+        total_segments = rewrite_plan.effective_end_segment_index - start_segment_index + 1
         beat_sheet_id = snapshot.selected_beat_sheet.id
         story_setup_id = snapshot.selected_story_setup.id
         job = CompositionJob(
@@ -710,6 +711,21 @@ class CompositionJobService:
         self._enqueue_runtime_job(job.session_id, job.id)
         self._session.refresh(job)
         self._session.refresh(first_segment)
+        with bound_log_context(
+            session_id=session_id,
+            composition_job_id=job.id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "composition.job.queued",
+                "Queued a durable composition job.",
+                job_kind=job.job_kind.value,
+                start_segment_index=start_segment_index,
+                end_segment_index=rewrite_plan.effective_end_segment_index,
+                total_segments=total_segments,
+                requires_acceptance=_job_requires_acceptance(job),
+            )
         return CompositionJobStartResult(
             job=job,
             first_segment=first_segment,
@@ -777,6 +793,18 @@ class CompositionJobService:
             )
         self._session.commit()
         self._session.refresh(job)
+        with bound_log_context(
+            session_id=session_id,
+            composition_job_id=job.id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "composition.job.pause_requested",
+                "Composition pause was requested.",
+                current_segment_index=job.current_segment_index,
+                status=job.status.value,
+            )
         return job
 
     def request_redirect(
@@ -881,6 +909,17 @@ class CompositionJobService:
         )
         self._enqueue_runtime_job(job.session_id, job.id)
         self._session.refresh(job)
+        with bound_log_context(
+            session_id=session_id,
+            composition_job_id=job.id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "composition.job.resumed",
+                "Composition job was resumed.",
+                current_segment_index=job.current_segment_index,
+            )
         return job
 
     def cancel_job(
@@ -918,6 +957,18 @@ class CompositionJobService:
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
         self._session.commit()
+        with bound_log_context(
+            session_id=session_id,
+            composition_job_id=job.id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "composition.job.cancelled",
+                "Composition job was cancelled.",
+                current_segment_index=job.current_segment_index,
+                reason=reason,
+            )
         return job
 
     def cancel_active_jobs(
@@ -1313,6 +1364,17 @@ class CompositionJobService:
             ),
             actor=actor or DEFAULT_SYSTEM_ACTOR,
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "composition.segment.started",
+            "Started composing a segment.",
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            segment_index=current_segment.segment_index,
+            total_segments=total_segments,
+            job_kind=job.job_kind.value,
+        )
 
         refreshed_payload = self._refresh_runtime_segment_payload(
             job=job,
@@ -1352,13 +1414,22 @@ class CompositionJobService:
                 )
             )
         draft_started_at = perf_counter()
+        token = push_log_context(
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            segment_index=current_segment.segment_index,
+        )
         try:
-            draft = self._writer.compose_segment(
-                segment_payload=refreshed_payload,
-                prior_segments=completed_segments,
-                current_partial_text=current_segment.accepted_text or current_segment.text_content,
-                total_segments=total_segments,
-            )
+            try:
+                draft = self._writer.compose_segment(
+                    segment_payload=refreshed_payload,
+                    prior_segments=completed_segments,
+                    current_partial_text=current_segment.accepted_text
+                    or current_segment.text_content,
+                    total_segments=total_segments,
+                )
+            finally:
+                pop_log_context(token)
         finally:
             if isinstance(self._writer, GeminiCompositionSegmentWriter):
                 self._writer.set_retry_notifier(None)
@@ -1601,6 +1672,19 @@ class CompositionJobService:
             draft=draft,
             supersede_prior_assets=not _job_requires_acceptance(job),
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "composition.segment.completed",
+            "Finished composing a segment.",
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            segment_index=current_segment.segment_index,
+            total_segments=total_segments,
+            word_count=current_segment.word_count,
+            requires_acceptance=_job_requires_acceptance(job),
+            generation_source=draft.source,
+        )
 
         active_request = self._active_interruption_request(job)
         next_segment = self._next_queued_segment(
@@ -1708,6 +1792,15 @@ class CompositionJobService:
                     actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
                 self._session.commit()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "composition.job.awaiting_review",
+                    "Rewrite candidate finished and is awaiting review.",
+                    session_id=job.session_id,
+                    composition_job_id=job.id,
+                    total_segments=total_segments,
+                )
                 return {
                     "composition_job_id": job.id,
                     "status": job.status.value,
@@ -1777,6 +1870,16 @@ class CompositionJobService:
                 actor=actor or DEFAULT_SYSTEM_ACTOR,
             )
             self._session.commit()
+            log_event(
+                logger,
+                logging.INFO,
+                "composition.job.completed",
+                "Composition job completed and published the latest story artifact.",
+                session_id=job.session_id,
+                composition_job_id=job.id,
+                total_segments=total_segments,
+                story_asset_path=story_location.key,
+            )
             return {
                 "composition_job_id": job.id,
                 "status": job.status.value,
@@ -1811,6 +1914,16 @@ class CompositionJobService:
         )
         self._enqueue_runtime_job(job.session_id, job.id)
         self._session.commit()
+        log_event(
+            logger,
+            logging.INFO,
+            "composition.job.queued_next_segment",
+            "Queued the next composition segment.",
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            next_segment_index=next_segment.segment_index,
+            total_segments=total_segments,
+        )
         return {
             "composition_job_id": job.id,
             "status": job.status.value,
@@ -1853,6 +1966,16 @@ class CompositionJobService:
             status=WorkflowStageState.NEEDS_REGENERATION,
             detail=job.error_message,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        log_event(
+            logger,
+            logging.ERROR,
+            "composition.job.failed",
+            "Composition job failed.",
+            session_id=job.session_id,
+            composition_job_id=job.id,
+            current_segment_index=job.current_segment_index,
+            error_message=job.error_message,
         )
         return job
 
@@ -2244,8 +2367,7 @@ class CompositionJobService:
                 CompositionSegment.session_id == session_id,
                 CompositionSegment.segment_index >= from_segment_index,
                 CompositionSegment.segment_index <= to_segment_index,
-                CompositionSegment.acceptance_state
-                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
                 CompositionSegment.superseded_by_segment_id.is_(None),
             )
             .limit(1)
@@ -2697,8 +2819,7 @@ class CompositionJobService:
             .where(
                 CompositionSegment.session_id == session_id,
                 CompositionSegment.segment_index == segment_index,
-                CompositionSegment.acceptance_state
-                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
                 CompositionSegment.superseded_by_segment_id.is_(None),
             )
             .order_by(CompositionSegment.revision_number.desc())
@@ -2723,8 +2844,7 @@ class CompositionJobService:
             select(CompositionSegment.id)
             .where(
                 CompositionSegment.session_id == session_id,
-                CompositionSegment.acceptance_state
-                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
                 CompositionSegment.superseded_by_segment_id.is_(None),
                 CompositionSegment.is_stale.is_(True),
             )
@@ -2745,8 +2865,7 @@ class CompositionJobService:
             .where(
                 CompositionSegment.session_id == session_id,
                 CompositionSegment.segment_index > segment_index,
-                CompositionSegment.acceptance_state
-                == CompositionSegmentAcceptanceState.ACCEPTED,
+                CompositionSegment.acceptance_state == CompositionSegmentAcceptanceState.ACCEPTED,
                 CompositionSegment.superseded_by_segment_id.is_(None),
             )
             .order_by(CompositionSegment.segment_index.asc())
@@ -2803,10 +2922,9 @@ class CompositionJobService:
             "latest_partial_output": story_text,
             **dict(metadata_json or {}),
         }
-        current_segment = (
-            self._current_story_segment_for_index(job.session_id, segment_index)
-            or self._current_segment(job)
-        )
+        current_segment = self._current_story_segment_for_index(
+            job.session_id, segment_index
+        ) or self._current_segment(job)
         self._persist_draft_snapshot(
             job=job,
             story_text=story_text,
@@ -3050,10 +3168,20 @@ class CompositionJobService:
     def _enqueue_runtime_job(self, session_id: str, composition_job_id: str) -> None:
         if self._has_pending_runtime_job(composition_job_id):
             return
-        self._jobs.enqueue_job(
+        queued_job = self._jobs.enqueue_job(
             job_type=COMPOSITION_RUNTIME_JOB_TYPE,
             payload={"composition_job_id": composition_job_id},
             session_id=session_id,
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "worker.job.enqueued",
+            "Enqueued the composition runtime worker job.",
+            session_id=session_id,
+            composition_job_id=composition_job_id,
+            background_job_id=queued_job.id,
+            background_job_type=queued_job.job_type,
         )
 
     def _has_pending_runtime_job(self, composition_job_id: str) -> bool:

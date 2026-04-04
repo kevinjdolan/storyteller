@@ -19,6 +19,7 @@ from app.ai import (
 )
 from app.db.session import get_session_factory
 from app.models.identity import LOCAL_DEVELOPMENT_IDENTITY, RequestIdentity
+from app.observability import update_log_context
 from app.repositories import StorySessionRepository
 from app.settings import AppSettings, get_settings
 from app.storage import ObjectStorageService, build_object_storage_service
@@ -45,6 +46,10 @@ def get_request_identity(request: Request) -> RequestIdentity:
     if identity is None:
         identity = LOCAL_DEVELOPMENT_IDENTITY
         request.app.state.request_identity = identity
+    update_log_context(
+        actor_id=identity.subject,
+        auth_mode=identity.auth_mode,
+    )
     return identity
 
 
@@ -56,6 +61,7 @@ def require_owned_session_access(
     session_id = request.path_params.get("session_id")
     if not session_id:
         return identity
+    update_log_context(session_id=session_id)
 
     if StorySessionRepository(db_session).exists(session_id, owner_id=identity.subject):
         return identity

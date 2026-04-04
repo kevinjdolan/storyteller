@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import re
 from dataclasses import dataclass
 from time import sleep as default_sleep
@@ -21,6 +22,7 @@ from app.ai.gemini_resilience import (
     safe_json_payload,
 )
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
+from app.observability import log_event
 
 DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_TTS_SAMPLE_RATE_HZ = 24_000
@@ -55,10 +57,9 @@ _STYLE_DIRECTIONS: dict[AudioNarrationStyle, str] = {
     AudioNarrationStyle.HUSHED: (
         "Keep the delivery hushed and intimate while staying fully intelligible."
     ),
-    AudioNarrationStyle.WARM: (
-        "Keep the delivery warm, reassuring, and softly expressive."
-    ),
+    AudioNarrationStyle.WARM: ("Keep the delivery warm, reassuring, and softly expressive."),
 }
+logger = logging.getLogger(__name__)
 
 
 class TextToSpeechError(RuntimeError):
@@ -163,6 +164,17 @@ class GeminiTextToSpeechAdapter:
     def synthesize(self, request: NarrationSynthesisRequest) -> NarrationSynthesisResult:
         rendered_prompt = render_gemini_tts_prompt(request)
         voice_name, _voice_direction = _VOICE_PROFILES[request.voice_key]
+        log_event(
+            logger,
+            logging.INFO,
+            "ai.request.started",
+            "Gemini text-to-speech generation started.",
+            operation="text_to_speech_generation",
+            model_id=self._model_id,
+            prompt_version=GEMINI_TTS_PROMPT_VERSION,
+            voice_name=voice_name,
+        )
+        retry_notifier = self._build_retry_notifier()
         try:
             execution = execute_with_retry(
                 lambda: self._synthesize_once(
@@ -174,10 +186,21 @@ class GeminiTextToSpeechAdapter:
                     exc,
                     operation_name="text-to-speech generation",
                 ),
-                on_retry=self._retry_notifier,
+                on_retry=retry_notifier,
                 sleep_func=self._sleep_func,
             )
             result = execution.value
+            log_event(
+                logger,
+                logging.INFO,
+                "ai.request.succeeded",
+                "Gemini text-to-speech generation succeeded.",
+                operation="text_to_speech_generation",
+                model_id=self._model_id,
+                prompt_version=GEMINI_TTS_PROMPT_VERSION,
+                voice_name=voice_name,
+                attempts_used=execution.attempts_used,
+            )
             return NarrationSynthesisResult(
                 pcm_audio_bytes=result.pcm_audio_bytes,
                 provider=result.provider,
@@ -196,12 +219,22 @@ class GeminiTextToSpeechAdapter:
                     "attempts_used": execution.attempts_used,
                 },
             )
-        except TextToSpeechTransportError:
+        except TextToSpeechTransportError as exc:
+            self._log_failure(
+                failure_detail=exc.failure_detail,
+                error_message=str(exc),
+                voice_name=voice_name,
+            )
             raise
         except Exception as exc:
             failure_detail = classify_gemini_exception(
                 exc,
                 operation_name="text-to-speech generation",
+            )
+            self._log_failure(
+                failure_detail=failure_detail,
+                error_message=failure_detail.message,
+                voice_name=voice_name,
             )
             raise TextToSpeechTransportError(
                 failure_detail.message,
@@ -217,6 +250,48 @@ class GeminiTextToSpeechAdapter:
         retry_notifier: Callable[[GeminiRetryNotice], None] | None,
     ) -> None:
         self._retry_notifier = retry_notifier
+
+    def _build_retry_notifier(self) -> Callable[[GeminiRetryNotice], None]:
+        def notifier(notice: GeminiRetryNotice) -> None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "ai.request.retry_scheduled",
+                "Gemini text-to-speech generation retry scheduled.",
+                operation="text_to_speech_generation",
+                model_id=self._model_id,
+                prompt_version=GEMINI_TTS_PROMPT_VERSION,
+                failure_kind=notice.failure.kind.value,
+                failed_attempt=notice.failed_attempt,
+                next_attempt=notice.next_attempt,
+                max_attempts=notice.max_attempts,
+                delay_seconds=round(notice.delay_seconds, 3),
+            )
+            if self._retry_notifier is not None:
+                self._retry_notifier(notice)
+
+        return notifier
+
+    def _log_failure(
+        self,
+        *,
+        failure_detail: GeminiFailureDetail | None,
+        error_message: str,
+        voice_name: str,
+    ) -> None:
+        log_event(
+            logger,
+            logging.ERROR,
+            "ai.request.failed",
+            "Gemini text-to-speech generation failed.",
+            operation="text_to_speech_generation",
+            model_id=self._model_id,
+            prompt_version=GEMINI_TTS_PROMPT_VERSION,
+            voice_name=voice_name,
+            failure_kind=failure_detail.kind.value if failure_detail is not None else None,
+            retryable=failure_detail.retryable if failure_detail is not None else None,
+            error_message=error_message,
+        )
 
     def _synthesize_once(
         self,

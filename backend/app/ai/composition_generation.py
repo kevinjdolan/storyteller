@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from string import Template
@@ -27,6 +28,7 @@ from app.models import (
     CompositionSegmentGenerationPromptContext,
     CompositionSegmentGenerationStructuredOutput,
 )
+from app.observability import log_event
 
 PROMPTS_ROOT = Path(__file__).resolve().parent / "prompts"
 DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -52,6 +54,7 @@ _SUPPORTED_JSON_SCHEMA_KEYS = {
     "title",
     "type",
 }
+logger = logging.getLogger(__name__)
 
 
 class CompositionSegmentGenerationError(RuntimeError):
@@ -114,6 +117,16 @@ class GeminiCompositionSegmentGenerationAdapter:
         self,
         invocation: CompositionSegmentGenerationInvocation,
     ) -> CompositionSegmentGenerationInvocationResult:
+        log_event(
+            logger,
+            logging.INFO,
+            "ai.request.started",
+            "Gemini composition segment generation started.",
+            operation="composition_segment_generation",
+            model_id=self._model_id,
+            prompt_version=invocation.prompt_version,
+        )
+        retry_notifier = self._build_retry_notifier(invocation.prompt_version)
         try:
             execution = execute_with_retry(
                 lambda: self._generate_once(invocation),
@@ -122,16 +135,36 @@ class GeminiCompositionSegmentGenerationAdapter:
                     exc,
                     operation_name="composition segment generation",
                 ),
-                on_retry=self._retry_notifier,
+                on_retry=retry_notifier,
                 sleep_func=self._sleep_func,
             )
+            log_event(
+                logger,
+                logging.INFO,
+                "ai.request.succeeded",
+                "Gemini composition segment generation succeeded.",
+                operation="composition_segment_generation",
+                model_id=self._model_id,
+                prompt_version=invocation.prompt_version,
+                attempts_used=execution.attempts_used,
+            )
             return execution.value
-        except CompositionSegmentGenerationTransportError:
+        except CompositionSegmentGenerationTransportError as exc:
+            self._log_failure(
+                prompt_version=invocation.prompt_version,
+                failure_detail=exc.failure_detail,
+                error_message=str(exc),
+            )
             raise
         except Exception as exc:
             failure_detail = classify_gemini_exception(
                 exc,
                 operation_name="composition segment generation",
+            )
+            self._log_failure(
+                prompt_version=invocation.prompt_version,
+                failure_detail=failure_detail,
+                error_message=failure_detail.message,
             )
             raise CompositionSegmentGenerationTransportError(
                 failure_detail.message,
@@ -147,6 +180,50 @@ class GeminiCompositionSegmentGenerationAdapter:
         retry_notifier: Callable[[GeminiRetryNotice], None] | None,
     ) -> None:
         self._retry_notifier = retry_notifier
+
+    def _build_retry_notifier(
+        self,
+        prompt_version: str,
+    ) -> Callable[[GeminiRetryNotice], None]:
+        def notifier(notice: GeminiRetryNotice) -> None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "ai.request.retry_scheduled",
+                "Gemini composition segment generation retry scheduled.",
+                operation="composition_segment_generation",
+                model_id=self._model_id,
+                prompt_version=prompt_version,
+                failure_kind=notice.failure.kind.value,
+                failed_attempt=notice.failed_attempt,
+                next_attempt=notice.next_attempt,
+                max_attempts=notice.max_attempts,
+                delay_seconds=round(notice.delay_seconds, 3),
+            )
+            if self._retry_notifier is not None:
+                self._retry_notifier(notice)
+
+        return notifier
+
+    def _log_failure(
+        self,
+        *,
+        prompt_version: str,
+        failure_detail: GeminiFailureDetail | None,
+        error_message: str,
+    ) -> None:
+        log_event(
+            logger,
+            logging.ERROR,
+            "ai.request.failed",
+            "Gemini composition segment generation failed.",
+            operation="composition_segment_generation",
+            model_id=self._model_id,
+            prompt_version=prompt_version,
+            failure_kind=failure_detail.kind.value if failure_detail is not None else None,
+            retryable=failure_detail.retryable if failure_detail is not None else None,
+            error_message=error_message,
+        )
 
     def _generate_once(
         self,

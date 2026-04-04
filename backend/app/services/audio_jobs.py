@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter
@@ -41,6 +42,7 @@ from app.models import (
     WorkflowStageState,
 )
 from app.models.audio_settings import AudioNarrationStyle, AudioVoiceKey
+from app.observability import bound_log_context, log_event, pop_log_context, push_log_context
 from app.services.assets import SessionAssetService
 from app.services.audio_mixing import AudioMixingError, FfmpegAudioMixer
 from app.services.audio_music import build_audio_mix_plan, deserialize_audio_mix_plan
@@ -67,6 +69,7 @@ _AUDIO_SEGMENT_PROGRESS_CEILING = 86.0
 _AUDIO_ASSEMBLY_PROGRESS = 90.0
 _AUDIO_MIX_PROGRESS = 96.0
 _AUDIO_PUBLISH_PROGRESS = 99.0
+logger = logging.getLogger(__name__)
 
 
 class AudioJobServiceError(Exception):
@@ -192,6 +195,20 @@ class AudioJobService:
         self._enqueue_runtime_job(session_id, job.id)
         self._session.refresh(job)
         self._session.refresh(first_segment)
+        with bound_log_context(
+            session_id=session_id,
+            audio_job_id=job.id,
+        ):
+            log_event(
+                logger,
+                logging.INFO,
+                "audio.job.queued",
+                "Queued a durable audio job.",
+                total_segments=total_segments,
+                estimated_duration_seconds=estimated_duration_seconds,
+                include_background_music=settings.include_background_music,
+                voice_key=settings.voice_key.value,
+            )
         return AudioJobStartResult(
             job=job,
             first_segment=first_segment,
@@ -279,6 +296,11 @@ class AudioJobService:
                     self._session.commit()
 
                     synthesis_started_at = perf_counter()
+                    token = push_log_context(
+                        session_id=job.session_id,
+                        audio_job_id=job.id,
+                        segment_index=segment.segment_index,
+                    )
                     try:
                         if hasattr(adapter, "set_retry_notifier"):
                             adapter.set_retry_notifier(
@@ -322,6 +344,7 @@ class AudioJobService:
                         )
                         raise
                     finally:
+                        pop_log_context(token)
                         if hasattr(adapter, "set_retry_notifier"):
                             adapter.set_retry_notifier(None)
 
@@ -357,6 +380,17 @@ class AudioJobService:
                         actor=actor or DEFAULT_SYSTEM_ACTOR,
                     )
                     self._session.commit()
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "audio.segment.completed",
+                        "Finished rendering an audio segment.",
+                        session_id=job.session_id,
+                        audio_job_id=job.id,
+                        segment_index=segment.segment_index,
+                        total_segments=total_segments,
+                        asset_id=segment_asset.id,
+                    )
 
                 final_result = self._persist_final_audio(
                     job=job,
@@ -406,6 +440,17 @@ class AudioJobService:
                     actor=actor or DEFAULT_SYSTEM_ACTOR,
                 )
                 self._session.commit()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "audio.job.completed",
+                    "Audio job completed and published the final artifact.",
+                    session_id=job.session_id,
+                    audio_job_id=job.id,
+                    total_segments=total_segments,
+                    final_asset_id=final_result["asset_id"],
+                    mix_applied=final_result["mix_applied"],
+                )
                 return {
                     "audio_job_id": job.id,
                     "status": job.status.value,
@@ -472,6 +517,16 @@ class AudioJobService:
             status=WorkflowStageState.NEEDS_REGENERATION,
             detail=job.error_message,
             actor=actor or DEFAULT_SYSTEM_ACTOR,
+        )
+        log_event(
+            logger,
+            logging.ERROR,
+            "audio.job.failed",
+            "Audio job failed.",
+            session_id=job.session_id,
+            audio_job_id=job.id,
+            current_segment_index=job.current_segment_index,
+            error_message=job.error_message,
         )
         return job
 
@@ -739,9 +794,7 @@ class AudioJobService:
                 or _read_mapping(job.config_json).get("tts_model_id")
                 or ""
             ),
-            prompt_version=str(
-                segment_metadata.get("prompt_version") or GEMINI_TTS_PROMPT_VERSION
-            ),
+            prompt_version=str(segment_metadata.get("prompt_version") or GEMINI_TTS_PROMPT_VERSION),
             rendered_prompt=str(segment_metadata.get("rendered_prompt") or ""),
             voice_name=str(segment_metadata.get("voice_name") or ""),
             provider_mime_type="audio/wav",
@@ -848,10 +901,20 @@ class AudioJobService:
     def _enqueue_runtime_job(self, session_id: str, audio_job_id: str) -> None:
         if self._has_pending_runtime_job(audio_job_id):
             return
-        self._jobs.enqueue_job(
+        queued_job = self._jobs.enqueue_job(
             job_type=AUDIO_RUNTIME_JOB_TYPE,
             payload={"audio_job_id": audio_job_id},
             session_id=session_id,
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "worker.job.enqueued",
+            "Enqueued the audio runtime worker job.",
+            session_id=session_id,
+            audio_job_id=audio_job_id,
+            background_job_id=queued_job.id,
+            background_job_type=queued_job.job_type,
         )
 
     def _has_pending_runtime_job(self, audio_job_id: str) -> bool:
@@ -897,9 +960,7 @@ class AudioJobService:
             "total_steps": total_steps,
             "completed_segments": completed_segments,
             "latest_asset_id": latest_asset_id or existing_config.get("latest_asset_id"),
-            "latest_asset_kind": (
-                latest_asset_kind or existing_config.get("latest_asset_kind")
-            ),
+            "latest_asset_kind": (latest_asset_kind or existing_config.get("latest_asset_kind")),
             "current_segment_id": segment_id or existing_config.get("current_segment_id"),
         }
         self._events.record_audio_progress(
@@ -938,11 +999,15 @@ def _build_audio_retry_message(
 
 
 def _build_audio_terminal_failure_message(exc: Exception) -> str:
-    if not isinstance(exc, TextToSpeechTransportError) and getattr(
-        exc,
-        "failure_detail",
-        None,
-    ) is None:
+    if (
+        not isinstance(exc, TextToSpeechTransportError)
+        and getattr(
+            exc,
+            "failure_detail",
+            None,
+        )
+        is None
+    ):
         return str(exc).strip() or exc.__class__.__name__
 
     failure_detail = classify_gemini_exception(
@@ -1074,10 +1139,7 @@ def _segment_progress_percent(completed_segments: int, total_segments: int) -> f
 
 
 def _build_queued_audio_message(total_segments: int) -> str:
-    return (
-        f"Queued narration for {total_segments} segment"
-        f"{'' if total_segments == 1 else 's'}."
-    )
+    return f"Queued narration for {total_segments} segment{'' if total_segments == 1 else 's'}."
 
 
 def _build_rendering_segment_message(
@@ -1087,10 +1149,7 @@ def _build_rendering_segment_message(
     attempt_count: int,
 ) -> str:
     attempt_suffix = f" (attempt {attempt_count})" if attempt_count > 1 else ""
-    return (
-        f"Rendering narration segment {segment_index} of {total_segments}"
-        f"{attempt_suffix}."
-    )
+    return f"Rendering narration segment {segment_index} of {total_segments}{attempt_suffix}."
 
 
 def _build_segment_saved_message(segment_index: int, total_segments: int) -> str:

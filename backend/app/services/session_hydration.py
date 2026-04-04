@@ -2425,7 +2425,7 @@ def _read_optional_asset_duration_seconds(asset: SessionAsset) -> int | None:
     duration_seconds = _read_optional_mapping_float(details, "duration_seconds")
     if duration_seconds is None or duration_seconds <= 0:
         return None
-    return round(duration_seconds)
+    return max(round(duration_seconds), 1)
 
 
 def resolve_display_title_with_source(

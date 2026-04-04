@@ -19,6 +19,7 @@ from app.models.model_usage import (
     SessionUsageSummaryView,
 )
 from app.models.workflow import WorkflowStage
+from app.observability import log_event
 from app.repositories import ModelUsageRepository
 from app.settings import AppSettings, get_settings
 
@@ -104,27 +105,30 @@ class SessionModelUsageService:
             now=now,
         )
 
-        logger.info(
-            "model_usage session_id=%s bucket=%s stage=%s purpose=%s model=%s outcome=%s "
-            "elapsed_ms=%s input_tokens=%s output_tokens=%s total_tokens=%s approx_cost_usd=%s",
-            context.session_id,
-            context.usage_bucket.value,
-            context.workflow_stage.value if context.workflow_stage is not None else "none",
-            context.purpose,
-            context.model_id,
-            outcome.value,
-            max(int(elapsed_ms), 0),
-            token_usage.input_tokens,
-            token_usage.output_tokens,
-            token_usage.total_tokens,
-            approximate_cost_usd,
+        log_event(
+            logger,
+            logging.INFO,
+            "model.usage.recorded",
+            "Recorded model usage diagnostics.",
+            session_id=context.session_id,
+            usage_bucket=context.usage_bucket.value,
+            workflow_stage=(
+                context.workflow_stage.value if context.workflow_stage is not None else None
+            ),
+            purpose=context.purpose,
+            provider=context.provider,
+            model_id=context.model_id,
+            outcome=outcome.value,
+            elapsed_ms=max(int(elapsed_ms), 0),
+            input_tokens=token_usage.input_tokens,
+            output_tokens=token_usage.output_tokens,
+            total_tokens=token_usage.total_tokens,
+            approximate_cost_usd=approximate_cost_usd,
         )
         return event
 
     def load_session_summary(self, session_id: str) -> SessionUsageSummaryView:
-        rollups_by_bucket = {
-            row.usage_bucket: row for row in self._usage.list_rollups(session_id)
-        }
+        rollups_by_bucket = {row.usage_bucket: row for row in self._usage.list_rollups(session_id)}
         bucket_summaries = [
             build_bucket_summary_view(rollups_by_bucket.get(bucket.value), usage_bucket=bucket)
             for bucket in _DEFAULT_USAGE_BUCKETS
@@ -135,9 +139,7 @@ class SessionModelUsageService:
             (item.max_elapsed_ms or 0 for item in bucket_summaries),
             default=0,
         )
-        approximate_cost_usd = sum(
-            item.approximate_cost_usd or 0 for item in bucket_summaries
-        )
+        approximate_cost_usd = sum(item.approximate_cost_usd or 0 for item in bucket_summaries)
         return SessionUsageSummaryView(
             total_calls=total_calls,
             succeeded_calls=sum(item.succeeded_calls for item in bucket_summaries),
@@ -221,8 +223,7 @@ def extract_gemini_token_usage(
     return ModelTokenUsageView(
         input_tokens=_read_optional_int(usage_payload.get("promptTokenCount")),
         output_tokens=_read_optional_int(
-            usage_payload.get("candidatesTokenCount")
-            or usage_payload.get("candidateTokenCount")
+            usage_payload.get("candidatesTokenCount") or usage_payload.get("candidateTokenCount")
         ),
         total_tokens=_read_optional_int(usage_payload.get("totalTokenCount")),
         cached_input_tokens=_read_optional_int(usage_payload.get("cachedContentTokenCount")),
@@ -342,9 +343,7 @@ def build_stage_breakdown_view(row: Mapping[str, Any]) -> SessionUsageStageBreak
             if row["average_elapsed_ms"] is not None
             else None
         ),
-        max_elapsed_ms=(
-            int(row["max_elapsed_ms"]) if row["max_elapsed_ms"] is not None else None
-        ),
+        max_elapsed_ms=(int(row["max_elapsed_ms"]) if row["max_elapsed_ms"] is not None else None),
         approximate_cost_usd=(
             round(float(row["approximate_cost_usd"]), 6)
             if row["approximate_cost_usd"] is not None

@@ -27,6 +27,7 @@ from app.models import (
     NormalizedBriefPreferences,
 )
 from app.models.workflow import WorkflowStage
+from app.observability import log_event
 from app.repositories import StorySessionRepository
 from app.services.continuity import SessionContinuityService
 
@@ -224,15 +225,17 @@ class CompositionPromptAssemblyService:
                 segment_goal_summary=_truncate(segment_goal_summary),
             ),
         )
-        logger.info(
-            "assembled composition prompt package session_id=%s segment_index=%s job_kind=%s "
-            "outline_card_key=%s continuity_revision=%s continuity_fact_count=%s",
-            request.session_id,
-            request.segment_index,
-            request.job_kind,
-            package.debug_context.outline_card_key,
-            package.debug_context.continuity_revision_number,
-            package.debug_context.continuity_fact_count,
+        log_event(
+            logger,
+            logging.INFO,
+            "composition.prompt.assembled",
+            "Assembled the composition prompt package.",
+            session_id=request.session_id,
+            segment_index=request.segment_index,
+            job_kind=request.job_kind,
+            outline_card_key=package.debug_context.outline_card_key,
+            continuity_revision=package.debug_context.continuity_revision_number,
+            continuity_fact_count=package.debug_context.continuity_fact_count,
         )
         return package
 
