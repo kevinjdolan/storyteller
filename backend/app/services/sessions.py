@@ -40,6 +40,7 @@ from app.models import (
     SessionCharacterSheetGenerationResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
+    SessionDebugInspectorView,
     SessionEventActor,
     SessionEventView,
     SessionHistoryView,
@@ -57,6 +58,7 @@ from app.models import (
     resolve_resume_stage,
 )
 from app.repositories import StorySessionRepository, WorkflowStageStateRepository
+from app.services.artifact_inventory import SessionArtifactInventoryService
 from app.services.audio_settings import (
     audio_settings_field_values,
     build_audio_runtime_estimate,
@@ -277,6 +279,47 @@ class SessionService:
             session_id,
             recent_limit=recent_limit,
             leaderboard_limit=leaderboard_limit,
+        )
+
+    def load_session_debug_inspector(
+        self,
+        session_id: str,
+        *,
+        history_limit: int = 100,
+        usage_recent_limit: int = 20,
+        usage_leaderboard_limit: int = 5,
+    ) -> SessionDebugInspectorView:
+        if history_limit <= 0:
+            raise ValueError("history_limit must be greater than zero")
+        if usage_recent_limit <= 0:
+            raise ValueError("usage_recent_limit must be greater than zero")
+        if usage_leaderboard_limit <= 0:
+            raise ValueError("usage_leaderboard_limit must be greater than zero")
+
+        if not self._sessions.exists(session_id):
+            raise SessionNotFoundError(f"session {session_id!r} was not found")
+
+        hydration = SessionHydrationService(self._session).hydrate_session(
+            session_id,
+            history_limit=history_limit,
+        )
+        artifact_inventory = SessionArtifactInventoryService(self._session).load_inventory(
+            session_id,
+        )
+        usage_diagnostics = SessionModelUsageService(self._session).load_session_diagnostics(
+            session_id,
+            recent_limit=usage_recent_limit,
+            leaderboard_limit=usage_leaderboard_limit,
+        )
+
+        return SessionDebugInspectorView(
+            session_id=session_id,
+            generated_at=utc_now(),
+            snapshot=hydration.snapshot,
+            hydration=hydration.hydration,
+            recent_history=hydration.recent_history,
+            artifact_inventory=artifact_inventory,
+            usage_diagnostics=usage_diagnostics,
         )
 
     def record_ui_action(

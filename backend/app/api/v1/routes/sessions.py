@@ -15,6 +15,7 @@ from app.ai import (
     PitchGenerationAdapter,
 )
 from app.api.dependencies import (
+    get_app_settings,
     get_beat_sheet_generation_adapter,
     get_brief_normalization_adapter,
     get_character_generation_adapter,
@@ -62,6 +63,7 @@ from app.models import (
     SessionCompositionResponse,
     SessionContextUpdateRequest,
     SessionContextUpdateResponse,
+    SessionDebugInspectorView,
     SessionEventView,
     SessionHistoryView,
     SessionHydrationView,
@@ -120,9 +122,20 @@ from app.services.sessions import (
     UnsupportedSessionContextUpdateError,
 )
 from app.services.story_tools import StoryWorkflowToolServiceError
+from app.settings import AppSettings
 from app.storage import ObjectNotFoundError, ObjectStorageService, StorageError
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+def _require_debug_inspector_enabled(settings: AppSettings) -> None:
+    if settings.feature_flags.enable_debug_inspector:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="The developer debug inspector is not enabled for this environment.",
+    )
 
 
 @router.get(
@@ -185,6 +198,35 @@ def hydrate_session_workspace(
             history_limit=history_limit,
         )
     except SessionHydrationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{session_id}/debug-inspector",
+    response_model=SessionDebugInspectorView,
+    summary="Load the developer debug inspector snapshot for a story session",
+)
+def get_session_debug_inspector(
+    session_id: str,
+    db_session: Annotated[Session, Depends(get_db_session)],
+    settings: Annotated[AppSettings, Depends(get_app_settings)],
+    history_limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    usage_recent_limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    usage_leaderboard_limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> SessionDebugInspectorView:
+    _require_debug_inspector_enabled(settings)
+
+    try:
+        return SessionService(db_session).load_session_debug_inspector(
+            session_id,
+            history_limit=history_limit,
+            usage_recent_limit=usage_recent_limit,
+            usage_leaderboard_limit=usage_leaderboard_limit,
+        )
+    except SessionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),

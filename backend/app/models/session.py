@@ -20,7 +20,10 @@ from app.models.chat_actions import (
 from app.models.composition_interruptions import CompositionInterruptionRequestView
 from app.models.continuity import ContinuityBibleView
 from app.models.events import SessionEventView, SessionHistoryView
-from app.models.model_usage import SessionUsageSummaryView
+from app.models.model_usage import (
+    SessionUsageDiagnosticsView,
+    SessionUsageSummaryView,
+)
 from app.models.story_outline import StoryOutlineCard, StoryOutlineChangeImpact
 from app.models.workflow import WorkflowStage, WorkflowStageState
 
@@ -1037,6 +1040,16 @@ class SessionHydrationView(BaseModel):
     hydration: SessionHydrationMetadata
 
 
+class SessionDebugInspectorView(BaseModel):
+    session_id: str
+    generated_at: datetime
+    snapshot: SessionSnapshot
+    hydration: SessionHydrationMetadata
+    recent_history: SessionHistoryView
+    artifact_inventory: SessionArtifactInventoryView
+    usage_diagnostics: SessionUsageDiagnosticsView
+
+
 ExportAssetView = SessionAssetView
 
 
@@ -1052,3 +1065,4 @@ SessionStoryOutlineResponse.model_rebuild()
 SessionStorySetupResponse.model_rebuild()
 SessionArtifactInventoryView.model_rebuild()
 SessionHydrationView.model_rebuild()
+SessionDebugInspectorView.model_rebuild()

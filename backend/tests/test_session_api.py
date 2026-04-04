@@ -420,10 +420,18 @@ class StubBeatSheetGenerationAdapter:
         return None
 
 
-@pytest.fixture
-def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def _build_session_api_test_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    enable_debug_inspector: bool = False,
+) -> Iterator[TestClient]:
     database_path = tmp_path / "session-api.sqlite3"
     monkeypatch.setenv("STORYTELLER_DATABASE_URL", f"sqlite+pysqlite:///{database_path}")
+    monkeypatch.setenv(
+        "STORYTELLER_FEATURE_ENABLE_DEBUG_INSPECTOR",
+        "true" if enable_debug_inspector else "false",
+    )
 
     get_settings.cache_clear()
     get_engine.cache_clear()
@@ -447,6 +455,23 @@ def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
+
+
+@pytest.fixture
+def session_api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    yield from _build_session_api_test_client(tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def session_api_client_with_debug_inspector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[TestClient]:
+    yield from _build_session_api_test_client(
+        tmp_path,
+        monkeypatch,
+        enable_debug_inspector=True,
+    )
 
 
 def _seed_catalog_rows() -> None:
@@ -943,6 +968,53 @@ def test_hydrate_session_endpoint_returns_snapshot_history_and_metadata(
     assert payload["hydration"]["strategy"] == "materialized_only"
     assert payload["hydration"]["latest_sequence_number"] == 1
     assert payload["hydration"]["history_event_count"] == 1
+
+
+def test_debug_inspector_endpoint_requires_feature_flag(
+    session_api_client: TestClient,
+) -> None:
+    created = session_api_client.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    ).json()
+
+    response = session_api_client.get(
+        f"/api/v1/sessions/{created['id']}/debug-inspector"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "The developer debug inspector is not enabled for this environment."
+    )
+
+
+def test_debug_inspector_endpoint_returns_snapshot_history_artifacts_and_usage(
+    session_api_client_with_debug_inspector: TestClient,
+) -> None:
+    created = session_api_client_with_debug_inspector.post(
+        "/api/v1/sessions",
+        json={"working_title": "Moonlit Harbor"},
+    ).json()
+
+    response = session_api_client_with_debug_inspector.get(
+        f"/api/v1/sessions/{created['id']}/debug-inspector"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["session_id"] == created["id"]
+    assert payload["snapshot"]["id"] == created["id"]
+    assert payload["recent_history"]["session_id"] == created["id"]
+    assert payload["recent_history"]["events"][0]["event_type"] == "session.created"
+    assert payload["hydration"]["latest_sequence_number"] == 1
+    assert [item["key"] for item in payload["artifact_inventory"]["items"]] == [
+        "story_text",
+        "story_docx",
+        "final_audio",
+    ]
+    assert payload["usage_diagnostics"]["session_id"] == created["id"]
+    assert payload["usage_diagnostics"]["summary"]["total_calls"] == 0
 
 
 def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(

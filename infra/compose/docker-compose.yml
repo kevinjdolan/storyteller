@@ -72,6 +72,7 @@ services:
       STORYTELLER_GCS_SESSIONS_BUCKET_NAME: storyteller-sessions
       STORYTELLER_GCS_AUDIO_BUCKET_NAME: storyteller-audio
       STORYTELLER_GCS_EXPORTS_BUCKET_NAME: storyteller-exports
+      STORYTELLER_FEATURE_ENABLE_DEBUG_INSPECTOR: ${STORYTELLER_FEATURE_ENABLE_DEBUG_INSPECTOR:-false}
     ports:
       - "8565:8565"
     command: python -m app
