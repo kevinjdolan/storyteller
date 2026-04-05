@@ -13,6 +13,7 @@ import type {
   SessionArtifactInventoryView,
   SessionSnapshot,
 } from '../../api/sessions.ts'
+import { mockMatchMedia } from '../../test/mockMatchMedia.ts'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
 import { FinalizeStage } from './FinalizeStage.tsx'
 
@@ -277,6 +278,7 @@ afterEach(() => {
   scrollIntoViewMock.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(window, 'matchMedia')
 })
 
 afterAll(() => {
@@ -514,6 +516,157 @@ The oars slowed as the lake went still again.`,
       await screen.findByRole('button', { name: 'Download narration' }),
     )
     expect(onDownloadAudio).toHaveBeenCalledTimes(1)
+  })
+
+  it('supports arrow-key navigation across finalize review tabs', async () => {
+    const fetchMock = createFetchMock({
+      inventory: buildArtifactInventory([
+        buildArtifactInventoryItem('story_text', {
+          status: 'ready',
+          status_detail: 'The accepted manuscript is stored and ready.',
+        }),
+        buildArtifactInventoryItem('story_docx'),
+        buildArtifactInventoryItem('final_audio'),
+      ]),
+      storyText: `# Chapter 1: Lantern Wake
+
+Mira carried the lantern home.`,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithAppProviders(
+      <FinalizeStage
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onDownloadAudio={vi.fn()}
+        onDownloadStoryExport={vi.fn()}
+        onKeepExploringRewrite={vi.fn()}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
+        snapshot={buildSnapshot({
+          latest_composition_job: {
+            ...baseSnapshot.latest_composition_job!,
+            pending_review: false,
+          },
+          latest_story_asset: {
+            id: 'story-asset-tabs',
+            asset_kind: 'story_text',
+            status: 'ready',
+            access: {
+              download_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-tabs/content?disposition=attachment',
+              filename: 'lanterns-over-juniper-lake.md',
+              stream_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-tabs/content?disposition=inline',
+            },
+            public_url:
+              '/api/v1/sessions/session-finalize-1/assets/story-asset-tabs/content?disposition=inline',
+            details: {
+              word_count: 1782,
+            },
+            ready_at: '2026-04-02T05:28:00Z',
+          },
+          latest_audio_asset: null,
+        })}
+      />,
+    )
+
+    const readTab = await screen.findByRole('tab', { name: 'Read story' })
+    const listenTab = screen.getByRole('tab', { name: 'Listen back' })
+
+    readTab.focus()
+    fireEvent.keyDown(readTab, {
+      key: 'ArrowRight',
+    })
+
+    await waitFor(() => {
+      expect(listenTab).toHaveFocus()
+      expect(listenTab).toHaveAttribute('aria-selected', 'true')
+    })
+
+    fireEvent.keyDown(listenTab, {
+      key: 'Home',
+    })
+
+    await waitFor(() => {
+      expect(readTab).toHaveFocus()
+      expect(readTab).toHaveAttribute('aria-selected', 'true')
+    })
+  })
+
+  it('uses instant reader jumps when reduced motion is preferred', async () => {
+    mockMatchMedia(true)
+
+    const fetchMock = createFetchMock({
+      inventory: buildArtifactInventory([
+        buildArtifactInventoryItem('story_text', {
+          status: 'ready',
+          status_detail: 'The accepted manuscript is stored and ready.',
+        }),
+        buildArtifactInventoryItem('story_docx'),
+        buildArtifactInventoryItem('final_audio'),
+      ]),
+      storyText: `# Chapter 1: Lantern Wake
+
+Mira carried the lantern home.
+
+# Chapter 2: Moonlit Crossing
+
+The harbor path glowed softly under the bridge.`,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithAppProviders(
+      <FinalizeStage
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onDownloadAudio={vi.fn()}
+        onDownloadStoryExport={vi.fn()}
+        onKeepExploringRewrite={vi.fn()}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onReturnToAudioSettings={vi.fn()}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToComposition={vi.fn()}
+        onReturnToStorySetup={vi.fn()}
+        snapshot={buildSnapshot({
+          latest_composition_job: {
+            ...baseSnapshot.latest_composition_job!,
+            pending_review: false,
+          },
+          latest_story_asset: {
+            id: 'story-asset-reduced-motion',
+            asset_kind: 'story_text',
+            status: 'ready',
+            access: {
+              download_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-reduced-motion/content?disposition=attachment',
+              filename: 'lanterns-over-juniper-lake.md',
+              stream_path:
+                '/api/v1/sessions/session-finalize-1/assets/story-asset-reduced-motion/content?disposition=inline',
+            },
+            public_url:
+              '/api/v1/sessions/session-finalize-1/assets/story-asset-reduced-motion/content?disposition=inline',
+            details: {
+              word_count: 1782,
+            },
+            ready_at: '2026-04-02T05:28:00Z',
+          },
+          latest_audio_asset: null,
+        })}
+      />,
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /Chapter 2: Moonlit Crossing/,
+      }),
+    )
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: 'auto',
+      block: 'start',
+    })
   })
 
   it('keeps the story readable while narration is still processing', async () => {

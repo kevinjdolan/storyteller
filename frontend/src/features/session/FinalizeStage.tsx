@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  type KeyboardEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import type {
   AudioJobView,
   CompositionSegmentView,
@@ -7,6 +14,7 @@ import type {
   SessionAssetView,
   SessionSnapshot,
 } from '../../api/sessions.ts'
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion.ts'
 import { FeedbackBanner, InlineSpinner } from '../../shared/ui/feedback.tsx'
 import {
   Badge,
@@ -77,6 +85,8 @@ type AudioReviewState =
   | 'completed'
 
 type ActionState = 'acceptRewrite' | 'rejectRewrite' | 'restoreVersion' | null
+
+const reviewTabOrder: ReviewTab[] = ['read', 'listen']
 
 const reviewTimestampFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',
@@ -526,7 +536,9 @@ function findReaderSectionForPlaybackMarker(
         return false
       }
 
-      return sectionTitle.includes(markerTitle) || markerTitle.includes(sectionTitle)
+      return (
+        sectionTitle.includes(markerTitle) || markerTitle.includes(sectionTitle)
+      )
     })
     if (fuzzyMatch != null) {
       return fuzzyMatch
@@ -622,6 +634,51 @@ function resolveAudioReviewState(
   }
 
   return 'generating'
+}
+
+function roundProgressForAnnouncement(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value / 10) * 10))
+}
+
+function buildFinalizeAudioProgressAnnouncement(options: {
+  audioJob: AudioJobView | null
+  finalAudioReady: boolean
+  renderState: AudioReviewState
+  showingPreviousMaster: boolean
+}) {
+  if (options.showingPreviousMaster) {
+    return 'A previous narration master is still available while a replacement pass catches up.'
+  }
+
+  if (options.finalAudioReady) {
+    return 'The compiled narration master is ready to listen.'
+  }
+
+  if (options.renderState === 'failed') {
+    return 'Narration stopped before the compiled master was ready.'
+  }
+
+  if (options.renderState === 'paused') {
+    return 'Narration is paused with the current checkpoint preserved.'
+  }
+
+  if (options.audioJob == null) {
+    return 'Narration has not started yet.'
+  }
+
+  const roundedProgress = roundProgressForAnnouncement(
+    options.audioJob.progress_percent ?? 0,
+  )
+  const stepLabel =
+    options.audioJob.current_step_index != null &&
+    options.audioJob.total_steps != null
+      ? `Step ${options.audioJob.current_step_index} of ${options.audioJob.total_steps}.`
+      : options.audioJob.current_segment_index != null &&
+          options.audioJob.total_segments != null
+        ? `Segment ${options.audioJob.current_segment_index} of ${options.audioJob.total_segments}.`
+        : null
+
+  return [stepLabel, `${roundedProgress}% complete.`].filter(Boolean).join(' ')
 }
 
 function getAudioBadgeTone(
@@ -944,10 +1001,15 @@ export function FinalizeStage({
   onReturnToStorySetup,
   snapshot,
 }: FinalizeStageProps) {
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionState, setActionState] = useState<ActionState>(null)
   const readerViewportRef = useRef<HTMLDivElement | null>(null)
   const readerSectionRefs = useRef<Record<string, HTMLElement | null>>({})
+  const reviewTabRefs = useRef<Record<ReviewTab, HTMLButtonElement | null>>({
+    listen: null,
+    read: null,
+  })
   const fallbackStoryText = useMemo(
     () => buildFallbackStoryText(snapshot),
     [snapshot],
@@ -1079,6 +1141,23 @@ export function FinalizeStage({
       : finalAudioReady
         ? 100
         : 0
+  const announcedAudioProgressPercent =
+    roundProgressForAnnouncement(audioProgressPercent)
+  const audioProgressAnnouncement = buildFinalizeAudioProgressAnnouncement({
+    audioJob: displayAudioJob,
+    finalAudioReady,
+    renderState: audioRenderState,
+    showingPreviousMaster,
+  })
+  const audioProgressAnnouncementKey = [
+    displayAudioJob?.id ?? 'no-job',
+    audioRenderState,
+    displayAudioJob?.current_step_index ?? 'no-step',
+    displayAudioJob?.current_segment_index ?? 'no-segment',
+    announcedAudioProgressPercent,
+    showingPreviousMaster ? 'previous-master' : 'current-master',
+    finalAudioReady ? 'ready' : 'pending',
+  ].join(':')
   const completionSummary =
     snapshot.completed_at != null
       ? `Completed ${formatTimestamp(snapshot.completed_at) ?? 'recently'}`
@@ -1342,7 +1421,7 @@ export function FinalizeStage({
   function scrollReaderToSection(sectionId: string) {
     setActiveReaderSectionId(sectionId)
     readerSectionRefs.current[sectionId]?.scrollIntoView({
-      behavior: 'smooth',
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
       block: 'start',
     })
   }
@@ -1354,6 +1433,41 @@ export function FinalizeStage({
     }
 
     scrollReaderToSection(nextSection.id)
+  }
+
+  function focusReviewTab(nextTab: ReviewTab) {
+    setActiveTab(nextTab)
+    reviewTabRefs.current[nextTab]?.focus()
+  }
+
+  function handleReviewTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: ReviewTab,
+  ) {
+    if (event.key === 'Home') {
+      event.preventDefault()
+      focusReviewTab(reviewTabOrder[0])
+      return
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault()
+      focusReviewTab(reviewTabOrder[reviewTabOrder.length - 1])
+      return
+    }
+
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return
+    }
+
+    event.preventDefault()
+
+    const currentIndex = reviewTabOrder.indexOf(currentTab)
+    const offset = event.key === 'ArrowRight' ? 1 : -1
+    const nextIndex =
+      (currentIndex + offset + reviewTabOrder.length) % reviewTabOrder.length
+
+    focusReviewTab(reviewTabOrder[nextIndex])
   }
 
   return (
@@ -1449,6 +1563,7 @@ export function FinalizeStage({
         <section className="workspace-stage-panel finalize-stage__experience">
           <div
             aria-label="Finalize review modes"
+            aria-orientation="horizontal"
             className="finalize-stage__tablist"
             role="tablist"
           >
@@ -1457,10 +1572,17 @@ export function FinalizeStage({
               aria-selected={activeTab === 'read'}
               className="finalize-stage__tab"
               id={`${tabSetId}-read-tab`}
+              onKeyDown={(event) => {
+                handleReviewTabKeyDown(event, 'read')
+              }}
               onClick={() => {
                 setActiveTab('read')
               }}
+              ref={(node) => {
+                reviewTabRefs.current.read = node
+              }}
               role="tab"
+              tabIndex={activeTab === 'read' ? 0 : -1}
               type="button"
             >
               Read story
@@ -1470,10 +1592,17 @@ export function FinalizeStage({
               aria-selected={activeTab === 'listen'}
               className="finalize-stage__tab"
               id={`${tabSetId}-listen-tab`}
+              onKeyDown={(event) => {
+                handleReviewTabKeyDown(event, 'listen')
+              }}
               onClick={() => {
                 setActiveTab('listen')
               }}
+              ref={(node) => {
+                reviewTabRefs.current.listen = node
+              }}
               role="tab"
+              tabIndex={activeTab === 'listen' ? 0 : -1}
               type="button"
             >
               Listen back
@@ -1588,7 +1717,7 @@ export function FinalizeStage({
                               <button
                                 aria-current={
                                   activeReaderSectionId === section.id
-                                    ? 'true'
+                                    ? 'location'
                                     : undefined
                                 }
                                 className="finalize-stage__toc-button"
@@ -1748,6 +1877,8 @@ export function FinalizeStage({
             {(displayAudioJob != null || finalAudioReady) && (
               <ProgressBar
                 aria-label="Narration review progress"
+                announcementKey={audioProgressAnnouncementKey}
+                announcementText={audioProgressAnnouncement}
                 className="finalize-stage__progress"
                 hint={audioStatusCopy}
                 label={displayAudioJob?.current_step ?? 'Narration readiness'}

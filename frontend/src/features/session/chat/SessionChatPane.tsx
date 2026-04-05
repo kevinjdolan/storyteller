@@ -1,11 +1,12 @@
 import type { FormEvent, KeyboardEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   Badge,
   Button,
   TextArea,
   type BadgeTone,
 } from '../../../shared/ui/primitives.tsx'
+import { LiveRegion } from '../../../shared/ui/a11y.tsx'
 import { FeedbackBanner, InlineSpinner } from '../../../shared/ui/feedback.tsx'
 import {
   formatSessionChatTimestamp,
@@ -121,6 +122,9 @@ export function SessionChatPane({
   const [draft, setDraft] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const chatHeadingId = useId()
+  const activityId = useId()
+  const pendingHeadingId = useId()
 
   useEffect(() => {
     const transcript = transcriptRef.current
@@ -243,12 +247,21 @@ export function SessionChatPane({
     slashCommandHint,
   })
   const composerIsDisabled = disabledReason != null || isSubmitting
+  const pendingConfirmationAnnouncement =
+    pendingConfirmations.length > 0
+      ? `${pendingConfirmations.length} chat-requested change${pendingConfirmations.length === 1 ? '' : 's'} waiting for confirmation.`
+      : 'All chat-requested changes have been cleared.'
 
   return (
     <>
+      <LiveRegion
+        announcementKey={pendingConfirmations.map((item) => item.id).join(',')}
+        text={pendingConfirmationAnnouncement}
+      />
+
       <div className="pane-heading workspace-chat-pane__heading">
         <div>
-          <h2>Chat lane</h2>
+          <h2 id={chatHeadingId}>Chat lane</h2>
           <p className="body-copy">
             Messages, action echoes, and redirect notes stay visible beside the
             structured workflow.
@@ -257,12 +270,19 @@ export function SessionChatPane({
         <Badge tone={connectionTone}>{connectionLabel}</Badge>
       </div>
 
-      <p className="workspace-chat-pane__status body-copy">{activityLabel}</p>
+      <p
+        className="workspace-chat-pane__status body-copy"
+        id={activityId}
+        role="status"
+      >
+        {activityLabel}
+      </p>
 
       <ol
         ref={transcriptRef}
+        aria-describedby={activityId}
+        aria-labelledby={chatHeadingId}
         aria-busy={isBusy || isSubmitting}
-        aria-live="polite"
         aria-relevant="additions text"
         className="workspace-chat-transcript"
         onScroll={updateStickiness}
@@ -291,9 +311,12 @@ export function SessionChatPane({
       </ol>
 
       {pendingConfirmations.length > 0 ? (
-        <section className="workspace-chat-pending">
+        <section
+          aria-labelledby={pendingHeadingId}
+          className="workspace-chat-pending"
+        >
           <div className="workspace-chat-pending__header">
-            <strong>Pending confirmations</strong>
+            <h3 id={pendingHeadingId}>Pending confirmations</h3>
             <p>
               Apply the chat-requested change once the summary looks correct.
             </p>

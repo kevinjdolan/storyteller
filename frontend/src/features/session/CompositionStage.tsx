@@ -4,6 +4,7 @@ import type {
   StartSessionCompositionRequest,
   StoryOutlineCard,
 } from '../../api/sessions.ts'
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion.ts'
 import type { SessionFeedConnectionState } from './live/sessionFeedConnection.ts'
 import type { SessionCompositionStreamState } from './sessionRuntimeStore.ts'
 import {
@@ -12,7 +13,11 @@ import {
   ProgressBar,
   TextArea,
 } from '../../shared/ui/primitives.tsx'
-import { CardGrid, SelectField, SummaryPanel } from '../../shared/ui/workflow.tsx'
+import {
+  CardGrid,
+  SelectField,
+  SummaryPanel,
+} from '../../shared/ui/workflow.tsx'
 import { SegmentVersionComparePanel } from './SegmentVersionComparePanel.tsx'
 
 type RewriteDownstreamMode = 'auto_regenerate' | 'require_confirmation'
@@ -120,6 +125,45 @@ function buildProgressTitle(options: {
   }
 
   return 'Ready to write'
+}
+
+function roundProgressForAnnouncement(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value / 10) * 10))
+}
+
+function buildCompositionProgressAnnouncement(options: {
+  currentSegmentIndex: number | null
+  progressPercent: number
+  reviewPending: boolean
+  stageStatus: string
+  totalSegments: number | null
+}) {
+  if (options.reviewPending) {
+    return 'A rewrite is ready for review in the composition stage.'
+  }
+
+  const roundedProgress = roundProgressForAnnouncement(options.progressPercent)
+
+  if (options.stageStatus === 'completed') {
+    return 'Composition complete. The draft is ready for the next stage.'
+  }
+
+  if (options.stageStatus === 'failed' || options.stageStatus === 'cancelled') {
+    return `Composition ${options.stageStatus}.`
+  }
+
+  if (options.currentSegmentIndex != null && options.totalSegments != null) {
+    const stageVerb =
+      options.stageStatus === 'paused'
+        ? 'paused at'
+        : options.stageStatus === 'queued'
+          ? 'queued for'
+          : 'writing'
+
+    return `Composition ${stageVerb} segment ${options.currentSegmentIndex} of ${options.totalSegments}. ${roundedProgress}% complete.`
+  }
+
+  return `Composition progress updated. ${roundedProgress}% complete.`
 }
 
 function resolveCurrentOutlineCard(
@@ -260,6 +304,7 @@ export function CompositionStage({
   onStartComposition,
   snapshot,
 }: CompositionStageProps) {
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [rewriteInstructions, setRewriteInstructions] = useState('')
   const [rewriteFromSegmentIndex, setRewriteFromSegmentIndex] = useState<
     number | null
@@ -321,6 +366,7 @@ export function CompositionStage({
     recentSegmentText,
   )
   const progressPercent = compositionJob?.progress_percent ?? 0
+  const announcedProgressPercent = roundProgressForAnnouncement(progressPercent)
   const currentSegmentIndex =
     composition.currentSegmentIndex ??
     compositionJob?.current_segment_index ??
@@ -376,6 +422,20 @@ export function CompositionStage({
       : interruptionRequest.request_kind === 'pause'
         ? 'Pause queued'
         : 'Redirect queued'
+  const compositionProgressAnnouncement = buildCompositionProgressAnnouncement({
+    currentSegmentIndex,
+    progressPercent,
+    reviewPending: reviewJob != null,
+    stageStatus,
+    totalSegments,
+  })
+  const compositionProgressAnnouncementKey = [
+    reviewJob?.id ?? 'no-review',
+    stageStatus,
+    currentSegmentIndex ?? 'none',
+    totalSegments ?? 'none',
+    announcedProgressPercent,
+  ].join(':')
 
   const defaultRewriteStart =
     activeJob?.current_segment_index ??
@@ -385,7 +445,8 @@ export function CompositionStage({
   const effectiveRewriteStart =
     rewriteFromSegmentIndex ?? defaultRewriteStart ?? 1
   const effectiveRewriteEnd =
-    rewriteToSegmentIndex != null && rewriteToSegmentIndex >= effectiveRewriteStart
+    rewriteToSegmentIndex != null &&
+    rewriteToSegmentIndex >= effectiveRewriteStart
       ? rewriteToSegmentIndex
       : effectiveRewriteStart
   const downstreamSegmentCount = compositionSegments.filter(
@@ -472,6 +533,8 @@ export function CompositionStage({
 
         <ProgressBar
           aria-label="Composition progress"
+          announcementKey={compositionProgressAnnouncementKey}
+          announcementText={compositionProgressAnnouncement}
           className="composition-stage__progress"
           hint={
             targetWordCount != null
@@ -545,15 +608,13 @@ export function CompositionStage({
                 <p className="eyebrow">
                   {reviewJob != null ? 'Rewrite review' : 'Current segment'}
                 </p>
-                <h3>
-                  {currentSegmentTitle}
-                </h3>
+                <h3>{currentSegmentTitle}</h3>
                 <p>
                   {reviewJob != null
                     ? 'Compare the proposed rewrite against the current manuscript before accepting it.'
-                    : statusMessage ??
+                    : (statusMessage ??
                       latestSegmentSummary ??
-                      'The newest words stay in the foreground so you can follow the draft as it lands.'}
+                      'The newest words stay in the foreground so you can follow the draft as it lands.')}
                 </p>
               </div>
 
@@ -593,13 +654,9 @@ export function CompositionStage({
               ) : null}
             </div>
 
-            <div className="composition-stage__manuscript-shell composition-stage__manuscript-shell--live">
-              <div className="visually-hidden" aria-live="polite">
-                {composition.lastChunkText ??
-                  latestSegmentSummary ??
-                  'Composition status updated.'}
-              </div>
-
+            <div
+              className={`composition-stage__manuscript-shell${!prefersReducedMotion ? ' composition-stage__manuscript-shell--live' : ''}`}
+            >
               {recentSegmentText.length > 0 ? (
                 <div
                   className="composition-stage__manuscript"
@@ -607,6 +664,7 @@ export function CompositionStage({
                 >
                   <pre>{recentSegmentText}</pre>
                   {activeJob != null &&
+                  !prefersReducedMotion &&
                   (activeJob.status === 'queued' ||
                     activeJob.status === 'in_progress') ? (
                     <span
@@ -737,7 +795,6 @@ export function CompositionStage({
                   {activeAction === 'cancel' ? 'Stopping...' : 'Cancel run'}
                 </Button>
               ) : null}
-
             </div>
 
             <div
@@ -899,7 +956,8 @@ export function CompositionStage({
               <h3>Segment revisions</h3>
               <p>
                 Inspect the live manuscript, highlighted rewrite changes, and
-                older segment versions without comparing two unrelated walls of text.
+                older segment versions without comparing two unrelated walls of
+                text.
               </p>
             </div>
           </div>
@@ -926,7 +984,9 @@ export function CompositionStage({
             }
             onKeepExploring={(segmentIndex) => {
               onKeepExploringRewrite(segmentIndex)
-              if (typeof rewriteControlsRef.current?.scrollIntoView === 'function') {
+              if (
+                typeof rewriteControlsRef.current?.scrollIntoView === 'function'
+              ) {
                 rewriteControlsRef.current.scrollIntoView({
                   behavior: 'smooth',
                   block: 'center',

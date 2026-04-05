@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   Panel,
@@ -76,6 +76,40 @@ describe('shared ui primitives', () => {
 
     expect(progress).toHaveAttribute('aria-valuenow', '45')
     expect(progress).toHaveAttribute('aria-valuetext', '45% complete')
+  })
+
+  it('announces progress changes without speaking on initial render', async () => {
+    const { rerender } = render(
+      <ProgressBar
+        announcementKey="workflow-30"
+        announcementText="Workflow progress is now 30% complete."
+        hint="Resume at pitches."
+        label="Workflow progress"
+        value={30}
+        valueText="30% complete"
+      />,
+    )
+
+    expect(
+      screen.queryByText('Workflow progress is now 30% complete.'),
+    ).not.toBeInTheDocument()
+
+    rerender(
+      <ProgressBar
+        announcementKey="workflow-40"
+        announcementText="Workflow progress is now 40% complete."
+        hint="Resume at characters."
+        label="Workflow progress"
+        value={40}
+        valueText="40% complete"
+      />,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Workflow progress is now 40% complete.'),
+      ).toBeInTheDocument()
+    })
   })
 
   it('preserves ordered list semantics for stacked lists', () => {

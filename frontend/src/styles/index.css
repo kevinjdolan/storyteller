@@ -2463,6 +2463,18 @@ h4 {
   border: 1px solid rgba(60, 92, 141, 0.14);
 }
 
+.workspace-chat-pending__header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.workspace-chat-pending__header h3 {
+  margin: 0;
+  color: var(--color-ink-strong);
+  font-family: var(--font-family-display);
+  font-size: 1.05rem;
+}
+
 .workspace-chat-pending__header p,
 .workspace-chat-pending__copy p {
   margin: 0;
@@ -2722,6 +2734,11 @@ h4 {
   align-items: start;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+.workspace-stage-detail__hero h2,
+.finalize-stage__reader-section {
+  scroll-margin-top: var(--space-6);
 }
 
 .workspace-stage-detail__note {

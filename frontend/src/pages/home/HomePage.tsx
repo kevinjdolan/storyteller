@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from 'react'
+import { useDeferredValue, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { buildSessionWorkspacePath } from '../../app/routePaths.ts'
 import {
@@ -23,8 +23,17 @@ import {
   InlineSpinner,
   SkeletonBlock,
 } from '../../shared/ui/feedback.tsx'
-import { Badge, Button, Panel, ProgressBar, TextInput } from '../../shared/ui/primitives.tsx'
-import { SelectField, type SelectFieldOption } from '../../shared/ui/workflow.tsx'
+import {
+  Badge,
+  Button,
+  Panel,
+  ProgressBar,
+  TextInput,
+} from '../../shared/ui/primitives.tsx'
+import {
+  SelectField,
+  type SelectFieldOption,
+} from '../../shared/ui/workflow.tsx'
 
 type SessionLoadState = 'loading' | 'ready' | 'error'
 
@@ -352,7 +361,9 @@ function SessionCard({ session }: { session: RecentSessionSummary }) {
   const cardClassName = [
     'session-card',
     isCompleted ? 'session-card--completed' : null,
-    librarySummary.display_kind === 'polished_story' ? 'session-card--polished' : null,
+    librarySummary.display_kind === 'polished_story'
+      ? 'session-card--polished'
+      : null,
   ]
     .filter(Boolean)
     .join(' ')
@@ -361,7 +372,9 @@ function SessionCard({ session }: { session: RecentSessionSummary }) {
     <li className={cardClassName}>
       <div className="session-card__header">
         <div>
-          <p className="session-card__eyebrow">{buildSessionKindCopy(session)}</p>
+          <p className="session-card__eyebrow">
+            {buildSessionKindCopy(session)}
+          </p>
           <div className="session-card__title-row">
             <h4>{session.display_title}</h4>
             <Badge tone={statusCopy.tone}>{statusCopy.label}</Badge>
@@ -387,11 +400,15 @@ function SessionCard({ session }: { session: RecentSessionSummary }) {
       </div>
 
       <div className="session-card__tag-row">
-        <Badge tone="brand">{session.selected_genre?.label ?? 'Genre pending'}</Badge>
+        <Badge tone="brand">
+          {session.selected_genre?.label ?? 'Genre pending'}
+        </Badge>
         <Badge tone="neutral">
           {session.selected_tone_profile?.label ?? 'Tone pending'}
         </Badge>
-        {runtimeLabel != null ? <Badge tone="success">{runtimeLabel}</Badge> : null}
+        {runtimeLabel != null ? (
+          <Badge tone="success">{runtimeLabel}</Badge>
+        ) : null}
       </div>
 
       <dl className="session-card__meta">
@@ -441,11 +458,13 @@ function SessionCard({ session }: { session: RecentSessionSummary }) {
 }
 
 function SessionMonthGroup({ group }: { group: SessionMonthGroupView }) {
+  const headingId = useId()
+
   return (
-    <section className="session-month-group" aria-label={group.label}>
+    <section className="session-month-group" aria-labelledby={headingId}>
       <div className="session-month-group__header">
         <div>
-          <h3>{group.label}</h3>
+          <h3 id={headingId}>{group.label}</h3>
           <p>
             {group.sessions.length} session
             {group.sessions.length === 1 ? '' : 's'} updated in this span.
@@ -553,7 +572,9 @@ export function HomePage() {
         <div className="session-summary-grid" aria-label="Session summary">
           <div className="session-summary-card">
             <strong>{loadState === 'ready' ? totalSessions : '...'}</strong>
-            <span>{hasActiveFilters ? 'Matching sessions' : 'Total sessions'}</span>
+            <span>
+              {hasActiveFilters ? 'Matching sessions' : 'Total sessions'}
+            </span>
           </div>
           <div className="session-summary-card">
             <strong>{loadState === 'ready' ? active.length : '...'}</strong>
@@ -631,7 +652,9 @@ export function HomePage() {
                 className="session-library__filter"
                 label="Status"
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as RecentSessionsStatusFilter)
+                  setStatusFilter(
+                    event.target.value as RecentSessionsStatusFilter,
+                  )
                 }
                 options={statusFilterOptions}
                 value={statusFilter}
@@ -646,7 +669,11 @@ export function HomePage() {
             </div>
 
             <div className="session-library__results">
-              <p className="session-library__count">
+              <p
+                aria-atomic="true"
+                className="session-library__count"
+                role="status"
+              >
                 {totalSessions} matching session
                 {totalSessions === 1 ? '' : 's'}
               </p>

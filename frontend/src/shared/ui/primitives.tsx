@@ -11,6 +11,7 @@ import {
   type ButtonSize,
   type ButtonTone,
 } from './buttonStyles.ts'
+import { LiveRegion } from './a11y.tsx'
 
 function cx(...classNames: Array<string | false | null | undefined>) {
   return classNames.filter(Boolean).join(' ')
@@ -152,6 +153,9 @@ export function Panel({
 type ProgressBarTone = 'brand' | 'moss' | 'accent'
 
 type ProgressBarProps = {
+  announcementKey?: number | string | null
+  announcementPoliteness?: 'polite' | 'assertive'
+  announcementText?: string | null
   'aria-label'?: string
   className?: string
   hint?: ReactNode
@@ -167,6 +171,9 @@ function clamp(value: number, minimum: number, maximum: number) {
 }
 
 export function ProgressBar({
+  announcementKey,
+  announcementPoliteness = 'polite',
+  announcementText = null,
   'aria-label': ariaLabel,
   className,
   hint,
@@ -176,17 +183,24 @@ export function ProgressBar({
   value,
   valueText,
 }: ProgressBarProps) {
+  const progressId = useId()
   const safeMax = max <= 0 ? 100 : max
   const safeValue = clamp(value, 0, safeMax)
   const percentage = Math.round((safeValue / safeMax) * 100)
   const resolvedValueText = valueText ?? `${percentage}%`
+  const labelId = label != null ? `${progressId}-label` : undefined
+  const hintId = hint != null ? `${progressId}-hint` : undefined
+  const resolvedAriaLabel =
+    ariaLabel ?? (label == null ? 'Progress' : undefined)
 
   return (
     <div className={cx('progress', `progress--${tone}`, className)}>
       {label != null || valueText != null ? (
         <div className="progress__meta">
           {label != null ? (
-            <span className="progress__label">{label}</span>
+            <span className="progress__label" id={labelId}>
+              {label}
+            </span>
           ) : (
             <span />
           )}
@@ -194,9 +208,9 @@ export function ProgressBar({
         </div>
       ) : null}
       <div
-        aria-label={
-          ariaLabel ?? (typeof label === 'string' ? label : 'Progress')
-        }
+        aria-label={resolvedAriaLabel}
+        aria-describedby={hintId}
+        aria-labelledby={ariaLabel == null ? labelId : undefined}
         aria-valuemax={safeMax}
         aria-valuemin={0}
         aria-valuenow={Math.round(safeValue)}
@@ -212,7 +226,18 @@ export function ProgressBar({
           style={{ width: `${percentage}%` }}
         />
       </div>
-      {hint != null ? <p className="progress__hint">{hint}</p> : null}
+      {hint != null ? (
+        <p className="progress__hint" id={hintId}>
+          {hint}
+        </p>
+      ) : null}
+      {announcementText != null ? (
+        <LiveRegion
+          announcementKey={announcementKey}
+          politeness={announcementPoliteness}
+          text={announcementText}
+        />
+      ) : null}
     </div>
   )
 }

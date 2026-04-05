@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -502,7 +502,8 @@ const sampleContinuityBible = {
       key: 'location:juniper-harbor:1',
       category: 'location',
       title: 'Juniper Harbor',
-      detail: 'Use the harbor docks and lantern routes as the default world anchor.',
+      detail:
+        'Use the harbor docks and lantern routes as the default world anchor.',
       source_stage: 'brief',
       source_label: 'Story brief',
     },
@@ -510,7 +511,8 @@ const sampleContinuityBible = {
       key: 'promise:lanterns-home:1',
       category: 'promise',
       title: 'Safe return promise',
-      detail: 'Every drifting lantern reaches home before the harbor fully sleeps.',
+      detail:
+        'Every drifting lantern reaches home before the harbor fully sleeps.',
       source_stage: 'beats',
       source_label: 'Revision 3',
     },
@@ -518,7 +520,8 @@ const sampleContinuityBible = {
       key: 'voice:guardrail:1',
       category: 'voice_constraint',
       title: 'Bedtime guardrail',
-      detail: 'Keep every surprise luminous, buffered by company, and quick to settle.',
+      detail:
+        'Keep every surprise luminous, buffered by company, and quick to settle.',
       source_stage: 'tone',
       source_label: 'Hushed Wonder',
     },
@@ -526,7 +529,8 @@ const sampleContinuityBible = {
       key: 'thread:midpoint:1',
       category: 'unresolved_thread',
       title: 'Midpoint reveal',
-      detail: 'The hidden lantern map still needs a gentle explanation before the finale.',
+      detail:
+        'The hidden lantern map still needs a gentle explanation before the finale.',
       source_stage: 'beats',
       source_label: 'Revision 3',
     },
@@ -534,7 +538,8 @@ const sampleContinuityBible = {
       key: 'locked:chapter-1:1',
       category: 'locked_detail',
       title: 'Chapter 1: Lantern Wake',
-      detail: 'Mira has already promised Pip that no lantern will drift alone tonight.',
+      detail:
+        'Mira has already promised Pip that no lantern will drift alone tonight.',
       source_stage: 'composition',
       source_label: 'Segment 1',
     },
@@ -758,9 +763,7 @@ function buildContextUpdateResponse(body: Record<string, unknown>) {
   }
 }
 
-function buildAudioSettingsSaveResponse(
-  body: Record<string, unknown>,
-) {
+function buildAudioSettingsSaveResponse(body: Record<string, unknown>) {
   const savedAt = '2026-04-01T03:05:00Z'
   const currentAudioSettings = sampleSnapshot.audio_settings ?? {
     voice_key: 'moonbeam',
@@ -847,7 +850,8 @@ function buildAudioSettingsSaveResponse(
       minimum_duration_seconds: Math.round((10 / nextPlaybackSpeed) * 60),
       maximum_duration_seconds: Math.round((14 / nextPlaybackSpeed) * 60),
       basis_source:
-        currentAudioSettings.runtime_estimate?.basis_source ?? 'story_setup_target',
+        currentAudioSettings.runtime_estimate?.basis_source ??
+        'story_setup_target',
       pacing_band:
         nextPlaybackSpeed < 0.9
           ? 'roomy'
@@ -979,10 +983,16 @@ function buildStorySetupSaveResponse(
         ? Math.round(savedSetup.target_word_count / outlineCardCount)
         : null,
       target_runtime_minutes: savedSetup.target_runtime_minutes
-        ? Math.max(1, Math.round(savedSetup.target_runtime_minutes / outlineCardCount))
+        ? Math.max(
+            1,
+            Math.round(savedSetup.target_runtime_minutes / outlineCardCount),
+          )
         : null,
       target_scene_count: savedSetup.approximate_scene_count
-        ? Math.max(1, Math.round(savedSetup.approximate_scene_count / outlineCardCount))
+        ? Math.max(
+            1,
+            Math.round(savedSetup.approximate_scene_count / outlineCardCount),
+          )
         : null,
       tone_direction:
         'Stay anchored in the Hushed Wonder tone while advancing the Quest Fantasy lane.',
@@ -1016,35 +1026,39 @@ function buildStorySetupSaveResponse(
         in_progress_stages: 0,
         needs_regeneration_stages: 1,
       },
-      stage_states: baseSelection.snapshot.stage_states.map((stageState, index) => {
-        if (index === 6) {
-          return {
-            ...stageState,
-            status: 'completed',
-            detail: selectionLabel,
-            last_event_summary: `Accepted story setup: ${selectionLabel}`,
-            last_event_type: 'selection.recorded',
-            last_event_at: savedAt,
+      stage_states: baseSelection.snapshot.stage_states.map(
+        (stageState, index) => {
+          if (index === 6) {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: selectionLabel,
+              last_event_summary: `Accepted story setup: ${selectionLabel}`,
+              last_event_type: 'selection.recorded',
+              last_event_at: savedAt,
+            }
           }
-        }
 
-        if (index === 7 || index === 8 || index === 9) {
-          return {
-            ...stageState,
-            status: index === 7 ? 'draft' : 'draft',
-            detail:
-              index === 7
-                ? null
-                : `Story setup changed to ${selectionLabel}. Revisit this stage before continuing.`,
-            last_event_summary:
-              index === 7 ? null : `Story setup changed to ${selectionLabel}.`,
-            last_event_type: index === 7 ? null : 'workflow.stage_changed',
-            last_event_at: index === 7 ? null : savedAt,
+          if (index === 7 || index === 8 || index === 9) {
+            return {
+              ...stageState,
+              status: index === 7 ? 'draft' : 'draft',
+              detail:
+                index === 7
+                  ? null
+                  : `Story setup changed to ${selectionLabel}. Revisit this stage before continuing.`,
+              last_event_summary:
+                index === 7
+                  ? null
+                  : `Story setup changed to ${selectionLabel}.`,
+              last_event_type: index === 7 ? null : 'workflow.stage_changed',
+              last_event_at: index === 7 ? null : savedAt,
+            }
           }
-        }
 
-        return stageState
-      }),
+          return stageState
+        },
+      ),
     },
     event: {
       id: 'story-setup-selection-event',
@@ -2765,15 +2779,16 @@ function buildBeatEditResponse(
   const nextSummary =
     typeof body.summary === 'string' && body.summary.trim().length > 0
       ? body.summary.trim()
-      : sourceBeatSheet?.summary ?? null
+      : (sourceBeatSheet?.summary ?? null)
   const nextBedtimeNotes =
-    typeof body.bedtime_notes === 'string' && body.bedtime_notes.trim().length > 0
+    typeof body.bedtime_notes === 'string' &&
+    body.bedtime_notes.trim().length > 0
       ? body.bedtime_notes.trim()
-      : sourceBeatSheet?.bedtime_notes ?? null
+      : (sourceBeatSheet?.bedtime_notes ?? null)
   const nextBedtimeGoal =
     typeof body.bedtime_goal === 'string' && body.bedtime_goal.trim().length > 0
       ? body.bedtime_goal.trim()
-      : sourceBeatSheet?.bedtime_goal ?? null
+      : (sourceBeatSheet?.bedtime_goal ?? null)
 
   if (typeof body.summary === 'string' && body.summary.trim().length > 0) {
     changedFields.push('summary')
@@ -2796,7 +2811,10 @@ function buildBeatEditResponse(
     if (beatKey == null) {
       continue
     }
-    if (typeof update.summary === 'string' && update.summary.trim().length > 0) {
+    if (
+      typeof update.summary === 'string' &&
+      update.summary.trim().length > 0
+    ) {
       changedFields.push(`beats.${beatKey}.summary`)
     }
     if (
@@ -2893,42 +2911,44 @@ function buildBeatEditResponse(
         in_progress_stages: 0,
         needs_regeneration_stages: 2,
       },
-      stage_states: baseSelection.snapshot.stage_states.map((stageState, index) => {
-        if (index === 5) {
-          return {
-            ...stageState,
-            status: 'completed',
-            detail: `Accepted beat sheet revision ${updatedBeatSheet?.revision_number}. ${updatedBeatSheet?.summary}`,
-            last_event_summary: summaryText,
-            last_event_type: 'content.user_edit.recorded',
-            last_event_at: editedAt,
+      stage_states: baseSelection.snapshot.stage_states.map(
+        (stageState, index) => {
+          if (index === 5) {
+            return {
+              ...stageState,
+              status: 'completed',
+              detail: `Accepted beat sheet revision ${updatedBeatSheet?.revision_number}. ${updatedBeatSheet?.summary}`,
+              last_event_summary: summaryText,
+              last_event_type: 'content.user_edit.recorded',
+              last_event_at: editedAt,
+            }
           }
-        }
 
-        if (index === 6 || index === 7) {
-          return {
-            ...stageState,
-            status: 'needs_regeneration',
-            detail: invalidationDetail,
-            last_event_summary: summaryText,
-            last_event_type: 'content.user_edit.recorded',
-            last_event_at: editedAt,
+          if (index === 6 || index === 7) {
+            return {
+              ...stageState,
+              status: 'needs_regeneration',
+              detail: invalidationDetail,
+              last_event_summary: summaryText,
+              last_event_type: 'content.user_edit.recorded',
+              last_event_at: editedAt,
+            }
           }
-        }
 
-        if (index === 8) {
-          return {
-            ...stageState,
-            status: 'draft',
-            detail: null,
-            last_event_summary: null,
-            last_event_type: null,
-            last_event_at: null,
+          if (index === 8) {
+            return {
+              ...stageState,
+              status: 'draft',
+              detail: null,
+              last_event_summary: null,
+              last_event_type: null,
+              last_event_at: null,
+            }
           }
-        }
 
-        return stageState
-      }),
+          return stageState
+        },
+      ),
     },
     event: {
       id: 'beat-edit-event',
@@ -3690,6 +3710,25 @@ describe('SessionWorkspacePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('moves focus to the new stage heading after a workspace stage preview change', async () => {
+    mockWorkspaceApi()
+
+    renderWorkspaceRoute('/sessions/moonlit-harbor?stage=genre')
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Preview tone stage' }),
+    )
+
+    const toneStageHeading = await screen.findByRole('heading', {
+      level: 2,
+      name: 'Tune the bedtime mood',
+    })
+
+    await waitFor(() => {
+      expect(toneStageHeading).toHaveFocus()
+    })
+  })
+
   it('renders the continuity bible inspector when hydrated facts are available', async () => {
     mockWorkspaceApi({
       hydration: {
@@ -3717,10 +3756,16 @@ describe('SessionWorkspacePage', () => {
       ),
     ).toBeInTheDocument()
     expect(within(continuityRegion).getByText('Characters')).toBeInTheDocument()
-    expect(within(continuityRegion).getByText('Voice guardrails')).toBeInTheDocument()
-    expect(within(continuityRegion).getByText('Open threads')).toBeInTheDocument()
+    expect(
+      within(continuityRegion).getByText('Voice guardrails'),
+    ).toBeInTheDocument()
+    expect(
+      within(continuityRegion).getByText('Open threads'),
+    ).toBeInTheDocument()
     expect(within(continuityRegion).getByText('Mira')).toBeInTheDocument()
-    expect(within(continuityRegion).getByText('Midpoint reveal')).toBeInTheDocument()
+    expect(
+      within(continuityRegion).getByText('Midpoint reveal'),
+    ).toBeInTheDocument()
     expect(
       within(continuityRegion).getByText(
         'Mira has already promised Pip that no lantern will drift alone tonight.',
@@ -4830,8 +4875,12 @@ describe('SessionWorkspacePage', () => {
       .getByRole('heading', { level: 3, name: 'Change tracking' })
       .closest('section')
     expect(changeTrackingSection).not.toBeNull()
-    expect(within(changeTrackingSection as HTMLElement).getByText(changeSummary)).toBeInTheDocument()
-    expect(screen.getAllByText('Needs refresh').length).toBeGreaterThanOrEqual(2)
+    expect(
+      within(changeTrackingSection as HTMLElement).getByText(changeSummary),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Needs refresh').length).toBeGreaterThanOrEqual(
+      2,
+    )
   })
 
   it('applies accepted character-sheet chat actions through the same durable endpoints', async () => {
@@ -5776,7 +5825,8 @@ describe('SessionWorkspacePage', () => {
 
     fireEvent.change(composer, {
       target: {
-        value: 'Make it about ten minutes and keep the transitions especially calm.',
+        value:
+          'Make it about ten minutes and keep the transitions especially calm.',
       },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
@@ -5899,7 +5949,8 @@ describe('SessionWorkspacePage', () => {
     })
     fireEvent.change(screen.getByLabelText('Mix and delivery note'), {
       target: {
-        value: 'Keep chapter breaks soft and leave longer pauses after dialogue.',
+        value:
+          'Keep chapter breaks soft and leave longer pauses after dialogue.',
       },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save audio settings' }))
@@ -6046,7 +6097,7 @@ describe('SessionWorkspacePage', () => {
                   status: 'completed',
                   detail: stageState.detail ?? `Accepted ${stageState.stage}.`,
                 }
-            : stageState,
+              : stageState,
         ),
       },
       recent_history: resumedHistory,

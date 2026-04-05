@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useId, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { selectSessionGenre, selectSessionTone } from '../../api/catalog.ts'
 import {
@@ -720,6 +720,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const [pendingChatConfirmations, setPendingChatConfirmations] = useState<
     PendingChatConfirmation[]
   >([])
+  const workflowCanvasHeadingId = useId()
+  const selectedStageHeadingId = useId()
+  const selectedStageHeadingRef = useRef<HTMLHeadingElement | null>(null)
+  const hasSelectedStageMountedRef = useRef(false)
 
   useEffect(() => {
     if (hydrationQuery.data == null || hydrationQuery.isError) {
@@ -779,6 +783,19 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
     setStageNoteDraft(selectedStageDetail ?? '')
     setStageNoteError(null)
   }, [selectedStageDetail, selectedStageId])
+
+  useEffect(() => {
+    if (selectedStageId == null) {
+      return
+    }
+
+    if (!hasSelectedStageMountedRef.current) {
+      hasSelectedStageMountedRef.current = true
+      return
+    }
+
+    selectedStageHeadingRef.current?.focus()
+  }, [selectedStageId])
 
   if (snapshot == null && hydrationQuery.isPending) {
     return <WorkspaceLoadingState sessionId={sessionId} />
@@ -2018,7 +2035,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
       ) : null}
 
       <div className="workspace-shell" data-testid="workspace-route">
-        <aside className="panel workspace-pane workspace-pane--chat">
+        <aside
+          aria-label="Chat lane"
+          className="panel workspace-pane workspace-pane--chat"
+        >
           <SessionChatPane
             activityLabel={chatActivityState.activityLabel}
             connectionLabel={runtimeConnectionLabel}
@@ -2064,10 +2084,13 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
           />
         </aside>
 
-        <section className="panel workspace-pane workspace-pane--canvas">
+        <section
+          aria-labelledby={workflowCanvasHeadingId}
+          className="panel workspace-pane workspace-pane--canvas"
+        >
           <div className="pane-heading">
             <div>
-              <h2>Workflow canvas</h2>
+              <h2 id={workflowCanvasHeadingId}>Workflow canvas</h2>
               <p className="body-copy">
                 The main pane keeps enough width for forms, stage review, and
                 later composition or audio progress views.
@@ -2161,11 +2184,20 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
               </ol>
             </nav>
 
-            <article className="workspace-stage-detail">
+            <article
+              aria-labelledby={selectedStageHeadingId}
+              className="workspace-stage-detail"
+            >
               <div className="workspace-stage-detail__hero">
                 <div>
                   <p className="eyebrow">Stage scaffold</p>
-                  <h2>{selectedStage.scaffoldTitle}</h2>
+                  <h2
+                    id={selectedStageHeadingId}
+                    ref={selectedStageHeadingRef}
+                    tabIndex={-1}
+                  >
+                    {selectedStage.scaffoldTitle}
+                  </h2>
                   <p className="body-copy">{selectedStage.scaffoldSummary}</p>
                 </div>
 
@@ -2546,6 +2578,8 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             <SummaryPanel label="Progress">
               <ProgressBar
                 aria-label={`${snapshot.display_title} workflow progress`}
+                announcementKey={`${snapshot.progress.completed_stages}:${snapshot.resume_stage}:${snapshot.current_stage}`}
+                announcementText={`Workflow progress updated. ${progress.label}. Resume at ${getWorkflowStageLabel(snapshot.resume_stage)}.`}
                 hint={`Resume at ${getWorkflowStageLabel(snapshot.resume_stage)} with ${progress.percent}% of the workflow currently complete.`}
                 label="Workflow progress"
                 value={progress.percent}

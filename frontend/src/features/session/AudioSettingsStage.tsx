@@ -251,6 +251,46 @@ function buildAudioProgressLabel(audioJob: AudioJobView | null) {
   return 'Narration runtime'
 }
 
+function roundProgressForAnnouncement(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value / 10) * 10))
+}
+
+function buildAudioProgressAnnouncement(options: {
+  audioJob: AudioJobView | null
+  finalAudioReady: boolean
+  renderState: AudioRenderState
+}) {
+  if (options.finalAudioReady) {
+    return 'Narration complete. The final master is ready.'
+  }
+
+  if (options.renderState === 'failed') {
+    return 'Narration stopped before the final master was ready.'
+  }
+
+  if (options.renderState === 'paused') {
+    return 'Narration is paused with its checkpoints preserved.'
+  }
+
+  if (options.audioJob == null) {
+    return 'Narration has not started yet.'
+  }
+
+  const roundedProgress = roundProgressForAnnouncement(
+    options.audioJob.progress_percent ?? 0,
+  )
+  const stepLabel =
+    options.audioJob.current_step_index != null &&
+    options.audioJob.total_steps != null
+      ? `Step ${options.audioJob.current_step_index} of ${options.audioJob.total_steps}.`
+      : options.audioJob.current_segment_index != null &&
+          options.audioJob.total_segments != null
+        ? `Segment ${options.audioJob.current_segment_index} of ${options.audioJob.total_segments}.`
+        : null
+
+  return [stepLabel, `${roundedProgress}% complete.`].filter(Boolean).join(' ')
+}
+
 function buildAudioProgressHint(audioJob: AudioJobView | null) {
   if (audioJob == null) {
     return null
@@ -277,7 +317,9 @@ function buildAudioProgressHint(audioJob: AudioJobView | null) {
     .join(' ')
 }
 
-function resolveAudioRenderState(audioJob: AudioJobView | null): AudioRenderState {
+function resolveAudioRenderState(
+  audioJob: AudioJobView | null,
+): AudioRenderState {
   if (audioJob == null) {
     return 'planned'
   }
@@ -454,7 +496,11 @@ function formatAudioCalloutValue(
   return 'Plan'
 }
 
-function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
+function formatCountLabel(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+) {
   return `${count} ${count === 1 ? singular : plural}`
 }
 
@@ -465,8 +511,13 @@ function buildRemainingWorkSummary(options: {
   previewCount: number
   renderState: AudioRenderState
 }) {
-  const { audioJob, audioSegments, finalAudioReady, previewCount, renderState } =
-    options
+  const {
+    audioJob,
+    audioSegments,
+    finalAudioReady,
+    previewCount,
+    renderState,
+  } = options
   const totalSegments = audioSegments.length || audioJob?.total_segments || 0
   const completedSegments =
     audioJob?.completed_segments ??
@@ -664,12 +715,8 @@ function buildSegmentPreviewCopy(
   return null
 }
 
-function readDetailsRecord(
-  value: unknown,
-): Record<string, unknown> | null {
-  return value != null &&
-    typeof value === 'object' &&
-    !Array.isArray(value)
+function readDetailsRecord(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
 }
@@ -725,9 +772,7 @@ function formatPublishedAtLabel(value: string | null | undefined) {
   })
 }
 
-function buildCompiledAudioMeta(
-  asset: SessionSnapshot['latest_audio_asset'],
-) {
+function buildCompiledAudioMeta(asset: SessionSnapshot['latest_audio_asset']) {
   if (asset == null) {
     return []
   }
@@ -839,10 +884,24 @@ export function AudioSettingsStage({
     snapshot.latest_audio_asset?.audio_job_id != null &&
     snapshot.latest_audio_asset.audio_job_id !== activeAudioJob.id
   const audioProgressPercent =
-    displayAudioJob?.progress_percent ??
-    (finalAudioReady ? 100 : 0)
+    displayAudioJob?.progress_percent ?? (finalAudioReady ? 100 : 0)
+  const announcedAudioProgressPercent =
+    roundProgressForAnnouncement(audioProgressPercent)
   const audioProgressLabel = buildAudioProgressLabel(displayAudioJob)
   const audioProgressHint = buildAudioProgressHint(displayAudioJob)
+  const audioProgressAnnouncement = buildAudioProgressAnnouncement({
+    audioJob: displayAudioJob,
+    finalAudioReady,
+    renderState,
+  })
+  const audioProgressAnnouncementKey = [
+    displayAudioJob?.id ?? 'no-job',
+    renderState,
+    displayAudioJob?.current_step_index ?? 'no-step',
+    displayAudioJob?.current_segment_index ?? 'no-segment',
+    announcedAudioProgressPercent,
+    finalAudioReady ? 'ready' : 'pending',
+  ].join(':')
   const remainingWorkSummary = buildRemainingWorkSummary({
     audioJob: displayAudioJob,
     audioSegments,
@@ -914,7 +973,11 @@ export function AudioSettingsStage({
 
           <div className="composition-stage__progress-callout">
             <strong>
-              {formatAudioCalloutValue(displayAudioJob, renderState, finalAudioReady)}
+              {formatAudioCalloutValue(
+                displayAudioJob,
+                renderState,
+                finalAudioReady,
+              )}
             </strong>
             <span>{getAudioStatusLabel(renderState)}</span>
           </div>
@@ -922,6 +985,8 @@ export function AudioSettingsStage({
 
         <ProgressBar
           aria-label="Narration render progress"
+          announcementKey={audioProgressAnnouncementKey}
+          announcementText={audioProgressAnnouncement}
           className="composition-stage__progress audio-stage__progress"
           hint={
             audioProgressHint ??
@@ -1212,9 +1277,9 @@ export function AudioSettingsStage({
 
               {showingPreviousMaster ? (
                 <p className="audio-stage__compiled-note">
-                  This player is showing the previous published master while
-                  the current narration run assembles a replacement. The older
-                  file stays available until the new publish succeeds.
+                  This player is showing the previous published master while the
+                  current narration run assembles a replacement. The older file
+                  stays available until the new publish succeeds.
                 </p>
               ) : null}
 
@@ -1249,9 +1314,9 @@ export function AudioSettingsStage({
             <div>
               <h3>Settings</h3>
               <p>
-                Keep the first pass tight: choose the voice, shape the
-                delivery, decide whether music belongs underneath it, and leave
-                any final mix note for the next render.
+                Keep the first pass tight: choose the voice, shape the delivery,
+                decide whether music belongs underneath it, and leave any final
+                mix note for the next render.
               </p>
             </div>
           </div>
@@ -1261,8 +1326,9 @@ export function AudioSettingsStage({
               description={voiceDescription}
               label="Voice"
               title={
-                voiceOptions.find((option) => option.value === formState.voiceKey)
-                  ?.label
+                voiceOptions.find(
+                  (option) => option.value === formState.voiceKey,
+                )?.label
               }
             />
             <SummaryPanel

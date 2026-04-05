@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionSnapshot } from '../../api/sessions.ts'
 import { renderWithAppProviders } from '../../test/renderWithAppProviders.tsx'
+import { mockMatchMedia } from '../../test/mockMatchMedia.ts'
 import type { SessionCompositionStreamState } from './sessionRuntimeStore.ts'
 import { CompositionStage } from './CompositionStage.tsx'
 
@@ -215,6 +216,11 @@ const liveComposition: SessionCompositionStreamState = {
   updatedAt: '2026-04-02T05:16:00Z',
 }
 
+afterEach(() => {
+  vi.restoreAllMocks()
+  Reflect.deleteProperty(window, 'matchMedia')
+})
+
 describe('CompositionStage', () => {
   it('renders the current segment focus, archive, and routes control requests through the callbacks', async () => {
     const onAcceptRewrite = vi.fn().mockResolvedValue(undefined)
@@ -297,6 +303,39 @@ describe('CompositionStage', () => {
     expect(onRejectRewrite).not.toHaveBeenCalled()
     expect(onRestoreSegmentVersion).not.toHaveBeenCalled()
     expect(onStartComposition).not.toHaveBeenCalled()
+  })
+
+  it('removes the live cursor and manuscript sweep when reduced motion is preferred', () => {
+    mockMatchMedia(true)
+
+    renderWithAppProviders(
+      <CompositionStage
+        composition={liveComposition}
+        connectionState="open"
+        onAcceptRewrite={vi.fn().mockResolvedValue(undefined)}
+        onCancelComposition={vi.fn().mockResolvedValue(undefined)}
+        onKeepExploringRewrite={vi.fn()}
+        onPauseComposition={vi.fn().mockResolvedValue(undefined)}
+        onRejectRewrite={vi.fn().mockResolvedValue(undefined)}
+        onRedirectComposition={vi.fn().mockResolvedValue(undefined)}
+        onResumeComposition={vi.fn().mockResolvedValue(undefined)}
+        onRestoreSegmentVersion={vi.fn().mockResolvedValue(undefined)}
+        onReturnToPlan={vi.fn().mockResolvedValue(undefined)}
+        onStartComposition={vi.fn().mockResolvedValue(undefined)}
+        snapshot={sampleSnapshot}
+      />,
+    )
+
+    const currentSurface = screen.getByTestId('composition-current-surface')
+
+    expect(
+      currentSurface.querySelector(
+        '.composition-stage__manuscript-shell--live',
+      ),
+    ).toBeNull()
+    expect(
+      currentSurface.querySelector('.composition-stage__cursor'),
+    ).toBeNull()
   })
 
   it('shows a ready-to-write state without an archive before the first segment exists', () => {
@@ -499,7 +538,8 @@ describe('CompositionStage', () => {
                   is_current: false,
                   is_stale: false,
                   accepted_summary: 'The harbor opens more gently.',
-                  text_content: 'Rewrite segment 1 opens the harbor more gently.',
+                  text_content:
+                    'Rewrite segment 1 opens the harbor more gently.',
                   word_count: 8,
                   created_at: '2026-04-02T05:20:00Z',
                   updated_at: '2026-04-02T05:22:00Z',
@@ -569,7 +609,8 @@ describe('CompositionStage', () => {
                   acceptance_state: 'accepted',
                   is_current: false,
                   is_stale: false,
-                  accepted_summary: 'The earlier cove draft kept the bell closer.',
+                  accepted_summary:
+                    'The earlier cove draft kept the bell closer.',
                   text_content:
                     'Mira followed the bell into the lantern cove while Pip hummed beside her.',
                   word_count: 13,
@@ -586,13 +627,12 @@ describe('CompositionStage', () => {
 
     expect(screen.getByText('Selected revision')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore this revision' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Restore this revision' }),
+    )
 
     await waitFor(() => {
-      expect(onRestoreSegmentVersion).toHaveBeenCalledWith(
-        2,
-        'segment-2-rev-0',
-      )
+      expect(onRestoreSegmentVersion).toHaveBeenCalledWith(2, 'segment-2-rev-0')
     })
   })
 })
