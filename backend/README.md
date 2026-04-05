@@ -120,9 +120,10 @@ STORYTELLER_INTEGRATION_GCS_ENDPOINT="http://127.0.0.1:8568" \
 python -m pytest --run-integration -m integration tests/integration
 ```
 
-Future CI should treat `make backend-integration-test` as the durable-state gate after booting the
-same Compose-backed infrastructure. That keeps local and CI behavior aligned and makes migration,
-queue-claim, and storage regressions visible before higher-level workflow prompts add more state.
+GitHub Actions now treats `make backend-integration-test` as the durable-state gate after booting
+the same Compose-backed infrastructure. That keeps local and CI behavior aligned and makes
+migration, queue-claim, and storage regressions visible before higher-level workflow prompts add
+more state.
 
 ## Background jobs
 

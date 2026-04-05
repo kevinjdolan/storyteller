@@ -19,6 +19,7 @@ Current entrypoints:
 - `storage-buckets-and-prefixes.md`: bucket roles, stable object-key conventions, and storage usage
 - `artifact-retention-policy.md`: conservative retention windows, cleanup safety rules, and maintenance commands
 - `observability-and-logging.md`: structured log format, correlated identifiers, and debugging flow
+- `ci.md`: GitHub Actions validation gates, required checks, and common failure recovery paths
 - `developer-debug-inspector.md`: hidden session-inspector route for debugging snapshot, jobs, events, artifacts, and usage
 - `system-diagram.md`: one-page runtime diagram for browser, API, worker, storage, and Gemini flows
 - `contributing.md`: shared quality commands and code-style conventions

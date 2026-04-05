@@ -9,12 +9,27 @@ Keep changes boring, typed, and easy to review. This repo is split between a Rea
 - `make lint`: run frontend ESLint and backend Ruff checks
 - `make test`: run backend pytest and frontend Vitest
 - `make check`: run formatting checks, lint, tests, and the frontend production build
+- `make ci`: run the same full validation path that GitHub Actions uses, including backend integration tests
 
 If you are only touching one stack, the narrower targets are:
 
 - `make frontend-format`, `make frontend-format-check`, `make frontend-lint`, `make frontend-test`, `make frontend-build`
 - `make backend-format`, `make backend-format-check`, `make backend-lint`, `make backend-test`
 - `make backend-integration-test` for the real Postgres + fake GCS durability suite
+
+## Required CI Checks
+
+The repository GitHub Actions workflow is defined in
+[`/.github/workflows/ci.yml`](/Users/kevin/code/storyteller/.github/workflows/ci.yml).
+
+Configure these checks from the `CI` workflow as required before merge:
+
+- `Frontend Validation`
+- `Backend Validation`
+- `Backend Integration`
+
+More detail, including local reproduction and troubleshooting notes, lives in
+[docs/ci.md](/Users/kevin/code/storyteller/docs/ci.md).
 
 ## Naming Conventions
 

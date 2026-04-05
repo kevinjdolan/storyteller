@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := ./scripts/dev-compose.sh
 
-.PHONY: help bootstrap up down logs ps reset format format-check lint test build check frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-integration-test backend-seed-catalog backend-storage-smoke backend-artifact-cleanup-dry-run backend-artifact-cleanup-apply
+.PHONY: help bootstrap up down logs ps reset format format-check lint test build check ci frontend-format frontend-format-check frontend-lint frontend-test frontend-build backend-format backend-format-check backend-lint backend-test backend-integration-test backend-seed-catalog backend-storage-smoke backend-artifact-cleanup-dry-run backend-artifact-cleanup-apply
 
 help: ## Show the common developer commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -56,6 +56,7 @@ backend-test: ## Run the backend pytest suite
 
 backend-integration-test: ## Run backend integration tests against local Postgres and fake GCS
 	@$(COMPOSE) up -d postgres gcs
+	@./scripts/wait-for-compose-services.sh postgres gcs
 	@cd backend && \
 	export STORYTELLER_RUN_INTEGRATION_TESTS=1; \
 	export STORYTELLER_SECRETS_FILE="$${STORYTELLER_SECRETS_FILE:-}"; \
@@ -134,3 +135,7 @@ check: ## Run formatting checks, lint, tests, and the frontend production build
 	@$(MAKE) lint
 	@$(MAKE) test
 	@$(MAKE) build
+
+ci: ## Run the full CI validation path, including backend integration coverage
+	@$(MAKE) check
+	@$(MAKE) backend-integration-test

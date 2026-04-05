@@ -119,6 +119,7 @@ The most common daily commands are:
 - `make test`: run backend pytest and frontend Vitest
 - `make build`: run the frontend production build
 - `make check`: run formatting checks, lint, tests, and the frontend build in one pass
+- `make ci`: run the full GitHub Actions validation path, including backend integration tests
 - `make backend-storage-smoke`: round-trip a sample object through the local storage emulator
 
 Suggested daily loop:
@@ -132,6 +133,10 @@ Suggested daily loop:
 7. `make down` when you are done
 
 For frontend-only work, `make frontend-format`, `make frontend-format-check`, `make frontend-lint`, `make frontend-test`, and `make frontend-build` are available as narrower targets. For backend-only work, use `make backend-format`, `make backend-format-check`, `make backend-lint`, `make backend-test`, and `make backend-storage-smoke`.
+
+GitHub Actions now runs the same validation surface in
+[docs/ci.md](/Users/kevin/code/storyteller/docs/ci.md), including a separate backend integration
+gate for migrations, Postgres, and fake GCS behavior.
 
 ## Docker Compose Local Stack
 

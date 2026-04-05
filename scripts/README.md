@@ -9,6 +9,7 @@ Current scripts:
 - `dev-compose.sh`: wraps the canonical Compose file under `infra/compose/`
 - `install-git-hooks.sh`: points `core.hooksPath` at the repo-managed `.githooks/` directory
 - `reset-local-data.sh`: stops the compose stack and removes only the Postgres and fake GCS persistent volumes
+- `wait-for-compose-services.sh`: waits for named Compose services to report healthy before dependent commands run
 
 Keep scripts narrow in scope and readable enough that engineers can trust them at a glance.
 
