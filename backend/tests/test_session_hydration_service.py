@@ -186,9 +186,9 @@ def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
     assert hydrated.snapshot.latest_story_asset is not None
     assert hydrated.snapshot.latest_story_export_asset is not None
     assert hydrated.snapshot.latest_audio_asset is not None
-    assert hydrated.snapshot.latest_story_asset.object_path.endswith("story.md")
-    assert hydrated.snapshot.latest_story_export_asset.object_path.endswith("story.docx")
-    assert hydrated.snapshot.latest_audio_asset.object_path.endswith("story.mp3")
+    assert hydrated.snapshot.latest_story_asset.object_path is None
+    assert hydrated.snapshot.latest_story_export_asset.object_path is None
+    assert hydrated.snapshot.latest_audio_asset.object_path is None
     assert hydrated.snapshot.latest_story_asset.access is not None
     assert hydrated.snapshot.latest_story_asset.access.download_path.endswith(
         f"/api/v1/sessions/{snapshot.id}/assets/{story_asset.id}/content?disposition=attachment"

@@ -1174,6 +1174,10 @@ def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(
         f"{payload['snapshot']['audio_segments'][0]['preview_asset']['id']}/content"
         "?disposition=inline"
     )
+    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["storage_bucket"] is None
+    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["object_path"] is None
+    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["mime_type"] is None
+    assert payload["snapshot"]["audio_segments"][0]["preview_asset"]["public_url"] is None
     assert payload["snapshot"]["audio_segments"][1]["split_reason"] == "sentence_boundary"
 
 
@@ -1219,7 +1223,9 @@ def test_get_session_asset_content_supports_byte_ranges_for_audio(
     assert response.content == b"FAKE"
     assert response.headers["content-range"] == f"bytes 0-3/{len(audio_bytes)}"
     assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["cache-control"] == "private, no-store"
     assert response.headers["content-type"] == "audio/mpeg"
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_get_named_story_docx_artifact_generates_export_from_story_text(
@@ -1349,6 +1355,10 @@ def test_post_story_docx_artifact_generates_export_metadata(
     assert payload["asset_kind"] == "story_docx"
     assert payload["status"] == "ready"
     assert payload["access"]["filename"] == "Lantern-Harbor.docx"
+    assert payload["storage_bucket"] is None
+    assert payload["object_path"] is None
+    assert payload["mime_type"] is None
+    assert payload["public_url"] is None
     assert payload["access"]["download_path"].endswith(
         f"/api/v1/sessions/{created['id']}/assets/{payload['id']}/content?disposition=attachment"
     )
@@ -1404,6 +1414,10 @@ def test_get_session_artifact_inventory_endpoint_reports_missing_and_failed_asse
 
     assert payload["session_id"] == created["id"]
     assert items["story_text"]["status"] == "ready"
+    assert items["story_text"]["asset"]["storage_bucket"] is None
+    assert items["story_text"]["asset"]["object_path"] is None
+    assert items["story_text"]["asset"]["mime_type"] is None
+    assert items["story_text"]["asset"]["public_url"] is None
     assert items["story_text"]["download_path"].endswith(
         f"/api/v1/sessions/{created['id']}/artifacts/story-text?disposition=attachment"
     )

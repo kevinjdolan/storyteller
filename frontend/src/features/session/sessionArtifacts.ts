@@ -6,7 +6,7 @@ export type SessionArtifactHandle = 'story-docx' | 'final-audio'
 export function resolveSessionAssetStreamUrl(
   asset: SessionAssetView | null | undefined,
 ) {
-  const streamPath = asset?.access?.stream_path ?? asset?.public_url ?? null
+  const streamPath = asset?.access?.stream_path ?? null
   if (streamPath == null) {
     return null
   }
@@ -16,7 +16,7 @@ export function resolveSessionAssetStreamUrl(
 export function resolveSessionAssetDownloadUrl(
   asset: SessionAssetView | null | undefined,
 ) {
-  const downloadPath = asset?.access?.download_path ?? asset?.public_url ?? null
+  const downloadPath = asset?.access?.download_path ?? null
   if (downloadPath == null) {
     return null
   }
@@ -60,8 +60,8 @@ export function triggerArtifactDownload(url: string) {
 }
 
 function resolveBackendAssetUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) {
-    return url
+  if (!url.startsWith('/')) {
+    return null
   }
   return resolveApiUrl(url as `/${string}`)
 }

@@ -434,9 +434,9 @@ class SessionAssetView(BaseModel):
     id: str
     asset_kind: str
     status: str
-    storage_bucket: str
-    object_path: str
-    mime_type: str
+    storage_bucket: str | None = None
+    object_path: str | None = None
+    mime_type: str | None = None
     composition_job_id: str | None = None
     audio_job_id: str | None = None
     byte_size: int | None = None

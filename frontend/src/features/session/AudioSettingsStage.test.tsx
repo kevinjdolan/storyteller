@@ -249,8 +249,13 @@ describe('AudioSettingsStage', () => {
             id: 'preview-1',
             asset_kind: 'audio_segment',
             status: 'ready',
-            public_url:
-              'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/segments/0001.wav?alt=media',
+            access: {
+              download_path:
+                '/api/v1/sessions/moonlit-harbor/assets/preview-1/content?disposition=attachment',
+              filename: 'segment-0001.wav',
+              stream_path:
+                '/api/v1/sessions/moonlit-harbor/assets/preview-1/content?disposition=inline',
+            },
           },
         },
         {
@@ -294,8 +299,13 @@ describe('AudioSettingsStage', () => {
             applied: false,
           },
         },
-        public_url:
-          'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-6/final/story.wav?alt=media',
+        access: {
+          download_path:
+            '/api/v1/sessions/moonlit-harbor/assets/final-audio/content?disposition=attachment',
+          filename: 'story.wav',
+          stream_path:
+            '/api/v1/sessions/moonlit-harbor/assets/final-audio/content?disposition=inline',
+        },
         ready_at: '2026-04-02T05:22:00Z',
       },
     }

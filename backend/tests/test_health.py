@@ -25,9 +25,8 @@ def test_health_endpoint_returns_service_metadata(client: TestClient) -> None:
     assert payload["dependencies"]["object_storage"] == {
         "status": "configured",
         "detail": (
-            "A file-backed GCS emulator is configured for buckets "
-            "storyteller-sessions, storyteller-audio, storyteller-exports at "
-            "http://gcs:4443. Public URL: http://localhost:8568."
+            "A file-backed object storage backend is configured for session, audio, "
+            "and export artifacts. Asset access stays mediated through backend routes."
         ),
     }
     assert "gemini" not in payload["dependencies"]

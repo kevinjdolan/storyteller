@@ -36,10 +36,16 @@ class SessionArtifactInventoryNotFoundError(SessionArtifactInventoryError):
 
 
 class SessionArtifactInventoryService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        include_storage_details: bool = False,
+    ) -> None:
         self._session = session
         self._sessions = StorySessionRepository(session)
         self._assets = SessionAssetRepository(session)
+        self._include_storage_details = include_storage_details
 
     def load_inventory(self, session_id: str) -> SessionArtifactInventoryView:
         aggregate = self._sessions.get_aggregate(session_id)
@@ -103,7 +109,10 @@ class SessionArtifactInventoryService:
             artifact_kind=AssetKind.STORY_TEXT.value,
             status=status,
             status_detail=status_detail,
-            asset=build_session_asset_view(story_asset),
+            asset=build_session_asset_view(
+                story_asset,
+                include_storage_details=self._include_storage_details,
+            ),
             download_path=download_path,
             stream_path=stream_path,
         )
@@ -159,7 +168,10 @@ class SessionArtifactInventoryService:
             artifact_kind=AssetKind.STORY_DOCX.value,
             status=status,
             status_detail=status_detail,
-            asset=build_session_asset_view(docx_asset),
+            asset=build_session_asset_view(
+                docx_asset,
+                include_storage_details=self._include_storage_details,
+            ),
             download_path=download_path,
         )
 
@@ -175,7 +187,10 @@ class SessionArtifactInventoryService:
         preview_asset_views = [
             view
             for view in (
-                build_session_asset_view(asset)
+                build_session_asset_view(
+                    asset,
+                    include_storage_details=self._include_storage_details,
+                )
                 for asset in ready_preview_assets[:_PREVIEW_ASSET_LIMIT]
             )
             if view is not None
@@ -244,7 +259,10 @@ class SessionArtifactInventoryService:
             artifact_kind=AssetKind.FINAL_AUDIO.value,
             status=status,
             status_detail=status_detail,
-            asset=build_session_asset_view(final_audio_asset),
+            asset=build_session_asset_view(
+                final_audio_asset,
+                include_storage_details=self._include_storage_details,
+            ),
             preview_assets=preview_asset_views,
             preview_asset_count=len(ready_preview_assets),
             download_path=download_path,

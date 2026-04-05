@@ -163,7 +163,17 @@ def _discover_secrets_file(
         if not candidate.is_absolute():
             candidate = (search_root / candidate).resolve()
 
-        return candidate if candidate.is_file() else None
+        if not candidate.exists():
+            raise SettingsValidationError(
+                (f"STORYTELLER_SECRETS_FILE points to a missing file: {candidate}",),
+            )
+
+        if not candidate.is_file():
+            raise SettingsValidationError(
+                (f"STORYTELLER_SECRETS_FILE must point to a file, not {candidate}",),
+            )
+
+        return candidate
 
     candidates = (
         search_root / DEFAULT_SECRETS_FILE_NAME,

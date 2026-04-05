@@ -312,11 +312,15 @@ class SessionService:
         hydration = SessionHydrationService(
             self._session,
             owner_id=self._owner_id,
+            include_storage_details=True,
         ).hydrate_session(
             session_id,
             history_limit=history_limit,
         )
-        artifact_inventory = SessionArtifactInventoryService(self._session).load_inventory(
+        artifact_inventory = SessionArtifactInventoryService(
+            self._session,
+            include_storage_details=True,
+        ).load_inventory(
             session_id,
         )
         usage_diagnostics = SessionModelUsageService(self._session).load_session_diagnostics(

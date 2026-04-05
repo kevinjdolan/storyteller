@@ -115,6 +115,7 @@ class SessionHydrationService:
         *,
         owner_id: str | None = LOCAL_DEVELOPMENT_OWNER_ID,
         object_storage: ObjectStorageService | None = None,
+        include_storage_details: bool = False,
     ):
         self._session = session
         self._owner_id = owner_id
@@ -122,6 +123,7 @@ class SessionHydrationService:
         self._memory = SessionMemoryService(session)
         self._events = SessionEventLogService(session)
         self._object_storage = object_storage
+        self._include_storage_details = include_storage_details
 
     def load_session_snapshot(self, session_id: str) -> SessionSnapshot:
         aggregate = self._sessions.get_aggregate(session_id, owner_id=self._owner_id)
@@ -132,6 +134,7 @@ class SessionHydrationService:
             aggregate,
             conversation_memory=self._memory.load_latest_snapshot(session_id),
             usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
+            include_storage_details=self._include_storage_details,
         )
         self._apply_draft_snapshot_fallback(snapshot, aggregate.latest_draft_snapshot_asset)
         return snapshot
@@ -154,6 +157,7 @@ class SessionHydrationService:
             aggregate,
             conversation_memory=conversation_memory,
             usage_summary=SessionModelUsageService(self._session).load_session_summary(session_id),
+            include_storage_details=self._include_storage_details,
         )
         self._apply_draft_snapshot_fallback(
             base_snapshot,
@@ -369,6 +373,7 @@ def build_session_snapshot(
     *,
     conversation_memory: ConversationMemorySnapshotView | None,
     usage_summary: SessionUsageSummaryView,
+    include_storage_details: bool = False,
 ) -> SessionSnapshot:
     story_session = aggregate.session
     pitch_batch_views, pitch_batch_window = _limit_recent_collection(
@@ -459,10 +464,20 @@ def build_session_snapshot(
         audio_segments=build_narration_segment_views(
             aggregate.audio_segments,
             aggregate.audio_segment_assets,
+            include_storage_details=include_storage_details,
         ),
-        latest_story_asset=build_session_asset_view(aggregate.latest_story_asset),
-        latest_story_export_asset=build_session_asset_view(aggregate.latest_story_export_asset),
-        latest_audio_asset=build_session_asset_view(aggregate.latest_audio_asset),
+        latest_story_asset=build_session_asset_view(
+            aggregate.latest_story_asset,
+            include_storage_details=include_storage_details,
+        ),
+        latest_story_export_asset=build_session_asset_view(
+            aggregate.latest_story_export_asset,
+            include_storage_details=include_storage_details,
+        ),
+        latest_audio_asset=build_session_asset_view(
+            aggregate.latest_audio_asset,
+            include_storage_details=include_storage_details,
+        ),
         audio_settings=build_audio_settings_view(
             story_session=story_session,
             latest_audio_job=aggregate.latest_audio_job,
@@ -2283,6 +2298,8 @@ def build_composition_segment_version_view(row) -> CompositionSegmentVersionView
 def build_narration_segment_views(
     rows: list[NarrationSegment],
     preview_assets: list[SessionAsset],
+    *,
+    include_storage_details: bool = False,
 ) -> list[NarrationSegmentView]:
     latest_preview_asset_by_segment: dict[int, SessionAsset] = {}
     for asset in preview_assets:
@@ -2294,6 +2311,7 @@ def build_narration_segment_views(
         build_narration_segment_view(
             row,
             preview_asset=latest_preview_asset_by_segment.get(row.segment_index),
+            include_storage_details=include_storage_details,
         )
         for row in rows
     ]
@@ -2303,6 +2321,7 @@ def build_narration_segment_view(
     row: NarrationSegment,
     *,
     preview_asset: SessionAsset | None = None,
+    include_storage_details: bool = False,
 ) -> NarrationSegmentView:
     metadata = _read_mapping(row.metadata_json)
 
@@ -2320,7 +2339,10 @@ def build_narration_segment_view(
         text_preview=_build_text_preview(row.text_content),
         error_message=row.error_message,
         completed_at=row.completed_at,
-        preview_asset=build_session_asset_view(preview_asset),
+        preview_asset=build_session_asset_view(
+            preview_asset,
+            include_storage_details=include_storage_details,
+        ),
     )
 
 
@@ -2366,7 +2388,11 @@ def build_audio_job_view(row: AudioJob | None) -> AudioJobView | None:
     )
 
 
-def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | None:
+def build_session_asset_view(
+    row: SessionAsset | None,
+    *,
+    include_storage_details: bool = False,
+) -> SessionAssetView | None:
     if row is None:
         return None
 
@@ -2376,9 +2402,9 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         id=row.id,
         asset_kind=row.asset_kind,
         status=row.status,
-        storage_bucket=row.storage_bucket,
-        object_path=row.object_path,
-        mime_type=row.mime_type,
+        storage_bucket=row.storage_bucket if include_storage_details else None,
+        object_path=row.object_path if include_storage_details else None,
+        mime_type=row.mime_type if include_storage_details else None,
         composition_job_id=row.composition_job_id,
         audio_job_id=row.audio_job_id,
         byte_size=row.byte_size,
@@ -2388,7 +2414,7 @@ def build_session_asset_view(row: SessionAsset | None) -> SessionAssetView | Non
         error_message=row.error_message,
         details=details or None,
         access=access,
-        public_url=access.stream_path if access is not None else None,
+        public_url=None,
         ready_at=row.ready_at,
         failed_at=row.failed_at,
         superseded_at=row.superseded_at,

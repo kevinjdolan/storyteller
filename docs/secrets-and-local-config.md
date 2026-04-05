@@ -37,6 +37,8 @@ The backend looks for `secrets.yaml` in this order:
 4. the repository root
 
 If `STORYTELLER_SECRETS_FILE` is set to an empty string, file discovery is disabled and only environment variables are used.
+If `STORYTELLER_SECRETS_FILE` is set to a non-empty path that does not exist, startup fails fast
+instead of silently falling back to a different file or to environment-only mode.
 
 The Docker Compose backend service mounts the repository at `/workspace` and sets:
 
@@ -114,7 +116,9 @@ The required values today are:
 - `gcs.buckets.audio`
 - `gcs.buckets.exports`
 
-`gcs.public_url` is optional.
+`gcs.public_url` is optional. It is useful for local emulator diagnostics, but the product UI still
+downloads and streams artifacts through backend-owned `/api/v1/sessions/...` routes rather than
+linking the browser directly to object storage.
 
 `gemini.approximate_pricing` is optional but recommended for usable cost diagnostics. The
 checked-in defaults are intentionally lightweight approximations for local development, and you

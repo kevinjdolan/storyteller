@@ -567,8 +567,8 @@ def test_load_session_snapshot_returns_selected_outputs_and_active_jobs(db_sessi
     assert snapshot.active_audio_job is not None
     assert snapshot.latest_story_asset is not None
     assert snapshot.latest_audio_asset is not None
-    assert snapshot.latest_story_asset.object_path == "sessions/story-1/story.md"
-    assert snapshot.latest_audio_asset.object_path == "sessions/story-1/story.mp3"
+    assert snapshot.latest_story_asset.object_path is None
+    assert snapshot.latest_audio_asset.object_path is None
     assert snapshot.progress.completed_stages == 7
     assert snapshot.progress.in_progress_stages == 1
     assert snapshot.current_stage == WorkflowStage.COMPOSITION

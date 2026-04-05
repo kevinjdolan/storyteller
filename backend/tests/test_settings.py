@@ -237,6 +237,19 @@ def test_invalid_secrets_yaml_is_reported_cleanly(tmp_path: Path) -> None:
     assert "Could not parse secrets file" in str(exc_info.value)
 
 
+def test_missing_explicit_secrets_file_is_reported_cleanly(tmp_path: Path) -> None:
+    missing_file = tmp_path / "missing-secrets.yaml"
+
+    with pytest.raises(SettingsValidationError) as exc_info:
+        load_settings(
+            {"STORYTELLER_SECRETS_FILE": str(missing_file)},
+            cwd=tmp_path,
+        )
+
+    assert str(missing_file) in str(exc_info.value)
+    assert "STORYTELLER_SECRETS_FILE points to a missing file" in str(exc_info.value)
+
+
 def test_python_module_startup_surfaces_configuration_errors_without_traceback() -> None:
     command_env = os.environ.copy()
 

@@ -1802,10 +1802,12 @@ def _build_asset_streaming_response(
     total_bytes = len(payload)
     headers = {
         "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
         "Content-Disposition": _build_content_disposition(
             filename=filename,
             disposition=disposition,
         ),
+        "X-Content-Type-Options": "nosniff",
     }
     resolved_range = _resolve_byte_range(byte_range, total_bytes)
     if resolved_range is None:
@@ -1875,9 +1877,20 @@ def _resolve_byte_range(
 
 
 def _build_content_disposition(*, filename: str, disposition: str) -> str:
-    quoted_filename = quote(filename, safe="")
-    fallback_filename = filename.replace('"', "")
+    sanitized_filename = _sanitize_download_filename(filename)
+    quoted_filename = quote(sanitized_filename, safe="")
+    fallback_filename = sanitized_filename.replace('"', "")
     return f"{disposition}; filename=\"{fallback_filename}\"; filename*=UTF-8''{quoted_filename}"
+
+
+def _sanitize_download_filename(filename: str) -> str:
+    normalized = "".join(
+        character
+        for character in filename
+        if character.isprintable() and character not in {"\r", "\n"}
+    )
+    normalized = normalized.replace("/", "-").replace("\\", "-").strip()
+    return normalized or "download"
 
 
 def _iter_payload_chunks(payload: bytes, *, chunk_size: int = 64 * 1024):
