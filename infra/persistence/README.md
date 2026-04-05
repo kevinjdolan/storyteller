@@ -19,10 +19,17 @@ If future local infrastructure work needs host-mounted runtime state instead of 
 
 Those directories are gitignored so local persistence experiments and recovered data do not pollute commits.
 
-Current Compose-backed persistent volumes:
+Current Compose-backed persistent volumes from the base stack:
 
 - `storyteller_postgres_data`: mounted into `/var/lib/postgresql/data`
 - `storyteller_gcs_data`: mounted into `/data` for the local fake GCS server
+
+Local development also creates dependency cache volumes through the dev override:
+
+- `storyteller_frontend_node_modules`: mounted into `/app/node_modules` inside the frontend container
+- `storyteller_webapp_qa_node_modules`: mounted into `/workspace/tools/webapp-qa/node_modules`
+
+Treat those cache volumes as disposable. They speed up rebuilds, but they do not contain durable application state.
 
 Safe cleanup guidance:
 

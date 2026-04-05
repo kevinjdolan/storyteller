@@ -19,7 +19,7 @@ variable directly:
 
 ```bash
 STORYTELLER_FEATURE_ENABLE_DEBUG_INSPECTOR=true \
-  docker compose -f infra/compose/docker-compose.yml up -d backend
+  ./scripts/dev-compose.sh up -d backend
 ```
 
 ## Use it
@@ -33,7 +33,7 @@ Open the hidden route directly in the frontend:
 Example:
 
 ```text
-http://127.0.0.1:5173/sessions/moonlit-harbor/debug
+http://127.0.0.1:8566/sessions/moonlit-harbor/debug
 ```
 
 The inspector shows:

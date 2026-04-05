@@ -41,4 +41,14 @@ Useful commands:
 - `npm run test`: run the frontend unit tests
 - `npm run format`: format the frontend files with Prettier
 
+## Container targets
+
+`frontend/Dockerfile` now exposes explicit stages for:
+
+- `development`: Vite dev server for the local Compose override
+- `build`: production asset compilation with `VITE_*` build arguments
+- `runtime`: nginx serving the built SPA and proxying `/api` traffic to the backend service
+
+That split keeps local hot reload intact while leaving the checked-in runtime image closer to how the frontend would be deployed behind a real reverse proxy or ingress later.
+
 Later prompts should extend this TypeScript app into the sessions-first workspace rather than replacing it.

@@ -17,7 +17,7 @@ relational models, and durable background job processing.
 - `migrations/`: Alembic schema history and migration environment
 - `tests/`: backend test suite
 - `requirements.txt`: Python dependencies
-- `Dockerfile`: backend container image
+- `Dockerfile`: multi-stage backend container image for development and runtime targets
 
 Planned expansion inside `app/` follows the architecture notes in [docs/architecture-overview.md](/Users/kevin/code/storyteller/docs/architecture-overview.md), including explicit homes for repositories, AI adapters, storage, and worker execution.
 
@@ -62,6 +62,17 @@ python -m app.seed_catalog
 python -m app.storage.smoke_test
 python -m app.maintenance.artifact_cleanup
 ```
+
+## Container targets
+
+`backend/Dockerfile` now exposes two explicit targets:
+
+- `development`: installs the full Python dependency set from `requirements.txt` for local bind-mounted Compose development
+- `runtime`: installs only `requirements.runtime.txt` so the API and worker can share a smaller production-oriented image
+
+The local Compose wrapper uses the `development` target through
+[`infra/compose/docker-compose.dev.yml`](/Users/kevin/code/storyteller/infra/compose/docker-compose.dev.yml).
+The base runtime compose file uses the `runtime` target for both `backend` and `worker`.
 
 Structured logging and request or job correlation notes live in
 [docs/observability-and-logging.md](/Users/kevin/code/storyteller/docs/observability-and-logging.md).

@@ -51,20 +51,20 @@ services:
   backend:
     build:
       context: ../../backend
+      target: runtime
     depends_on:
       postgres:
         condition: service_healthy
       gcs:
         condition: service_healthy
-    working_dir: /app
-    volumes:
-      - ../../backend:/app
-      - ../../:/workspace:ro
+    restart: unless-stopped
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-      STORYTELLER_SECRETS_FILE: /workspace/secrets.yaml
-      STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_SECRETS_FILE: ${STORYTELLER_SECRETS_FILE:-}
+      STORYTELLER_ENVIRONMENT: production
+      STORYTELLER_RELOAD: "false"
+      STORYTELLER_GEMINI_API_KEY: ${STORYTELLER_GEMINI_API_KEY:-}
       STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
       STORYTELLER_GCS_ENDPOINT: http://gcs:4443
       STORYTELLER_GCS_PROJECT_ID: storyteller-local
@@ -93,21 +93,19 @@ services:
   worker:
     build:
       context: ../../backend
+      target: runtime
     depends_on:
       postgres:
         condition: service_healthy
       gcs:
         condition: service_healthy
-    working_dir: /app
     restart: unless-stopped
-    volumes:
-      - ../../backend:/app
-      - ../../:/workspace:ro
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       STORYTELLER_SECRETS_FILE: ""
-      STORYTELLER_ENVIRONMENT: development
+      STORYTELLER_ENVIRONMENT: production
+      STORYTELLER_RELOAD: "false"
       STORYTELLER_DATABASE_URL: postgresql+psycopg://storyteller:storyteller@postgres:5432/storyteller
       STORYTELLER_GEMINI_API_KEY: ${STORYTELLER_GEMINI_API_KEY:-worker-placeholder-key}
       STORYTELLER_GCS_ENDPOINT: http://gcs:4443
@@ -128,51 +126,25 @@ services:
   frontend:
     build:
       context: ../../frontend
+      target: runtime
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_SESSION_EVENTS_WS_URL: ${VITE_SESSION_EVENTS_WS_URL:-/api/v1/sessions/events/ws}
     depends_on:
       backend:
         condition: service_healthy
-    working_dir: /app
-    environment:
-      CHOKIDAR_USEPOLLING: "true"
-      VITE_DEV_PROXY_TARGET: http://backend:8565
-      VITE_SESSION_EVENTS_WS_URL: /api/v1/sessions/events/ws
-    volumes:
-      - ../../frontend:/app
-      - frontend_node_modules:/app/node_modules
+    restart: unless-stopped
     ports:
-      - "8566:8566"
-    command: npm run dev -- --host 0.0.0.0 --port 8566
+      - "8566:80"
     healthcheck:
       test:
-        - CMD
-        - node
-        - -e
-        - |
-          require("http").get("http://127.0.0.1:8566", (response) => {
-            process.exit(response.statusCode === 200 ? 0 : 1);
-          }).on("error", () => process.exit(1));
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1/ >/dev/null
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
 
-  browser:
-    build:
-      context: ../../tools/webapp-qa
-    depends_on:
-      frontend:
-        condition: service_healthy
-    working_dir: /workspace/tools/webapp-qa
-    environment:
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
-      TARGET_BASE_URL: http://frontend:8566
-    volumes:
-      - ../../:/workspace
-      - webapp_qa_node_modules:/workspace/tools/webapp-qa/node_modules
-    command: sleep infinity
-
 volumes:
-  frontend_node_modules:
   postgres_data:
   gcs_data:
-  webapp_qa_node_modules:

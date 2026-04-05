@@ -9,6 +9,6 @@ RUN apt-get update \
 WORKDIR /workspace/tools/webapp-qa
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 CMD ["sleep", "infinity"]

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE=(docker compose -f "${ROOT_DIR}/infra/compose/docker-compose.yml")
+COMPOSE_SCRIPT="${ROOT_DIR}/scripts/dev-compose.sh"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-2}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
 
@@ -17,7 +17,7 @@ for service in "$@"; do
   echo "Waiting for ${service} to become healthy..."
 
   while true; do
-    container_id="$("${COMPOSE[@]}" ps -q "${service}")"
+    container_id="$("${COMPOSE_SCRIPT}" ps -q "${service}")"
 
     if [[ -z "${container_id}" ]]; then
       echo "Service ${service} is not running yet." >&2
@@ -31,7 +31,7 @@ for service in "$@"; do
 
       if [[ "${status}" == "unhealthy" || "${status}" == "exited" || "${status}" == "dead" ]]; then
         echo "Service ${service} entered terminal status: ${status}" >&2
-        "${COMPOSE[@]}" logs --no-color "${service}" >&2 || true
+        "${COMPOSE_SCRIPT}" logs --no-color "${service}" >&2 || true
         exit 1
       fi
 
@@ -40,7 +40,7 @@ for service in "$@"; do
 
     if (( SECONDS >= deadline )); then
       echo "Timed out waiting for ${service} after ${TIMEOUT_SECONDS} seconds." >&2
-      "${COMPOSE[@]}" logs --no-color "${service}" >&2 || true
+      "${COMPOSE_SCRIPT}" logs --no-color "${service}" >&2 || true
       exit 1
     fi
 

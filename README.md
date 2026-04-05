@@ -58,7 +58,7 @@ The repo is intended to run locally with Docker Compose. At the current scaffold
 
 - `frontend/` contains a Vite React app served on `http://localhost:8566`
 - `backend/` contains a FastAPI app served on `http://localhost:8565`
-- `infra/compose/` holds the canonical Compose file for local orchestration
+- `infra/compose/` holds the base runtime Compose file plus the local-development override
 - `tools/webapp-qa/` contains the browser automation container used for local UI verification
 
 Current auth stance in local development:
@@ -140,18 +140,41 @@ gate for migrations, Postgres, and fake GCS behavior.
 
 ## Docker Compose Local Stack
 
-Use `make up`, `make down`, and `make logs` for the common compose workflow. The existing wrapper script remains the canonical compose entrypoint underneath those targets, so advanced commands can still go through:
+Use `make up`, `make down`, and `make logs` for the common compose workflow. The wrapper script now applies two files together:
+
+- `infra/compose/docker-compose.yml`: the base runtime-oriented shape
+- `infra/compose/docker-compose.dev.yml`: local-development overrides for bind mounts, live reload, and the browser QA container
+
+That keeps the local day-to-day path simple while preserving a cleaner production starting point. Advanced local commands can still go through:
 
 ```bash
 ./scripts/dev-compose.sh ps
+./scripts/dev-compose.sh config
 ```
 
-Persistent data lives in named Docker volumes:
+If you want to inspect the runtime-only shape without the development overlay, use Docker Compose directly against the base file:
 
-- `storyteller_postgres_data` for PostgreSQL
-- `storyteller_gcs_data` for the file-backed GCS emulator
+```bash
+docker compose -f infra/compose/docker-compose.yml config
+```
+
+The local development stack includes:
+
+- `frontend` on `http://localhost:8566`
+- `backend` on `http://localhost:8565`
+- `worker` for durable background job execution
+- `postgres` on `localhost:8567`
+- `gcs` on `http://localhost:8568`
+- `browser` as the containerized QA runner
+
+Persistent data lives in named Docker volumes declared in the base compose file:
+
+- `storyteller_postgres_data` for PostgreSQL data files under `/var/lib/postgresql/data`
+- `storyteller_gcs_data` for the file-backed GCS emulator filesystem under `/data`
 
 `make reset` removes only those two data volumes so schema or seed-data changes can start from a clean slate without forcing frontend or QA dependency reinstallation. If you intentionally want a full compose wipe, including cached dependency volumes, `./scripts/dev-compose.sh down --volumes` remains available as the deeper reset path.
+
+The development override adds named cache volumes for `frontend/node_modules` and the browser QA toolchain, but those are intentionally treated as disposable dependency caches rather than application data.
 
 The backend receives the local infrastructure coordinates through environment variables in Compose:
 
@@ -192,6 +215,7 @@ The root `Makefile` and the scripts under `scripts/` are written for `bash` and 
 ├── frontend/
 ├── infra/
 │   ├── compose/
+│   │   ├── docker-compose.dev.yml
 │   │   └── docker-compose.yml
 │   └── persistence/
 ├── prompts/

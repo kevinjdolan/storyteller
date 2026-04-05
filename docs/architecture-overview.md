@@ -113,7 +113,8 @@ The repository currently contains an initial scaffold:
   SQLAlchemy metadata, and migration-aware database helpers
 - `backend/migrations/`: Alembic home for database schema history
 - `backend/app/worker/`: reserved home for background job runners
-- `infra/compose/docker-compose.yml`: local frontend, backend, PostgreSQL, file-backed GCS emulator, and browser QA services
+- `infra/compose/docker-compose.yml`: base runtime-oriented Compose shape for frontend, backend, worker, PostgreSQL, and the file-backed GCS emulator
+- `infra/compose/docker-compose.dev.yml`: local-development override for bind mounts, live reload, and the browser QA service
 - `infra/persistence/`: notes for persistent local infrastructure data
 - `scripts/dev-compose.sh`: convenience entrypoint for the Compose stack
 - `tools/webapp-qa/`: containerized browser automation support

@@ -6,7 +6,7 @@ Current scripts:
 
 - `bootstrap-dev.sh`: creates `secrets.yaml` if needed, installs repo hooks, prepares `backend/.venv`, and syncs frontend dependencies
 - `check-secret-hygiene.sh`: blocks staged local-only config files and obvious secret material
-- `dev-compose.sh`: wraps the canonical Compose file under `infra/compose/`
+- `dev-compose.sh`: wraps the base Compose file plus the local-development override under `infra/compose/`
 - `install-git-hooks.sh`: points `core.hooksPath` at the repo-managed `.githooks/` directory
 - `reset-local-data.sh`: stops the compose stack and removes only the Postgres and fake GCS persistent volumes
 - `wait-for-compose-services.sh`: waits for named Compose services to report healthy before dependent commands run
@@ -21,3 +21,4 @@ Common usage:
 - `make down` to stop while preserving Postgres and GCS volumes
 - `make reset` to intentionally wipe only the database and object-storage data
 - `./scripts/dev-compose.sh down --volumes` for a deeper reset that also clears dependency cache volumes
+- `docker compose -f infra/compose/docker-compose.yml config` to inspect the base runtime shape without local bind mounts
