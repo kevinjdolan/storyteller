@@ -1013,7 +1013,10 @@ export function FinalizeStage({
     listen: null,
     read: null,
   })
-  const compositionSegments = snapshot.composition_segments ?? []
+  const compositionSegments = useMemo(
+    () => snapshot.composition_segments ?? [],
+    [snapshot.composition_segments],
+  )
   const displayCompositionJob =
     snapshot.active_composition_job ?? snapshot.latest_composition_job ?? null
   const fallbackStoryText = useMemo(

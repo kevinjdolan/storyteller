@@ -46,11 +46,6 @@ type CompositionStageProps = {
   snapshot: SessionSnapshot
 }
 
-type SegmentChoice = {
-  index: number
-  label: string
-}
-
 function countWords(value: string) {
   const trimmedValue = value.trim()
 

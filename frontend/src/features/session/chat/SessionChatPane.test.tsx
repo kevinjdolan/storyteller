@@ -30,12 +30,17 @@ const sampleMessages = [
 ] as const
 
 function buildLargeTranscript(count: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `message-${index + 1}`,
-    role: (index % 2 === 0 ? 'assistant' : 'user') as const,
-    body: `Transcript message ${index + 1}`,
-    createdAt: `2026-04-01T08:${String(index % 60).padStart(2, '0')}:00Z`,
-  }))
+  return Array.from({ length: count }, (_, index) => {
+    const role: 'assistant' | 'user' =
+      index % 2 === 0 ? 'assistant' : 'user'
+
+    return {
+      id: `message-${index + 1}`,
+      role,
+      body: `Transcript message ${index + 1}`,
+      createdAt: `2026-04-01T08:${String(index % 60).padStart(2, '0')}:00Z`,
+    }
+  })
 }
 
 describe('SessionChatPane', () => {
