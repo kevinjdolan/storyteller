@@ -26,7 +26,8 @@ export const sessionQueryKeys = {
   histories: () => [...sessionQueryKeys.all, 'history'] as const,
   history: (sessionId: string) =>
     [...sessionQueryKeys.histories(), sessionId] as const,
-  artifactInventories: () => [...sessionQueryKeys.all, 'artifact-inventory'] as const,
+  artifactInventories: () =>
+    [...sessionQueryKeys.all, 'artifact-inventory'] as const,
   artifactInventory: (sessionId: string) =>
     [...sessionQueryKeys.artifactInventories(), sessionId] as const,
   debugInspectors: () => [...sessionQueryKeys.all, 'debug-inspector'] as const,
@@ -34,7 +35,9 @@ export const sessionQueryKeys = {
     [...sessionQueryKeys.debugInspectors(), sessionId] as const,
 }
 
-export function useRecentSessionsQuery(options: FetchRecentSessionsOptions = {}) {
+export function useRecentSessionsQuery(
+  options: FetchRecentSessionsOptions = {},
+) {
   return useQuery({
     placeholderData: (previousData) => previousData,
     queryKey: sessionQueryKeys.list(options),

@@ -433,12 +433,9 @@ def _build_heuristic_refined_pitches(
         f"{source_pitch.hook} This refinement keeps the same bedtime lane while applying: "
         f"{guidance}."
     )
-    conflict = (
-        source_pitch.central_conflict
-        or (
-            f"{protagonist} must solve one gentle nighttime problem in "
-            f"{setting} before rest can return."
-        )
+    conflict = source_pitch.central_conflict or (
+        f"{protagonist} must solve one gentle nighttime problem in "
+        f"{setting} before rest can return."
     )
     fit = (
         f"This refinement preserves the core appeal of {source_pitch.title} while applying the "

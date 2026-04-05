@@ -854,12 +854,9 @@ class SessionService:
         previous_status = stage_snapshot.status
         previous_detail = stage_snapshot.detail
         now = utc_now()
-        audio_requires_regeneration = (
-            aggregate.latest_audio_asset is not None
-            or (
-                aggregate.latest_audio_job is not None
-                and aggregate.latest_audio_job.status == JobStatus.COMPLETED
-            )
+        audio_requires_regeneration = aggregate.latest_audio_asset is not None or (
+            aggregate.latest_audio_job is not None
+            and aggregate.latest_audio_job.status == JobStatus.COMPLETED
         )
 
         if stage_snapshot.status == WorkflowStageState.DRAFT:

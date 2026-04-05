@@ -164,8 +164,7 @@ class RewriteSegmentsToolInput(StoryWorkflowToolModel):
             and self.rewrite_to_segment_index < self.rewrite_from_segment_index
         ):
             raise ValueError(
-                "rewrite_to_segment_index cannot be earlier than "
-                "rewrite_from_segment_index"
+                "rewrite_to_segment_index cannot be earlier than rewrite_from_segment_index"
             )
         return self
 

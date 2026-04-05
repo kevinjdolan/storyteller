@@ -192,8 +192,7 @@ def _seed_continuity_session(db_session) -> str:
                     "key": "all_is_lost",
                     "label": "All Is Lost",
                     "summary": (
-                        "The bell goes quiet and Mira worries she has guided the lantern "
-                        "wrong."
+                        "The bell goes quiet and Mira worries she has guided the lantern wrong."
                     ),
                 },
             ],

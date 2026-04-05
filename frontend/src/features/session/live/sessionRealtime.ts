@@ -630,7 +630,10 @@ function parseCompositionInterruptionRequest(
     ),
     requested_status: readOptionalString(record, 'requested_status'),
     requested_segment_id: readOptionalString(record, 'requested_segment_id'),
-    requested_segment_index: readOptionalNumber(record, 'requested_segment_index'),
+    requested_segment_index: readOptionalNumber(
+      record,
+      'requested_segment_index',
+    ),
     requested_progress_percent: readOptionalNumber(
       record,
       'requested_progress_percent',

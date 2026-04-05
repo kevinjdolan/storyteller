@@ -164,8 +164,7 @@ def classify_gemini_exception(
         return GeminiFailureDetail(
             kind=GeminiFailureKind.TRANSPORT,
             message=(
-                f"Gemini {operation_name} could not reach the provider network "
-                f"reliably: {detail}"
+                f"Gemini {operation_name} could not reach the provider network reliably: {detail}"
             ),
             retryable=True,
             user_action_required=False,
@@ -355,12 +354,8 @@ def _extract_provider_error(
 
     provider_status = error_payload.get("status")
     provider_message = error_payload.get("message")
-    normalized_status = (
-        str(provider_status).strip() if provider_status is not None else None
-    )
-    normalized_message = (
-        str(provider_message).strip() if provider_message is not None else None
-    )
+    normalized_status = str(provider_status).strip() if provider_status is not None else None
+    normalized_message = str(provider_message).strip() if provider_message is not None else None
     return (
         normalized_status or None,
         normalized_message or None,

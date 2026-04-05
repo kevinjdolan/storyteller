@@ -75,9 +75,10 @@ describe('finalizeAudioSync', () => {
         endSeconds: 28.1,
       }),
     ])
-    expect(resolveActiveNarrationTimelineSegment(result.timeline, 14.9)?.segmentIndex).toBe(
-      1,
-    )
+    expect(
+      resolveActiveNarrationTimelineSegment(result.timeline, 14.9)
+        ?.segmentIndex,
+    ).toBe(1)
     expect(resolveActiveAudioPlaybackMarker(markers, 16)?.label).toBe(
       'Moonlit Crossing',
     )

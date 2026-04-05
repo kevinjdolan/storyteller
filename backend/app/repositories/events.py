@@ -46,9 +46,7 @@ class EventLogRepository:
                 if not _is_event_sequence_conflict(exc):
                     raise
 
-        raise RuntimeError(
-            "failed to allocate a unique event sequence number after retrying"
-        )
+        raise RuntimeError("failed to allocate a unique event sequence number after retrying")
 
     def get_latest_sequence_number(self, session_id: str) -> int | None:
         stmt = select(func.max(EventLogEntry.sequence_number)).where(

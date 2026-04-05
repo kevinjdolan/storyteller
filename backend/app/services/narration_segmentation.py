@@ -163,9 +163,7 @@ class NarrationSegmentationService:
         for index, segment in enumerate(planned_segments):
             is_last_segment = index == len(planned_segments) - 1
             metadata = (
-                dict(segment.metadata_json)
-                if isinstance(segment.metadata_json, dict)
-                else {}
+                dict(segment.metadata_json) if isinstance(segment.metadata_json, dict) else {}
             )
             ends_source_boundary = bool(metadata.get("ends_source_boundary"))
 

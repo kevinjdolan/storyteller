@@ -169,4 +169,3 @@ def estimate_narration_duration_seconds(
 
     effective_words_per_minute = words_per_minute * playback_speed
     return int(math.ceil((word_count / effective_words_per_minute) * 60))
-

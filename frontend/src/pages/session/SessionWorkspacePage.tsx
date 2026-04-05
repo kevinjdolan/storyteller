@@ -734,7 +734,9 @@ function buildWorkspacePerformanceBanner(options: {
     >) {
       const window = collectionWindows[key]
       if (window?.has_more) {
-        summaries.push(`${window.included_count} of ${window.total_count} ${label}`)
+        summaries.push(
+          `${window.included_count} of ${window.total_count} ${label}`,
+        )
       }
     }
   }

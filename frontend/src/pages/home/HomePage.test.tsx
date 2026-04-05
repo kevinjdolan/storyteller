@@ -254,11 +254,12 @@ describe('HomePage', () => {
 
     await waitFor(() => {
       const lastSessionRequest = [...fetchMock.mock.calls]
-        .map(([input]) =>
-          new URL(
-            typeof input === 'string' ? input : input.toString(),
-            'http://localhost',
-          ),
+        .map(
+          ([input]) =>
+            new URL(
+              typeof input === 'string' ? input : input.toString(),
+              'http://localhost',
+            ),
         )
         .reverse()
         .find((url) => url.pathname === '/api/v1/sessions')
@@ -295,9 +296,7 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Lanterns Over Juniper Lake'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('Lanterns Over Juniper Lake')).toBeInTheDocument()
     })
   })
 
@@ -321,28 +320,28 @@ describe('HomePage', () => {
   it('shows an error state and retries the list request', async () => {
     let sessionGetCount = 0
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const rawUrl = typeof input === 'string' ? input : input.toString()
-        const url = new URL(rawUrl, 'http://localhost')
+      const rawUrl = typeof input === 'string' ? input : input.toString()
+      const url = new URL(rawUrl, 'http://localhost')
 
-        if (url.pathname === '/api/v1/catalog/genres') {
-          return Promise.resolve(buildJsonResponse(200, genreCatalog))
+      if (url.pathname === '/api/v1/catalog/genres') {
+        return Promise.resolve(buildJsonResponse(200, genreCatalog))
+      }
+
+      if (url.pathname === '/api/v1/sessions' && init?.method === 'POST') {
+        return Promise.resolve(buildJsonResponse(201, { id: 'new-session' }))
+      }
+
+      if (url.pathname === '/api/v1/sessions' && init?.method !== 'POST') {
+        if (sessionGetCount === 0) {
+          sessionGetCount += 1
+          return Promise.resolve(buildJsonResponse(500, { detail: 'boom' }))
         }
 
-        if (url.pathname === '/api/v1/sessions' && init?.method === 'POST') {
-          return Promise.resolve(buildJsonResponse(201, { id: 'new-session' }))
-        }
+        return Promise.resolve(buildJsonResponse(200, sampleSessions))
+      }
 
-        if (url.pathname === '/api/v1/sessions' && init?.method !== 'POST') {
-          if (sessionGetCount === 0) {
-            sessionGetCount += 1
-            return Promise.resolve(buildJsonResponse(500, { detail: 'boom' }))
-          }
-
-          return Promise.resolve(buildJsonResponse(200, sampleSessions))
-        }
-
-        throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${rawUrl}`)
-      })
+      throw new Error(`Unhandled request: ${init?.method ?? 'GET'} ${rawUrl}`)
+    })
 
     vi.stubGlobal('fetch', fetchMock)
 

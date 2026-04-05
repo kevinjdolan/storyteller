@@ -207,8 +207,7 @@ def test_eval_outline_chapter_plan_preserves_targets_tone_and_guardrails() -> No
     assert all(card.drafting_brief is not None for card in plan.cards)
     assert all(card.bedtime_guardrail is not None for card in plan.cards)
     assert any(
-        "visible companionship" in (card.bedtime_guardrail or "").lower()
-        for card in plan.cards
+        "visible companionship" in (card.bedtime_guardrail or "").lower() for card in plan.cards
     )
     assert "Lane: Quest Fantasy / Hushed Wonder." in plan.summary
 
@@ -227,12 +226,8 @@ def test_eval_outline_scene_mode_uses_softened_beats_in_scene_cards() -> None:
         )
     )
 
-    midpoint_card = next(
-        card for card in plan.cards if "midpoint" in card.beat_keys
-    )
-    all_is_lost_card = next(
-        card for card in plan.cards if "all_is_lost" in card.beat_keys
-    )
+    midpoint_card = next(card for card in plan.cards if "midpoint" in card.beat_keys)
+    all_is_lost_card = next(card for card in plan.cards if "all_is_lost" in card.beat_keys)
 
     assert plan.outline_kind == "scene"
     assert len(plan.cards) == 6

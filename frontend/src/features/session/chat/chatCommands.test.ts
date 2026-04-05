@@ -176,8 +176,8 @@ describe('chatCommands', () => {
       selectedStage: 'composition',
     })
 
-    expect(quickActions.some((action) => action.commandId === 'pause_writing')).toBe(
-      false,
-    )
+    expect(
+      quickActions.some((action) => action.commandId === 'pause_writing'),
+    ).toBe(false)
   })
 })

@@ -169,10 +169,10 @@ describe('chatToUiActions', () => {
           extracted_values: {
             revision_number: 2,
             title: 'Lantern Keeper Cast',
-            instructions: "Soften Mira's voice and keep the same comfort ritual.",
+            instructions:
+              "Soften Mira's voice and keep the same comfort ritual.",
             focus_character_names: ['Mira'],
-            change_summary:
-              'Keep the same arc but make the dialogue gentler.',
+            change_summary: 'Keep the same arc but make the dialogue gentler.',
             change_impact: 'minor',
           },
         },

@@ -34,9 +34,7 @@ class StubBriefNormalizationAdapter:
                     setting="a moonlit harbor",
                     emotional_goal="a calm return home",
                     constraint_notes=["End with the harbor settled and safe."],
-                    bedtime_safety_concerns=[
-                        "Keep every surprise quickly reassuring."
-                    ],
+                    bedtime_safety_concerns=["Keep every surprise quickly reassuring."],
                     candidate_motifs=["floating lanterns", "moonlit water"],
                 ),
             ),

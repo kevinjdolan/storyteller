@@ -236,9 +236,7 @@ class StorySession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     audio_voice_key: Mapped[str | None] = mapped_column(String(120))
     audio_narration_style: Mapped[str | None] = mapped_column(String(60))
-    audio_playback_speed: Mapped[float | None] = mapped_column(
-        Numeric(4, 2, asdecimal=False)
-    )
+    audio_playback_speed: Mapped[float | None] = mapped_column(Numeric(4, 2, asdecimal=False))
     audio_include_background_music: Mapped[bool | None] = mapped_column(Boolean)
     audio_music_profile: Mapped[str | None] = mapped_column(String(120))
     audio_narration_volume: Mapped[int | None] = mapped_column(Integer)
@@ -983,9 +981,7 @@ class CompositionInterruptionRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("composition_segments.id", ondelete="SET NULL"),
     )
     requested_segment_index: Mapped[int | None] = mapped_column(Integer)
-    requested_progress_percent: Mapped[float | None] = mapped_column(
-        Numeric(5, 2, asdecimal=False)
-    )
+    requested_progress_percent: Mapped[float | None] = mapped_column(Numeric(5, 2, asdecimal=False))
     resolution_summary: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -993,9 +989,7 @@ class CompositionInterruptionRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     session: Mapped["StorySession"] = relationship(
         back_populates="composition_interruption_requests"
     )
-    composition_job: Mapped["CompositionJob"] = relationship(
-        back_populates="interruption_requests"
-    )
+    composition_job: Mapped["CompositionJob"] = relationship(back_populates="interruption_requests")
 
     __table_args__ = (
         Index(

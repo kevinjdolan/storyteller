@@ -165,9 +165,7 @@ class TrivialCharacterGenerationAdapter:
             title="Lantern Cast",
             summary="A calm cast for the harbor bedtime story.",
             story_function="The cast supports the pitch with a gentle bedtime lane.",
-            bedtime_safety_notes=(
-                "Everything stays safe because it is calm and bedtime-friendly."
-            ),
+            bedtime_safety_notes=("Everything stays safe because it is calm and bedtime-friendly."),
             visual_motifs=["lantern"],
             protagonist=GeneratedCharacterProfile(
                 name="Mira",

@@ -480,14 +480,10 @@ def _build_refined_heuristic_character_sheet(
         else _PROTAGONIST_NAMES[0]
     )
     base_title = (
-        existing.title
-        if existing is not None and existing.title is not None
-        else "Refined Cast"
+        existing.title if existing is not None and existing.title is not None else "Refined Cast"
     )
     focus_names = (
-        ", ".join(context.focus_character_names)
-        if context.focus_character_names
-        else None
+        ", ".join(context.focus_character_names) if context.focus_character_names else None
     )
     support_names = _SUPPORTING_NAMES[0]
 

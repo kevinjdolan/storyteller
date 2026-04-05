@@ -190,8 +190,7 @@ def evaluate_beat_sheet(beat_sheet: GeneratedBeatSheetCandidate) -> BeatSheetEva
         BeatSheetEvaluationCriterion(
             name="overall_summary_and_bedtime_notes_are_present",
             passed=(
-                len(beat_sheet.summary.split()) >= 5
-                and len(beat_sheet.bedtime_notes.split()) >= 5
+                len(beat_sheet.summary.split()) >= 5 and len(beat_sheet.bedtime_notes.split()) >= 5
             ),
             measured_value=2,
             detail="The beat sheet needs a high-level summary and overall bedtime notes.",
@@ -264,9 +263,7 @@ def _build_heuristic_beat_sheet(
     existing_beat_entries = (
         context.existing_beat_sheet.beats if context.existing_beat_sheet is not None else []
     )
-    existing_beats = {
-        beat.key: beat for beat in existing_beat_entries
-    }
+    existing_beats = {beat.key: beat for beat in existing_beat_entries}
 
     beats: list[GeneratedBeatSheetBeat] = []
     for index, (key, label) in enumerate(SAVE_THE_CAT_BEAT_SEQUENCE):
@@ -296,8 +293,7 @@ def _build_heuristic_beat_sheet(
     )
     if context.generation_goal == "refinement" and guidance_text is not None:
         summary = (
-            f"{summary} This revision preserves the core plan while applying: "
-            f"{guidance_text}."
+            f"{summary} This revision preserves the core plan while applying: {guidance_text}."
         )
 
     bedtime_notes = (

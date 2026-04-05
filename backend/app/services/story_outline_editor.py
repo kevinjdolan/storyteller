@@ -45,10 +45,7 @@ class StoryOutlineEditAssessment:
 def normalize_story_outline_cards(
     cards: Sequence[StoryOutlineCard],
 ) -> list[StoryOutlineCard]:
-    return [
-        card.model_copy(update={"position": index + 1})
-        for index, card in enumerate(cards)
-    ]
+    return [card.model_copy(update={"position": index + 1}) for index, card in enumerate(cards)]
 
 
 def regenerate_story_outline_cards(

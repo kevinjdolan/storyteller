@@ -93,7 +93,9 @@ export function FinalizeAudioPlayer({
           : currentTime),
       isPlaying:
         overrides?.isPlaying ??
-        (audioElement != null ? !audioElement.paused && !audioElement.ended : false),
+        (audioElement != null
+          ? !audioElement.paused && !audioElement.ended
+          : false),
       playbackRate:
         overrides?.playbackRate ??
         (audioElement != null ? audioElement.playbackRate : playbackRate),
@@ -264,7 +266,9 @@ export function FinalizeAudioPlayer({
 
   function handleError() {
     setIsPlaying(false)
-    setPlayerError('The narration file is ready, but this browser could not play it inline.')
+    setPlayerError(
+      'The narration file is ready, but this browser could not play it inline.',
+    )
   }
 
   const elapsedLabel = formatClock(currentTime)
@@ -451,7 +455,9 @@ function readPersistedPlaybackState(
       return null
     }
 
-    const parsedValue = JSON.parse(rawValue) as Partial<PersistedAudioPlaybackState>
+    const parsedValue = JSON.parse(
+      rawValue,
+    ) as Partial<PersistedAudioPlaybackState>
     if (
       parsedValue.assetId !== assetId ||
       typeof parsedValue.currentTime !== 'number' ||

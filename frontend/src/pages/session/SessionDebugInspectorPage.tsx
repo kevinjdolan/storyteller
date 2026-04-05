@@ -7,14 +7,17 @@ import type {
   SessionHistoryEvent,
   SessionUsageBucketSummaryView,
 } from '../../api/sessions.ts'
-import {
-  buildSessionWorkspacePath,
-  routePaths,
-} from '../../app/routePaths.ts'
+import { buildSessionWorkspacePath, routePaths } from '../../app/routePaths.ts'
 import { useSessionDebugInspectorQuery } from '../../features/session/sessionQueries.ts'
 import { getButtonClassName } from '../../shared/ui/buttonStyles.ts'
 import { BlockingFeedback, InlineSpinner } from '../../shared/ui/feedback.tsx'
-import { Badge, Button, Panel, StackedList, StackedListItem } from '../../shared/ui/primitives.tsx'
+import {
+  Badge,
+  Button,
+  Panel,
+  StackedList,
+  StackedListItem,
+} from '../../shared/ui/primitives.tsx'
 import { CardGrid } from '../../shared/ui/workflow.tsx'
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -95,7 +98,9 @@ function renderJobSummary(
     return (
       <StackedListItem>
         <strong>{label}</strong>
-        <p className="body-copy">No active or latest job is recorded right now.</p>
+        <p className="body-copy">
+          No active or latest job is recorded right now.
+        </p>
       </StackedListItem>
     )
   }
@@ -103,15 +108,17 @@ function renderJobSummary(
   const detail =
     'current_step' in job
       ? job.current_step
-      : job.error_message ??
+      : (job.error_message ??
         job.stop_reason ??
-        ('latest_segment_summary' in job ? job.latest_segment_summary : null)
+        ('latest_segment_summary' in job ? job.latest_segment_summary : null))
 
   return (
     <StackedListItem>
       <div className="debug-inspector__row">
         <strong>{label}</strong>
-        <Badge tone={getStatusTone(job.status)}>{job.status.replace(/_/g, ' ')}</Badge>
+        <Badge tone={getStatusTone(job.status)}>
+          {job.status.replace(/_/g, ' ')}
+        </Badge>
       </div>
       <dl className="debug-inspector__facts">
         <div>
@@ -165,7 +172,9 @@ function renderUsageBucket(bucket: SessionUsageBucketSummaryView) {
     <StackedListItem key={bucket.usage_bucket}>
       <div className="debug-inspector__row">
         <strong>{bucket.usage_bucket}</strong>
-        <Badge tone={getStatusTone(bucket.failed_calls > 0 ? 'failed' : 'completed')}>
+        <Badge
+          tone={getStatusTone(bucket.failed_calls > 0 ? 'failed' : 'completed')}
+        >
           {bucket.total_calls} calls
         </Badge>
       </div>
@@ -236,13 +245,7 @@ function buildTroubleshootingHighlights(data: SessionDebugInspector) {
   return highlights
 }
 
-function JsonPanel({
-  title,
-  value,
-}: {
-  title: string
-  value: unknown
-}) {
+function JsonPanel({ title, value }: { title: string; value: unknown }) {
   return (
     <Panel as="section" title={title} headingLevel={2} tone="subtle">
       <pre className="debug-inspector__json">
@@ -254,14 +257,17 @@ function JsonPanel({
 
 function InspectorLoadingState({ sessionId }: { sessionId: string }) {
   return (
-    <section className="debug-inspector-page" aria-label={`Loading debug inspector for ${sessionId}`}>
+    <section
+      className="debug-inspector-page"
+      aria-label={`Loading debug inspector for ${sessionId}`}
+    >
       <Panel
         as="section"
         title="Developer debug inspector"
         description={
           <p>
-            Loading the latest backend-owned session snapshot, event history, and
-            artifact state.
+            Loading the latest backend-owned session snapshot, event history,
+            and artifact state.
           </p>
         }
       >
@@ -295,7 +301,10 @@ export function SessionDebugInspectorPage() {
 
   if (inspectorQuery.error != null || inspectorQuery.data == null) {
     return (
-      <section className="debug-inspector-page" aria-label={`Debug inspector unavailable for ${sessionId}`}>
+      <section
+        className="debug-inspector-page"
+        aria-label={`Debug inspector unavailable for ${sessionId}`}
+      >
         <BlockingFeedback
           actions={
             <>
@@ -305,7 +314,9 @@ export function SessionDebugInspectorPage() {
               >
                 Back to workspace
               </Link>
-              <Button onClick={() => void inspectorQuery.refetch()}>Try again</Button>
+              <Button onClick={() => void inspectorQuery.refetch()}>
+                Try again
+              </Button>
             </>
           }
           description={
@@ -325,7 +336,10 @@ export function SessionDebugInspectorPage() {
   const { snapshot } = data
 
   return (
-    <section className="debug-inspector-page" aria-label={`Developer debug inspector for ${sessionId}`}>
+    <section
+      className="debug-inspector-page"
+      aria-label={`Developer debug inspector for ${sessionId}`}
+    >
       <Panel
         as="section"
         title="Developer debug inspector"
@@ -350,7 +364,9 @@ export function SessionDebugInspectorPage() {
             >
               Back to workspace
             </Link>
-            <Button onClick={() => void inspectorQuery.refetch()}>Refresh</Button>
+            <Button onClick={() => void inspectorQuery.refetch()}>
+              Refresh
+            </Button>
           </>
         }
       >
@@ -373,7 +389,9 @@ export function SessionDebugInspectorPage() {
               </div>
               <div>
                 <dt>Latest event</dt>
-                <dd>{data.hydration.latest_sequence_number ?? 'Unavailable'}</dd>
+                <dd>
+                  {data.hydration.latest_sequence_number ?? 'Unavailable'}
+                </dd>
               </div>
             </dl>
           </Panel>
@@ -387,7 +405,9 @@ export function SessionDebugInspectorPage() {
             {snapshot.current_plan_revision != null ? (
               <>
                 <div className="debug-inspector__row">
-                  <strong>Revision {snapshot.current_plan_revision.revision_number}</strong>
+                  <strong>
+                    Revision {snapshot.current_plan_revision.revision_number}
+                  </strong>
                   <Badge tone="brand">Current</Badge>
                 </div>
                 <p className="body-copy">
@@ -396,8 +416,9 @@ export function SessionDebugInspectorPage() {
                 </p>
                 <p className="body-copy">
                   Changed artifacts:{' '}
-                  {snapshot.current_plan_revision.changed_artifacts.join(', ') ||
-                    'None'}
+                  {snapshot.current_plan_revision.changed_artifacts.join(
+                    ', ',
+                  ) || 'None'}
                 </p>
               </>
             ) : (
@@ -421,12 +442,18 @@ export function SessionDebugInspectorPage() {
               <div>
                 <dt>Total tokens</dt>
                 <dd>
-                  {formatCount(data.usage_diagnostics.summary.token_usage.total_tokens)}
+                  {formatCount(
+                    data.usage_diagnostics.summary.token_usage.total_tokens,
+                  )}
                 </dd>
               </div>
               <div>
                 <dt>Approx cost</dt>
-                <dd>{formatCurrency(data.usage_diagnostics.summary.approximate_cost_usd)}</dd>
+                <dd>
+                  {formatCurrency(
+                    data.usage_diagnostics.summary.approximate_cost_usd,
+                  )}
+                </dd>
               </div>
             </dl>
           </Panel>
@@ -459,7 +486,8 @@ export function SessionDebugInspectorPage() {
         <Panel as="section" title="Active jobs" headingLevel={2}>
           <StackedList>
             {renderJobSummary(
-              snapshot.active_composition_job ?? snapshot.latest_composition_job,
+              snapshot.active_composition_job ??
+                snapshot.latest_composition_job,
               'Composition',
             )}
             {renderJobSummary(
@@ -471,7 +499,9 @@ export function SessionDebugInspectorPage() {
 
         <Panel as="section" title="Artifact inventory" headingLevel={2}>
           <StackedList>
-            {data.artifact_inventory.items.map((item) => renderArtifactSummary(item))}
+            {data.artifact_inventory.items.map((item) =>
+              renderArtifactSummary(item),
+            )}
           </StackedList>
         </Panel>
       </CardGrid>
@@ -505,7 +535,10 @@ export function SessionDebugInspectorPage() {
 
       <CardGrid columns={2}>
         <JsonPanel title="Session snapshot JSON" value={data.snapshot} />
-        <JsonPanel title="Usage diagnostics JSON" value={data.usage_diagnostics} />
+        <JsonPanel
+          title="Usage diagnostics JSON"
+          value={data.usage_diagnostics}
+        />
       </CardGrid>
 
       <JsonPanel

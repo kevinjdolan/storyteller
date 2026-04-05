@@ -65,16 +65,12 @@ def build_audio_settings_view(
         narration_style=_coerce_audio_narration_style(story_session.audio_narration_style),
         playback_speed=_coerce_playback_speed(
             story_session.audio_playback_speed,
-            fallback=(
-                latest_audio_job.playback_speed if latest_audio_job is not None else None
-            ),
+            fallback=(latest_audio_job.playback_speed if latest_audio_job is not None else None),
         ),
         include_background_music=_coerce_include_background_music(
             story_session.audio_include_background_music,
             fallback=(
-                latest_audio_job.include_background_music
-                if latest_audio_job is not None
-                else None
+                latest_audio_job.include_background_music if latest_audio_job is not None else None
             ),
         ),
         music_profile=_coerce_audio_music_profile(

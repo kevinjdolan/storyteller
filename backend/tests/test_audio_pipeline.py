@@ -149,9 +149,7 @@ def _build_rendered_segment(
         text_end_offset=len(text_content),
         pause_after_seconds=pause_after_seconds,
         pause_hint=(
-            NarrationPauseHint.CHAPTER_BREAK
-            if pause_after_seconds > 0
-            else NarrationPauseHint.NONE
+            NarrationPauseHint.CHAPTER_BREAK if pause_after_seconds > 0 else NarrationPauseHint.NONE
         ),
         music_transition_hint=(
             NarrationMusicTransitionHint.SOFT_RESET
@@ -234,9 +232,7 @@ def test_audio_runtime_worker_marks_partial_tts_failure_and_keeps_partial_assets
     assert len(segment_assets) == 1
     assert segment_assets[0].metadata_json["duration_seconds"] == 0.1
     audio_progress_payloads = [
-        event.payload
-        for event in history.events
-        if event.event_type == "audio.progress.recorded"
+        event.payload for event in history.events if event.event_type == "audio.progress.recorded"
     ]
     assert any(
         payload is not None
@@ -397,9 +393,7 @@ def test_audio_job_service_records_retry_status_messages_before_render_succeeds(
         if event.event_type == "workflow.stage_changed" and event.stage == WorkflowStage.AUDIO
     ]
     audio_progress_payloads = [
-        event.payload
-        for event in history.events
-        if event.event_type == "audio.progress.recorded"
+        event.payload for event in history.events if event.event_type == "audio.progress.recorded"
     ]
 
     assert run_result["status"] == "completed"

@@ -315,6 +315,7 @@ class StorySessionRepository:
             )
             for story_session in sessions
         ]
+
     def _load_library_assets(
         self,
         session_ids: list[str],

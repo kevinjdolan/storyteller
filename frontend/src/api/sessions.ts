@@ -1159,18 +1159,20 @@ export function fetchSessionHydration(
 }
 
 export function fetchSessionDebugInspector(sessionId: string) {
-  return fetch(resolveApiUrl(`/api/v1/sessions/${sessionId}/debug-inspector`)).then(
-    async (response) => {
-      if (response.ok) {
-        return (await response.json()) as SessionDebugInspector
-      }
+  return fetch(
+    resolveApiUrl(`/api/v1/sessions/${sessionId}/debug-inspector`),
+  ).then(async (response) => {
+    if (response.ok) {
+      return (await response.json()) as SessionDebugInspector
+    }
 
-      const payload = (await response.json().catch(() => null)) as
-        | { detail?: string }
-        | null
-      throw new Error(payload?.detail ?? `Unexpected status code: ${response.status}`)
-    },
-  )
+    const payload = (await response.json().catch(() => null)) as {
+      detail?: string
+    } | null
+    throw new Error(
+      payload?.detail ?? `Unexpected status code: ${response.status}`,
+    )
+  })
 }
 
 export function fetchSessionHistory(sessionId: string) {

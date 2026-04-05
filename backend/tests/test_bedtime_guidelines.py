@@ -118,8 +118,7 @@ def test_eval_bedtime_guideline_policy_fragment_covers_core_safety_criteria() ->
             "Resolution requirement" in fragment for fragment in fragments.values()
         ),
         "wonder_and_adventure_preserved": all(
-            "Adventure, wonder, discovery, and mild mystery are welcome"
-            in fragment
+            "Adventure, wonder, discovery, and mild mystery are welcome" in fragment
             for fragment in fragments.values()
         ),
         "stage_specific_focus_present": all(
@@ -168,8 +167,7 @@ def test_eval_stage_prompts_include_shared_bedtime_policy(
         "emotional_repair_included": "Emotional repair" in prompt,
         "stage_focus_included": f"Stage focus for {stage}" in prompt,
         "preset_key_serialized_in_context": (
-            f'"bedtime_guideline_preset_key": "{DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY}"'
-            in prompt
+            f'"bedtime_guideline_preset_key": "{DEFAULT_BEDTIME_GUIDELINE_PRESET_KEY}"' in prompt
         ),
     }
 

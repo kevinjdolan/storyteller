@@ -237,7 +237,9 @@ function resolveCurrentSegmentText(segment: CompositionSegmentView) {
 }
 
 function buildFallbackStoryText(options: {
-  compositionJob: SessionSnapshot['active_composition_job'] | SessionSnapshot['latest_composition_job']
+  compositionJob:
+    | SessionSnapshot['active_composition_job']
+    | SessionSnapshot['latest_composition_job']
   compositionSegments: CompositionSegmentView[]
 }) {
   const compositionJob = options.compositionJob ?? null

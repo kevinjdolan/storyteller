@@ -106,14 +106,9 @@ class StoryOutlineGenerationService:
         position: int | None = None,
     ) -> StoryOutlineCard:
         beats_by_key = {
-            beat.key: beat
-            for beat in sorted(context.beats, key=lambda beat: beat.order)
+            beat.key: beat for beat in sorted(context.beats, key=lambda beat: beat.order)
         }
-        group = [
-            beats_by_key[beat_key]
-            for beat_key in card.beat_keys
-            if beat_key in beats_by_key
-        ]
+        group = [beats_by_key[beat_key] for beat_key in card.beat_keys if beat_key in beats_by_key]
         if not group:
             raise StoryOutlineGenerationServiceError(
                 "story outline card regeneration requires matching supporting beats",

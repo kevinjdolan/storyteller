@@ -72,9 +72,17 @@ export function useNarrationPlaybackSync(
         timelineResult.timeline,
         options.currentTime,
       ),
-      activeMarker: resolveActiveAudioPlaybackMarker(markers, options.currentTime),
+      activeMarker: resolveActiveAudioPlaybackMarker(
+        markers,
+        options.currentTime,
+      ),
     }),
-    [markers, options.currentTime, timelineResult.syncSource, timelineResult.timeline],
+    [
+      markers,
+      options.currentTime,
+      timelineResult.syncSource,
+      timelineResult.timeline,
+    ],
   )
 }
 
@@ -93,7 +101,8 @@ export function buildNarrationTimeline(
     }
   }
 
-  const previewTimeline = buildNarrationTimelineFromPreviewSegments(audioSegments)
+  const previewTimeline =
+    buildNarrationTimelineFromPreviewSegments(audioSegments)
   if (previewTimeline.length > 0) {
     return {
       syncSource: 'preview_segments',
@@ -148,7 +157,11 @@ export function resolveActiveNarrationTimelineSegment(
   timeline: NarrationTimelineSegment[],
   currentTime: number,
 ) {
-  return resolveActiveEntry(timeline, currentTime, (segment) => segment.timelineEndSeconds)
+  return resolveActiveEntry(
+    timeline,
+    currentTime,
+    (segment) => segment.timelineEndSeconds,
+  )
 }
 
 export function resolveActiveAudioPlaybackMarker(
@@ -158,7 +171,9 @@ export function resolveActiveAudioPlaybackMarker(
   return resolveActiveEntry(markers, currentTime, (marker) => marker.endSeconds)
 }
 
-function buildNarrationTimelineFromAsset(asset: SessionAssetView | null | undefined) {
+function buildNarrationTimelineFromAsset(
+  asset: SessionAssetView | null | undefined,
+) {
   const details = readRecord(asset?.details)
   const rawTimeline = details?.segment_timeline
   if (!Array.isArray(rawTimeline)) {
@@ -171,7 +186,9 @@ function buildNarrationTimelineFromAsset(asset: SessionAssetView | null | undefi
     .sort((left, right) => left.segmentIndex - right.segmentIndex)
 }
 
-function buildNarrationTimelineFromPreviewSegments(audioSegments: AudioSegmentView[]) {
+function buildNarrationTimelineFromPreviewSegments(
+  audioSegments: AudioSegmentView[],
+) {
   const sortedSegments = [...audioSegments].sort(
     (left, right) => left.segment_index - right.segment_index,
   )
@@ -241,7 +258,8 @@ function buildTimelineSegmentFromRecord(
     return null
   }
 
-  const pauseAfterSeconds = readOptionalNumber(value, 'pause_after_seconds') ?? 0
+  const pauseAfterSeconds =
+    readOptionalNumber(value, 'pause_after_seconds') ?? 0
   const timelineEndSeconds =
     readOptionalNumber(value, 'timeline_end_seconds') ??
     roundSeconds(endSeconds + pauseAfterSeconds)
@@ -255,7 +273,10 @@ function buildTimelineSegmentFromRecord(
     segmentIndex,
     sourceBoundaryKind: readOptionalString(value, 'source_boundary_kind'),
     sourceOutlineCardKey: readOptionalString(value, 'source_outline_card_key'),
-    sourceOutlineCardTitle: readOptionalString(value, 'source_outline_card_title'),
+    sourceOutlineCardTitle: readOptionalString(
+      value,
+      'source_outline_card_title',
+    ),
     splitReason: readOptionalString(value, 'split_reason'),
     startSeconds: roundSeconds(startSeconds),
     textEndOffset: readOptionalNumber(value, 'text_end_offset'),

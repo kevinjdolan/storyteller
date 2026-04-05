@@ -238,8 +238,7 @@ def _build_explicit_command_result(
             assistant_response = f"I can move the workspace to {stage_label}."
         else:
             assistant_response = (
-                "You are already at the final stage, so there is no later "
-                "workspace step to open."
+                "You are already at the final stage, so there is no later workspace step to open."
             )
     elif explicit_command.command_id == ExplicitChatCommandId.REGENERATE_PITCHES:
         assistant_response = (
@@ -318,9 +317,7 @@ def _build_plan_summary_response(snapshot: SessionSnapshot) -> str:
                 f"writing is {snapshot.active_composition_job.status.replace('_', ' ')}"
             )
     elif snapshot.active_audio_job is not None:
-        plan_parts.append(
-            f"audio is {snapshot.active_audio_job.status.replace('_', ' ')}"
-        )
+        plan_parts.append(f"audio is {snapshot.active_audio_job.status.replace('_', ' ')}")
 
     plan_summary = ", ".join(plan_parts) if plan_parts else "the story plan is still taking shape"
     focus_tail = f" {current_detail}" if current_detail else ""

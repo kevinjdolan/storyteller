@@ -62,8 +62,7 @@ def test_story_docx_export_service_generates_and_reuses_matching_export() -> Non
         document = Document(BytesIO(exported_bytes))
         assert document.paragraphs[0].text == "Lantern Harbor"
         assert any(
-            paragraph.text == "Mira carried the lantern home."
-            for paragraph in document.paragraphs
+            paragraph.text == "Mira carried the lantern home." for paragraph in document.paragraphs
         )
     finally:
         db_session.close()

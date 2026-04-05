@@ -1,5 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import type { SessionAssetView } from '../../api/sessions.ts'
 import type { AudioPlaybackMarker } from './finalizeAudioSync.ts'
 import { FinalizeAudioPlayer } from './FinalizeAudioPlayer.tsx'
@@ -145,20 +153,26 @@ describe('FinalizeAudioPlayer', () => {
       />,
     )
 
-    const audio = screen.getByLabelText('Final narration preview') as TestMediaElement
+    const audio = screen.getByLabelText(
+      'Final narration preview',
+    ) as TestMediaElement
     audio.__duration = 120
     fireEvent.loadedMetadata(audio)
 
     fireEvent.click(screen.getByRole('button', { name: 'Play narration' }))
     await waitFor(() => {
       expect(playMock).toHaveBeenCalledTimes(1)
-      expect(screen.getByRole('button', { name: 'Pause narration' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Pause narration' }),
+      ).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '1.3x' }))
     expect(audio.playbackRate).toBe(1.3)
 
-    const seekInput = screen.getByLabelText('Seek narration') as HTMLInputElement
+    const seekInput = screen.getByLabelText(
+      'Seek narration',
+    ) as HTMLInputElement
     fireEvent.change(seekInput, { target: { value: '32.5' } })
     expect(audio.currentTime).toBe(32.5)
 
@@ -168,9 +182,11 @@ describe('FinalizeAudioPlayer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Moonlit Crossing/ }))
     expect(audio.currentTime).toBe(45)
-    expect(window.localStorage.getItem('storyteller:audio-player:session-1:final-audio-1')).toContain(
-      '"playbackRate":1.3',
-    )
+    expect(
+      window.localStorage.getItem(
+        'storyteller:audio-player:session-1:final-audio-1',
+      ),
+    ).toContain('"playbackRate":1.3')
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause narration' }))
     expect(pauseMock).toHaveBeenCalledTimes(1)
@@ -199,7 +215,9 @@ describe('FinalizeAudioPlayer', () => {
       />,
     )
 
-    const audio = screen.getByLabelText('Final narration preview') as TestMediaElement
+    const audio = screen.getByLabelText(
+      'Final narration preview',
+    ) as TestMediaElement
     audio.__duration = 120
     fireEvent.loadedMetadata(audio)
 
@@ -211,9 +229,10 @@ describe('FinalizeAudioPlayer', () => {
         'Playback position restored to 1:12. Press play to continue.',
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '1.15x' }),
-    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '1.15x' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 })
 

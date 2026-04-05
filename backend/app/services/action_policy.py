@@ -786,12 +786,9 @@ class SessionActionPolicyService:
                     stage=WorkflowStage.CHARACTERS,
                 )
 
-        change_impact = (
-            action.extracted_values.change_impact
-            or infer_character_change_impact(
-                instructions=action.extracted_values.instructions,
-                change_summary=action.extracted_values.change_summary,
-            )
+        change_impact = action.extracted_values.change_impact or infer_character_change_impact(
+            instructions=action.extracted_values.instructions,
+            change_summary=action.extracted_values.change_summary,
         )
         side_effects = (
             self._build_stage_edit_side_effects(state, WorkflowStage.CHARACTERS)

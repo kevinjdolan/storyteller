@@ -44,9 +44,7 @@ class SessionArtifactInventoryService:
     def load_inventory(self, session_id: str) -> SessionArtifactInventoryView:
         aggregate = self._sessions.get_aggregate(session_id)
         if aggregate is None:
-            raise SessionArtifactInventoryNotFoundError(
-                f"session {session_id!r} was not found"
-            )
+            raise SessionArtifactInventoryNotFoundError(f"session {session_id!r} was not found")
 
         return SessionArtifactInventoryView(
             session_id=session_id,
@@ -66,9 +64,7 @@ class SessionArtifactInventoryService:
         display_job = aggregate.active_composition_job or aggregate.latest_composition_job
 
         status = "missing"
-        status_detail = (
-            "The accepted manuscript has not been published into durable storage yet."
-        )
+        status_detail = "The accepted manuscript has not been published into durable storage yet."
         download_path = None
         stream_path = None
 
@@ -123,9 +119,7 @@ class SessionArtifactInventoryService:
         )
 
         status = "missing"
-        status_detail = (
-            "The Word export will unlock after the accepted manuscript is published."
-        )
+        status_detail = "The Word export will unlock after the accepted manuscript is published."
         download_path = None
 
         if story_asset is not None:
@@ -151,9 +145,7 @@ class SessionArtifactInventoryService:
                 )
             elif _docx_matches_story_asset(docx_asset, story_asset):
                 status = "ready"
-                status_detail = (
-                    "This Word export matches the latest accepted manuscript."
-                )
+                status_detail = "This Word export matches the latest accepted manuscript."
             else:
                 status = "stale"
                 status_detail = (
@@ -178,9 +170,7 @@ class SessionArtifactInventoryService:
         final_audio_asset = aggregate.latest_audio_asset
         display_job = aggregate.active_audio_job or aggregate.latest_audio_job
         ready_preview_assets = [
-            asset
-            for asset in aggregate.audio_segment_assets
-            if asset.status == AssetStatus.READY
+            asset for asset in aggregate.audio_segment_assets if asset.status == AssetStatus.READY
         ]
         preview_asset_views = [
             view
@@ -192,9 +182,7 @@ class SessionArtifactInventoryService:
         ]
 
         status = "missing"
-        status_detail = (
-            "No compiled narration master has been published for this session yet."
-        )
+        status_detail = "No compiled narration master has been published for this session yet."
         download_path = None
         stream_path = None
 
@@ -288,9 +276,7 @@ def _audio_asset_is_outdated(
         return False
 
     generation = _read_nested_mapping(_read_mapping(audio_asset.metadata_json), "generation")
-    source_composition_job_id = _read_optional_text(
-        generation.get("source_composition_job_id")
-    )
+    source_composition_job_id = _read_optional_text(generation.get("source_composition_job_id"))
     if (
         story_asset.composition_job_id is not None
         and source_composition_job_id is not None

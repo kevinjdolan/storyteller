@@ -94,7 +94,8 @@ const sampleInspectorResponse = {
       interruption_request: null,
       attempt_count: 2,
       stop_reason: 'The midpoint tone no longer matched the bedtime brief.',
-      error_message: 'The composition pass exceeded the allowed bedtime tension threshold.',
+      error_message:
+        'The composition pass exceeded the allowed bedtime tension threshold.',
       started_at: '2026-04-04T16:00:00Z',
       completed_at: '2026-04-04T16:10:00Z',
       created_at: '2026-04-04T15:59:00Z',
@@ -169,7 +170,8 @@ const sampleInspectorResponse = {
       updated_at: '2026-04-04T16:11:00Z',
     },
     continuity_bible: null,
-    agent_context_summary: 'The harbor midpoint needs to stay calm and reparative.',
+    agent_context_summary:
+      'The harbor midpoint needs to stay calm and reparative.',
   },
   hydration: {
     strategy: 'materialized_with_recent_replay',
@@ -297,7 +299,8 @@ const sampleInspectorResponse = {
         label: 'Final audio',
         artifact_kind: 'final_audio',
         status: 'stale',
-        status_detail: 'Narration is stale because the composition rewrite failed.',
+        status_detail:
+          'Narration is stale because the composition rewrite failed.',
         asset: null,
         preview_assets: [],
         preview_asset_count: 1,
@@ -431,8 +434,14 @@ describe('SessionDebugInspectorPage', () => {
         'The composition pass exceeded the allowed bedtime tension threshold.',
       ),
     ).toHaveLength(2)
-    expect(screen.getByText('Narration is stale because the composition rewrite failed.')).toBeInTheDocument()
-    expect(screen.getByText('Audio rendering reached segment 2.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Narration is stale because the composition rewrite failed.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Audio rendering reached segment 2.'),
+    ).toBeInTheDocument()
     expect(screen.getByText(/Session snapshot JSON/)).toBeInTheDocument()
   })
 
@@ -452,7 +461,9 @@ describe('SessionDebugInspectorPage', () => {
     renderInspectorRoute()
 
     expect(
-      await screen.findByRole('heading', { name: 'Debug inspector unavailable' }),
+      await screen.findByRole('heading', {
+        name: 'Debug inspector unavailable',
+      }),
     ).toBeInTheDocument()
     expect(
       screen.getByText(

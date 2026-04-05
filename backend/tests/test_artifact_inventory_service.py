@@ -46,9 +46,7 @@ def test_artifact_inventory_reports_stale_docx_and_generating_audio_preview() ->
             status=AssetStatus.READY,
             storage_bucket="storyteller-exports",
             object_path="sessions/story-1/exports/story.docx",
-            mime_type=(
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ),
+            mime_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             metadata_json={"source_story_asset_id": "older-story-asset"},
         )
         audio_job = AudioJob(
@@ -78,9 +76,7 @@ def test_artifact_inventory_reports_stale_docx_and_generating_audio_preview() ->
         db_session.add(preview_asset)
         db_session.commit()
 
-        inventory = SessionArtifactInventoryService(db_session).load_inventory(
-            story_session.id
-        )
+        inventory = SessionArtifactInventoryService(db_session).load_inventory(story_session.id)
         items = {item.key: item for item in inventory.items}
 
         assert items["story_text"].status == "ready"
@@ -141,9 +137,7 @@ def test_artifact_inventory_reports_missing_docx_and_stale_audio_master() -> Non
         db_session.add_all([current_audio_asset, replacement_audio_job])
         db_session.commit()
 
-        inventory = SessionArtifactInventoryService(db_session).load_inventory(
-            story_session.id
-        )
+        inventory = SessionArtifactInventoryService(db_session).load_inventory(story_session.id)
         items = {item.key: item for item in inventory.items}
 
         assert items["story_docx"].status == "missing"

@@ -82,9 +82,7 @@ def find_active_genre(
     genre_id: str | None = None,
     genre_label: str | None = None,
 ) -> Genre | None:
-    selected_count = sum(
-        value is not None for value in (genre_slug, genre_id, genre_label)
-    )
+    selected_count = sum(value is not None for value in (genre_slug, genre_id, genre_label))
     if selected_count != 1:
         raise ValueError("exactly one genre selector is required")
 
@@ -109,8 +107,7 @@ def find_active_tone_for_genre(
     tone_profile_label: str | None = None,
 ) -> ToneProfile | None:
     selected_count = sum(
-        value is not None
-        for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
+        value is not None for value in (tone_profile_id, tone_profile_slug, tone_profile_label)
     )
     if selected_count != 1:
         raise ValueError("exactly one tone selector is required")

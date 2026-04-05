@@ -249,7 +249,8 @@ describe('AudioSettingsStage', () => {
             id: 'preview-1',
             asset_kind: 'audio_segment',
             status: 'ready',
-            public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/segments/0001.wav?alt=media',
+            public_url:
+              'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-7/segments/0001.wav?alt=media',
           },
         },
         {
@@ -293,7 +294,8 @@ describe('AudioSettingsStage', () => {
             applied: false,
           },
         },
-        public_url: 'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-6/final/story.wav?alt=media',
+        public_url:
+          'http://localhost:8568/storage/v1/b/storyteller-audio/o/sessions/moonlit-harbor/audio/jobs/audio-job-6/final/story.wav?alt=media',
         ready_at: '2026-04-02T05:22:00Z',
       },
     }
@@ -313,9 +315,7 @@ describe('AudioSettingsStage', () => {
     expect(screen.getByText('Compiled narration')).toBeInTheDocument()
     expect(screen.getByText('Checkpoint preview clip')).toBeInTheDocument()
     expect(screen.getByText('Final audio')).toBeInTheDocument()
-    expect(
-      screen.getByLabelText('Segment 1 preview audio'),
-    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Segment 1 preview audio')).toBeInTheDocument()
     expect(
       screen.getByLabelText('Compiled narration preview'),
     ).toBeInTheDocument()

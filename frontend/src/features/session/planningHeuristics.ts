@@ -64,7 +64,9 @@ function roundToIncrement(value: number, increment: number) {
   return clampMinimum(Math.round(value / increment) * increment, increment)
 }
 
-export function estimateRuntimeFromWordCount(wordCount: number): RuntimeEstimate {
+export function estimateRuntimeFromWordCount(
+  wordCount: number,
+): RuntimeEstimate {
   if (wordCount <= 0) {
     return {
       targetMinutes: 0,
@@ -125,7 +127,8 @@ export function estimateChapterSizeFromWordCount(
   const averageWordsPerChapter = clampMinimum(
     Math.round(totalWordCount / chapterCount),
   )
-  const chapterVariance = averageWordsPerChapter * DEFAULT_CHAPTER_VARIANCE_RATIO
+  const chapterVariance =
+    averageWordsPerChapter * DEFAULT_CHAPTER_VARIANCE_RATIO
 
   return {
     averageWordsPerChapter,
@@ -186,7 +189,8 @@ export function buildRuntimeHeuristicSummary({
           body: `${targetWordCount} words in ${targetRuntimeMinutes} minutes implies about ${wordsPerMinute} words per minute, which sits outside the usual bedtime range of ${MIN_BEDTIME_WORDS_PER_MINUTE}-${MAX_BEDTIME_WORDS_PER_MINUTE}.`,
           suggestion: {
             field: 'targetRuntimeMinutes',
-            helpText: 'If you want runtime to follow this word target more closely, use the midpoint estimate.',
+            helpText:
+              'If you want runtime to follow this word target more closely, use the midpoint estimate.',
             label: `Use ~${estimate.targetMinutes} minutes`,
             value: estimate.targetMinutes,
           },
@@ -210,7 +214,8 @@ export function buildRuntimeHeuristicSummary({
           body: `${targetWordCount} words in ${targetRuntimeMinutes} minutes implies about ${wordsPerMinute} words per minute, which sits outside the usual bedtime range of ${MIN_BEDTIME_WORDS_PER_MINUTE}-${MAX_BEDTIME_WORDS_PER_MINUTE}.`,
           suggestion: {
             field: 'targetWordCount',
-            helpText: 'If you want word count to follow this runtime more closely, use the midpoint estimate.',
+            helpText:
+              'If you want word count to follow this runtime more closely, use the midpoint estimate.',
             label: `Use ${suggestedWordCount} words`,
             value: suggestedWordCount,
           },
@@ -247,7 +252,8 @@ export function buildRuntimeHeuristicSummary({
         lastEditedField === 'targetWordCount'
           ? {
               field: 'targetRuntimeMinutes',
-              helpText: 'Apply the midpoint runtime if you want the related field filled in for you.',
+              helpText:
+                'Apply the midpoint runtime if you want the related field filled in for you.',
               label: `Use ~${estimate.targetMinutes} minutes`,
               value: estimate.targetMinutes,
             }
@@ -268,7 +274,8 @@ export function buildRuntimeHeuristicSummary({
         lastEditedField === 'targetRuntimeMinutes'
           ? {
               field: 'targetWordCount',
-              helpText: 'Apply the midpoint word count if you want the related field filled in for you.',
+              helpText:
+                'Apply the midpoint word count if you want the related field filled in for you.',
               label: `Use ${suggestedWordCount} words`,
               value: suggestedWordCount,
             }

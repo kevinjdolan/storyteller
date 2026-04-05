@@ -86,8 +86,7 @@ def test_request_logging_echoes_request_id_and_binds_session_context(
         record
         for record in caplog.records
         if getattr(record, "event", None) == "http.request.completed"
-        and getattr(record, "log_context_fields", {}).get("path")
-        == f"/_test/trace/{session_id}"
+        and getattr(record, "log_context_fields", {}).get("path") == f"/_test/trace/{session_id}"
     ]
 
     assert matching_records

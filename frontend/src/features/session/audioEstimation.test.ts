@@ -38,7 +38,9 @@ describe('audioEstimation', () => {
   })
 
   it('builds transparent basis and assumption copy', () => {
-    expect(buildAudioEstimateBasisLabel(baseEstimate)).toBe('story setup target')
+    expect(buildAudioEstimateBasisLabel(baseEstimate)).toBe(
+      'story setup target',
+    )
     expect(buildAudioEstimateAssumptionsText(baseEstimate, 0.95)).toContain(
       '140 words per minute at 0.95x',
     )

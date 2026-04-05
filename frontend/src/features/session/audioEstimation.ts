@@ -36,10 +36,7 @@ function roundSeconds(
     return Math.max(roundingSeconds, Math.ceil(quotient) * roundingSeconds)
   }
 
-  return Math.max(
-    roundingSeconds,
-    Math.floor(quotient + 0.5) * roundingSeconds,
-  )
+  return Math.max(roundingSeconds, Math.floor(quotient + 0.5) * roundingSeconds)
 }
 
 function classifyNarrationPacing(

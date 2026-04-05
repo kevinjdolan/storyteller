@@ -31,8 +31,7 @@ const sampleMessages = [
 
 function buildLargeTranscript(count: number) {
   return Array.from({ length: count }, (_, index) => {
-    const role: 'assistant' | 'user' =
-      index % 2 === 0 ? 'assistant' : 'user'
+    const role: 'assistant' | 'user' = index % 2 === 0 ? 'assistant' : 'user'
 
     return {
       id: `message-${index + 1}`,
@@ -194,7 +193,9 @@ describe('SessionChatPane', () => {
     )
 
     expect(
-      screen.getByText('Showing the most recent 80 messages to keep the transcript responsive.'),
+      screen.getByText(
+        'Showing the most recent 80 messages to keep the transcript responsive.',
+      ),
     ).toBeInTheDocument()
     expect(screen.queryByText('Transcript message 1')).not.toBeInTheDocument()
     expect(screen.getByText('Transcript message 100')).toBeInTheDocument()

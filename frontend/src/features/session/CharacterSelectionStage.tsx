@@ -82,7 +82,9 @@ function readCharacterSelectionCopy(characterSheet: {
   summary?: string | null
   selection_rationale?: string | null
 }) {
-  return characterSheet.selection_rationale ?? readCharacterSummary(characterSheet)
+  return (
+    characterSheet.selection_rationale ?? readCharacterSummary(characterSheet)
+  )
 }
 
 function readLeadSignal(characterSheet: {
@@ -260,7 +262,8 @@ export function CharacterSelectionStage({
     if (
       refinementBaseCharacterSheetId != null &&
       allCharacterSheets.some(
-        (characterSheet) => characterSheet.id === refinementBaseCharacterSheetId,
+        (characterSheet) =>
+          characterSheet.id === refinementBaseCharacterSheetId,
       )
     ) {
       return
@@ -379,7 +382,8 @@ export function CharacterSelectionStage({
           }
           label="Current selection"
           title={
-            snapshot.selected_character_sheet?.title ?? 'Character sheet pending'
+            snapshot.selected_character_sheet?.title ??
+            'Character sheet pending'
           }
           tone={
             snapshot.selected_character_sheet != null ? 'accent' : 'default'
@@ -642,7 +646,9 @@ export function CharacterSelectionStage({
             }}
             tone="primary"
           >
-            {isRefining ? 'Refining character sheet...' : 'Refine character sheet'}
+            {isRefining
+              ? 'Refining character sheet...'
+              : 'Refine character sheet'}
           </Button>
           {refinementBaseCharacterSheet != null ? (
             <Badge tone="neutral">

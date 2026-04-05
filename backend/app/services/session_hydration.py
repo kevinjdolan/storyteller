@@ -237,12 +237,8 @@ class SessionHydrationService:
                 field_name,
                 current_job.model_copy(
                     update={
-                        "accepted_story_so_far": (
-                            current_job.accepted_story_so_far or draft_text
-                        ),
-                        "latest_partial_output": (
-                            current_job.latest_partial_output or draft_text
-                        ),
+                        "accepted_story_so_far": (current_job.accepted_story_so_far or draft_text),
+                        "latest_partial_output": (current_job.latest_partial_output or draft_text),
                     }
                 ),
             )
@@ -395,11 +391,9 @@ def build_session_snapshot(
         build_plan_revision_views(aggregate.plan_revisions),
         limit=_WORKSPACE_PLAN_REVISION_LIMIT,
     )
-    composition_segment_views, composition_segment_version_window = (
-        build_composition_segment_views(
-            aggregate.composition_segments,
-            per_segment_version_limit=_WORKSPACE_SEGMENT_VERSION_LIMIT,
-        )
+    composition_segment_views, composition_segment_version_window = build_composition_segment_views(
+        aggregate.composition_segments,
+        per_segment_version_limit=_WORKSPACE_SEGMENT_VERSION_LIMIT,
     )
     current_plan_revision_view = next(
         (revision for revision in plan_revision_views if revision.is_current),
@@ -792,9 +786,7 @@ def merge_composition_job_view(
         ),
         pending_review=current_job.pending_review if current_job is not None else False,
         rewrite_candidate_segment_indexes=(
-            list(current_job.rewrite_candidate_segment_indexes)
-            if current_job is not None
-            else []
+            list(current_job.rewrite_candidate_segment_indexes) if current_job is not None else []
         ),
         accepted_story_so_far=(
             current_job.accepted_story_so_far if current_job is not None else None
@@ -2221,8 +2213,7 @@ def build_composition_segment_views(
                 included_version_count=len(included_versions),
                 hidden_version_count=max(0, len(segment_rows) - len(included_versions)),
                 versions=[
-                    build_composition_segment_version_view(version)
-                    for version in included_versions
+                    build_composition_segment_version_view(version) for version in included_versions
                 ],
             )
         )
@@ -2239,10 +2230,7 @@ def _select_segment_versions_for_workspace(rows, *, limit: int):
         row.id
         for row in rows
         if row.acceptance_state == "pending"
-        or (
-            row.acceptance_state == "accepted"
-            and row.superseded_by_segment_id is None
-        )
+        or (row.acceptance_state == "accepted" and row.superseded_by_segment_id is None)
     }
 
     selected_rows: list[Any] = []
@@ -2474,12 +2462,9 @@ def resolve_session_library_runtime_seconds(
     latest_story_asset,
     latest_audio_asset,
 ) -> tuple[int | None, str | None]:
-    if (
-        latest_audio_asset is not None
-        and not _audio_asset_is_outdated(
-            latest_audio_asset=latest_audio_asset,
-            latest_story_asset=latest_story_asset,
-        )
+    if latest_audio_asset is not None and not _audio_asset_is_outdated(
+        latest_audio_asset=latest_audio_asset,
+        latest_story_asset=latest_story_asset,
     ):
         duration_seconds = _read_optional_asset_duration_seconds(latest_audio_asset)
         if duration_seconds is not None:

@@ -162,10 +162,7 @@ _BACKGROUND_MUSIC_TRACKS: dict[AudioMusicProfile, BackgroundMusicTrackDefinition
 
 
 def list_audio_music_profile_options() -> list[AudioMusicProfileOptionView]:
-    return [
-        _BACKGROUND_MUSIC_TRACKS[profile].to_option_view()
-        for profile in AudioMusicProfile
-    ]
+    return [_BACKGROUND_MUSIC_TRACKS[profile].to_option_view() for profile in AudioMusicProfile]
 
 
 def build_audio_mix_preview(settings: AudioSettingsView) -> AudioMixPreviewView:
@@ -232,12 +229,8 @@ def deserialize_audio_mix_plan(payload: Any) -> AudioMixPlan:
         track = get_background_music_track(music_profile)
         fallback_summary = build_audio_mix_plan(_settings_from_track(track)).summary
         music_track_label = str(data.get("music_track_label") or track.label)
-        music_track_description = str(
-            data.get("music_track_description") or track.description
-        )
-        music_track_file_name = str(
-            data.get("music_track_file_name") or track.asset_file_name
-        )
+        music_track_description = str(data.get("music_track_description") or track.description)
+        music_track_file_name = str(data.get("music_track_file_name") or track.asset_file_name)
         return AudioMixPlan(
             strategy=_CURATED_BED_MIX_STRATEGY,
             summary=str(data.get("summary") or fallback_summary),

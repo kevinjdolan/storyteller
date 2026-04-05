@@ -371,9 +371,7 @@ def _build_segment_timeline(
 
 
 def _segment_duration_seconds(rendered: RenderedNarrationSegment) -> float:
-    frame_width_bytes = (
-        rendered.synthesis.channel_count * rendered.synthesis.sample_width_bytes
-    )
+    frame_width_bytes = rendered.synthesis.channel_count * rendered.synthesis.sample_width_bytes
     if frame_width_bytes <= 0 or rendered.synthesis.sample_rate_hz <= 0:
         raise FinalAudioAssemblyError("audio segments must expose valid PCM metadata")
 

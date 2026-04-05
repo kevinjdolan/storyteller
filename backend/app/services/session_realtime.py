@@ -128,14 +128,8 @@ class SessionRealtimeService:
             after_sequence_number=last_sequence_number,
             delivery=RealtimeDeliveryMode.REPLAY,
         )
-        replay_strategy = (
-            "delta"
-            if replay_events
-            else "none"
-        )
-        replay_from_sequence_number = (
-            (last_sequence_number or 0) + 1 if replay_events else None
-        )
+        replay_strategy = "delta" if replay_events else "none"
+        replay_from_sequence_number = (last_sequence_number or 0) + 1 if replay_events else None
 
         ack = SessionSubscriptionAck(
             session_id=session_id,
@@ -487,11 +481,11 @@ class SessionRealtimeService:
         total_segments = payload.total_segments or _read_audio_config_int(job, "total_segments")
         total_steps = payload.total_steps or _read_audio_config_int(job, "total_steps")
         current_step = payload.current_step or _read_audio_config_text(job, "current_step")
-        current_step_index = (
-            payload.current_step_index or _read_audio_config_int(job, "current_step_index")
+        current_step_index = payload.current_step_index or _read_audio_config_int(
+            job, "current_step_index"
         )
-        completed_segments = (
-            payload.completed_segments or _read_audio_config_int(job, "completed_segments")
+        completed_segments = payload.completed_segments or _read_audio_config_int(
+            job, "completed_segments"
         )
         latest_asset_id = payload.latest_asset_id or _read_audio_config_text(
             job,
@@ -599,9 +593,7 @@ class SessionRealtimeService:
         accepted_story_so_far = metadata.get("accepted_story_so_far")
         if not isinstance(accepted_story_so_far, str):
             accepted_story_so_far = (
-                current_segment.accepted_text
-                or current_segment.text_content
-                or ""
+                current_segment.accepted_text or current_segment.text_content or ""
             )
 
         latest_segment_summary = metadata.get("latest_segment_summary")
@@ -771,8 +763,7 @@ def _build_composition_message(
     if status == RealtimeJobStatus.IN_PROGRESS:
         if current_segment_index is not None and total_segments is not None and planned_summary:
             return (
-                f"Composing segment {current_segment_index} of {total_segments}. "
-                f"{planned_summary}"
+                f"Composing segment {current_segment_index} of {total_segments}. {planned_summary}"
             )
         if current_segment_index is not None and total_segments is not None:
             return f"Composing segment {current_segment_index} of {total_segments}."

@@ -184,9 +184,7 @@ def _build_story_decisions(aggregate: SessionAggregate) -> list[str]:
             decisions.append(f"Pitch refinement note: {_truncate(pitch_rationale)}")
 
     if aggregate.selected_character_sheet is not None:
-        character_line = (
-            aggregate.selected_character_sheet.title or "Character sheet selected"
-        )
+        character_line = aggregate.selected_character_sheet.title or "Character sheet selected"
         if aggregate.selected_character_sheet.protagonist_name:
             character_line += (
                 f" (protagonist: {aggregate.selected_character_sheet.protagonist_name})"
@@ -217,8 +215,7 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
 
     if aggregate.selected_story_setup is not None and aggregate.selected_story_setup.guidance_notes:
         preferences.append(
-            "Setup guidance: "
-            + _truncate(aggregate.selected_story_setup.guidance_notes)
+            "Setup guidance: " + _truncate(aggregate.selected_story_setup.guidance_notes)
         )
 
     if aggregate.selected_story_outline is not None:
@@ -255,9 +252,7 @@ def _build_user_preferences(aggregate: SessionAggregate) -> list[str]:
             selected_story_setup=aggregate.selected_story_setup,
             selected_story_outline=aggregate.selected_story_outline,
         )
-        preferences.append(
-            "Narration settings: " + build_audio_settings_memory_summary(settings)
-        )
+        preferences.append("Narration settings: " + build_audio_settings_memory_summary(settings))
 
     return preferences
 
@@ -302,9 +297,7 @@ def _build_brief_preference_lines(raw_preferences) -> list[str]:
     if preferences.bedtime_safety_concerns:
         lines.append(
             "Bedtime safety guardrails: "
-            + "; ".join(
-                _truncate(note, limit=80) for note in preferences.bedtime_safety_concerns
-            )
+            + "; ".join(_truncate(note, limit=80) for note in preferences.bedtime_safety_concerns)
         )
     if preferences.candidate_motifs:
         lines.append(
@@ -389,10 +382,7 @@ def _build_active_jobs(aggregate: SessionAggregate) -> list[str]:
         JobStatus.FAILED,
         JobStatus.CANCELLED,
     ):
-        job_summary = (
-            f"Audio job: {audio_job.status.value}, "
-            f"voice={audio_job.voice_key or 'unset'}"
-        )
+        job_summary = f"Audio job: {audio_job.status.value}, voice={audio_job.voice_key or 'unset'}"
         if audio_job.current_segment_index is not None:
             job_summary += f", segment {audio_job.current_segment_index}"
         active_jobs.append(job_summary)
@@ -455,9 +445,7 @@ def _find_stage_state(aggregate: SessionAggregate, stage):
 
 def _build_latest_detail_summary(aggregate: SessionAggregate) -> str | None:
     detail_candidates = [
-        stage_state
-        for stage_state in aggregate.session.workflow_stage_states
-        if stage_state.detail
+        stage_state for stage_state in aggregate.session.workflow_stage_states if stage_state.detail
     ]
     if not detail_candidates:
         return None

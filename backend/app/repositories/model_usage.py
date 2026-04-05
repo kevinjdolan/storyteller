@@ -75,9 +75,9 @@ class ModelUsageRepository:
         succeeded_calls = func.sum(
             case((ModelUsageEvent.outcome == "succeeded", 1), else_=0)
         ).label("succeeded_calls")
-        failed_calls = func.sum(
-            case((ModelUsageEvent.outcome == "failed", 1), else_=0)
-        ).label("failed_calls")
+        failed_calls = func.sum(case((ModelUsageEvent.outcome == "failed", 1), else_=0)).label(
+            "failed_calls"
+        )
         fallback_calls = func.sum(
             case((ModelUsageEvent.outcome == "succeeded_with_fallback", 1), else_=0)
         ).label("fallback_calls")

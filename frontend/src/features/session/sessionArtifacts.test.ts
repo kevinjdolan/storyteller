@@ -12,9 +12,11 @@ describe('sessionArtifacts', () => {
       asset_kind: 'final_audio',
       status: 'ready',
       access: {
-        download_path: '/api/v1/sessions/moonlit/assets/asset-1/content?disposition=attachment',
+        download_path:
+          '/api/v1/sessions/moonlit/assets/asset-1/content?disposition=attachment',
         filename: 'story.mp3',
-        stream_path: '/api/v1/sessions/moonlit/assets/asset-1/content?disposition=inline',
+        stream_path:
+          '/api/v1/sessions/moonlit/assets/asset-1/content?disposition=inline',
       },
     }
 
@@ -27,8 +29,8 @@ describe('sessionArtifacts', () => {
   })
 
   it('builds named artifact downloads through the backend API', () => {
-    expect(buildSessionArtifactDownloadUrl('moonlit-harbor', 'story-docx')).toBe(
-      '/api/v1/sessions/moonlit-harbor/artifacts/story-docx',
-    )
+    expect(
+      buildSessionArtifactDownloadUrl('moonlit-harbor', 'story-docx'),
+    ).toBe('/api/v1/sessions/moonlit-harbor/artifacts/story-docx')
   })
 })

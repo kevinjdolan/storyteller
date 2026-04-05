@@ -95,8 +95,9 @@ def test_full_journey_e2e_persists_story_audio_exports_and_resume_state(
         )
     )
     assert composition_started["job"]["status"] == "queued"
-    assert composition_started["snapshot"]["active_composition_job"]["id"] == (
-        composition_started["job"]["id"]
+    assert (
+        composition_started["snapshot"]["active_composition_job"]["id"]
+        == (composition_started["job"]["id"])
     )
 
     composition_worker = build_worker(
@@ -126,9 +127,7 @@ def test_full_journey_e2e_persists_story_audio_exports_and_resume_state(
     assert _artifact_item(inventory_after_composition, "story_docx")["status"] == "missing"
     assert _artifact_item(inventory_after_composition, "final_audio")["status"] == "missing"
 
-    docx_asset = _expect_json(
-        client.post(f"/api/v1/sessions/{session_id}/artifacts/story-docx")
-    )
+    docx_asset = _expect_json(client.post(f"/api/v1/sessions/{session_id}/artifacts/story-docx"))
     assert docx_asset["asset_kind"] == "story_docx"
 
     audio_settings = _expect_json(
@@ -176,8 +175,9 @@ def test_full_journey_e2e_persists_story_audio_exports_and_resume_state(
     assert final_snapshot["latest_audio_asset"]["asset_kind"] == "final_audio"
     assert final_snapshot["active_audio_job"] is None
     assert final_snapshot["latest_audio_job"]["status"] == "completed"
-    assert final_hydration["snapshot"]["latest_audio_asset"]["id"] == (
-        final_snapshot["latest_audio_asset"]["id"]
+    assert (
+        final_hydration["snapshot"]["latest_audio_asset"]["id"]
+        == (final_snapshot["latest_audio_asset"]["id"])
     )
     assert _artifact_item(final_inventory, "story_text")["status"] == "ready"
     assert _artifact_item(final_inventory, "story_docx")["status"] == "ready"

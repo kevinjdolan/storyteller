@@ -437,8 +437,7 @@ class StreamingLoopCompositionWriter:
 
     def story_text(self, segment_indexes: list[int]) -> str:
         return "\n\n".join(
-            self.segment_text(segment_index=segment_index)
-            for segment_index in segment_indexes
+            self.segment_text(segment_index=segment_index) for segment_index in segment_indexes
         )
 
 
@@ -844,9 +843,7 @@ def test_story_workflow_tool_service_creates_durable_narration_segments(db_sessi
     assert narration_segments[0].source_boundary_kind == NarrationSourceBoundaryKind.CHAPTER
     assert narration_segments[0].pause_hint == NarrationPauseHint.CHAPTER_BREAK
     assert narration_segments[1].pause_after_seconds == 3
-    assert narration_segments[-1].music_transition_hint == (
-        NarrationMusicTransitionHint.END_STORY
-    )
+    assert narration_segments[-1].music_transition_hint == (NarrationMusicTransitionHint.END_STORY)
     assert snapshot.active_audio_job is not None
     assert snapshot.active_audio_job.status == JobStatus.QUEUED.value
     assert snapshot.active_audio_job.total_segments == 3
@@ -1036,8 +1033,7 @@ def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: P
         ]
         assert any(
             payload is not None
-            and getattr(payload, "current_step", None)
-            == "Mixing narration with night ambience."
+            and getattr(payload, "current_step", None) == "Mixing narration with night ambience."
             and getattr(payload, "current_step_index", None) == 4
             and getattr(payload, "total_steps", None) == 5
             and getattr(payload, "progress_percent", None) == 96.0
@@ -1045,8 +1041,7 @@ def test_audio_job_service_mixes_background_music_as_post_processing(tmp_path: P
         )
         assert any(
             payload is not None
-            and getattr(payload, "current_step", None)
-            == "Publishing the final audio asset."
+            and getattr(payload, "current_step", None) == "Publishing the final audio asset."
             and getattr(payload, "current_step_index", None) == 5
             and getattr(payload, "total_steps", None) == 5
             and getattr(payload, "progress_percent", None) == 99.0
@@ -1137,8 +1132,7 @@ def test_audio_job_service_marks_assembly_failures_after_rendering_segments(
         )
         assert not any(
             payload is not None
-            and getattr(payload, "current_step", None)
-            == "Publishing the final audio asset."
+            and getattr(payload, "current_step", None) == "Publishing the final audio asset."
             for payload in audio_progress_payloads
         )
     finally:
@@ -1370,9 +1364,8 @@ def test_audio_runtime_worker_marks_failures_durably(tmp_path: Path) -> None:
             "background_job_failed": background_job.status == JobStatus.FAILED,
             "audio_job_failed": audio_job.status == JobStatus.FAILED,
             "segment_failed": failed_segment.status == JobStatus.FAILED,
-            "failure_message_persisted": "Simulated Gemini TTS failure" in (
-                audio_job.error_message or ""
-            ),
+            "failure_message_persisted": "Simulated Gemini TTS failure"
+            in (audio_job.error_message or ""),
             "snapshot_stage_needs_regeneration": (
                 _stage_status(snapshot, WorkflowStage.AUDIO)
                 == WorkflowStageState.NEEDS_REGENERATION
@@ -1855,9 +1848,7 @@ def test_composition_job_service_records_retry_and_fallback_stage_updates(
                 ),
             )
             run_result = service.run_job(result.composition_job_id)
-            history = SessionEventLogService(session).list_session_history(
-                seeded["session_id"]
-            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
 
         stage_change_details = [
             getattr(event.payload, "detail", None)
@@ -1935,8 +1926,7 @@ def test_composition_pause_request_is_durable_and_applies_after_checkpoint(
             request = session.execute(
                 select(CompositionInterruptionRequest)
                 .where(
-                    CompositionInterruptionRequest.composition_job_id
-                    == result.composition_job_id
+                    CompositionInterruptionRequest.composition_job_id == result.composition_job_id
                 )
                 .order_by(CompositionInterruptionRequest.created_at.desc())
             ).scalar_one()
@@ -1948,9 +1938,7 @@ def test_composition_pause_request_is_durable_and_applies_after_checkpoint(
                     )
                 ).scalars()
             )
-            history = SessionEventLogService(session).list_session_history(
-                seeded["session_id"]
-            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
 
         assert job is not None
         assert len(draft_snapshot_assets) == 1
@@ -2048,20 +2036,16 @@ def test_composition_redirect_request_is_durable_and_starts_rewrite_after_checkp
             request = session.execute(
                 select(CompositionInterruptionRequest)
                 .where(
-                    CompositionInterruptionRequest.composition_job_id
-                    == result.composition_job_id
+                    CompositionInterruptionRequest.composition_job_id == result.composition_job_id
                 )
                 .order_by(CompositionInterruptionRequest.created_at.desc())
             ).scalar_one()
-            history = SessionEventLogService(session).list_session_history(
-                seeded["session_id"]
-            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
 
         assert original_job is not None
         assert rewrite_job is not None
         criteria = {
-            "worker_redirected_after_checkpoint": worker_result["result"]["action"]
-            == "redirected",
+            "worker_redirected_after_checkpoint": worker_result["result"]["action"] == "redirected",
             "original_job_cancelled": original_job.status == JobStatus.CANCELLED,
             "rewrite_job_created": rewrite_job.job_kind == CompositionJobKind.REWRITE,
             "rewrite_job_queued": rewrite_job.status == JobStatus.QUEUED,
@@ -2174,9 +2158,7 @@ def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
                 seeded["session_id"],
                 cursor=realtime_cursor,
             )
-            history = SessionEventLogService(session).list_session_history(
-                seeded["session_id"]
-            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
 
         paused_story_text = object_storage.download_text(
             StorageObjectLocation(
@@ -2188,9 +2170,7 @@ def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
             event for event in paused_events if event.payload.chunk_kind.value == "delta"
         ]
         paused_progress_events = [
-            event
-            for event in history.events
-            if event.event_type == "composition.progress.recorded"
+            event for event in history.events if event.event_type == "composition.progress.recorded"
         ]
 
         assert paused_job is not None
@@ -2202,9 +2182,9 @@ def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
         assert paused_segment.accepted_text
         assert paused_story_text.strip()
         assert paused_story_text != writer.segment_text(segment_index=1)
-        assert "".join(
-            event.payload.text or "" for event in paused_delta_events
-        ) == paused_story_text
+        assert (
+            "".join(event.payload.text or "" for event in paused_delta_events) == paused_story_text
+        )
         assert paused_hydration.snapshot.active_composition_job is not None
         assert paused_hydration.snapshot.active_composition_job.status == JobStatus.PAUSED
         assert (
@@ -2274,14 +2254,10 @@ def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
             event for event in resumed_events if event.payload.chunk_kind.value == "delta"
         ]
         resumed_summary_events = [
-            event
-            for event in resumed_events
-            if event.payload.chunk_kind.value == "segment_summary"
+            event for event in resumed_events if event.payload.chunk_kind.value == "segment_summary"
         ]
         resumed_segment_start_events = [
-            event
-            for event in resumed_events
-            if event.payload.chunk_kind.value == "segment_start"
+            event for event in resumed_events if event.payload.chunk_kind.value == "segment_start"
         ]
 
         assert resumed_session_hydration.snapshot.active_composition_job is not None
@@ -2297,8 +2273,9 @@ def test_composition_loop_e2e_streams_pause_resume_and_hydrates(
         )
         assert resumed_segment_start_events
         assert resumed_segment_start_events[0].payload.segment_index == 2
-        assert "".join(event.payload.text or "" for event in resumed_delta_events) == (
-            expected_segment_one[len(paused_story_text) :]
+        assert (
+            "".join(event.payload.text or "" for event in resumed_delta_events)
+            == (expected_segment_one[len(paused_story_text) :])
         )
         assert resumed_summary_events
         assert resumed_summary_events[0].payload.summary.startswith("Segment 1 keeps Mira")
@@ -2494,9 +2471,7 @@ def test_composition_job_service_records_checkpointed_summary_chat_messages(
                 )
                 .order_by(CompositionSegment.revision_number.desc())
             ).scalar_one()
-            history = SessionEventLogService(session).list_session_history(
-                seeded["session_id"]
-            )
+            history = SessionEventLogService(session).list_session_history(seeded["session_id"])
             composition_job = session.get(CompositionJob, result.composition_job_id)
 
         summary_events = [
@@ -2518,7 +2493,8 @@ def test_composition_job_service_records_checkpointed_summary_chat_messages(
             "composition_stage_only": all(
                 event.stage == WorkflowStage.COMPOSITION for event in summary_events
             ),
-            "stable_checkpoint_ids": summary_message_ids == [
+            "stable_checkpoint_ids": summary_message_ids
+            == [
                 f"composition-summary-{result.composition_job_id}-{first_segment.id}-progress-34",
                 f"composition-summary-{result.composition_job_id}-{first_segment.id}-progress-67",
                 f"composition-summary-{result.composition_job_id}-{first_segment.id}-segment-complete",
@@ -3048,9 +3024,7 @@ def test_rejecting_rewrite_keeps_current_manuscript_clean(
 
         assert snapshot.latest_composition_job is not None
         assert snapshot.latest_composition_job.pending_review is False
-        assert _stage_status(snapshot, WorkflowStage.COMPOSITION) == (
-            WorkflowStageState.COMPLETED
-        )
+        assert _stage_status(snapshot, WorkflowStage.COMPOSITION) == (WorkflowStageState.COMPLETED)
         assert rewrite_story_asset is None
         assert len(rejected_segments) == 2
         assert current_segments[2].text_content is not None

@@ -431,7 +431,5 @@ def test_eval_intent_parser_prompt_uses_durable_memory_summary_sections(db_sessi
     assert "Story decisions:" in rendered_prompt
     assert "User preferences:" in rendered_prompt
     assert "Unresolved questions:" in rendered_prompt
-    assert "Story setup: 1600 words, 10 minutes, 2 chapters, about 7 scenes" in (
-        rendered_prompt
-    )
+    assert "Story setup: 1600 words, 10 minutes, 2 chapters, about 7 scenes" in (rendered_prompt)
     assert "Latest saved UI detail: Beat sheet: Soften the midpoint" in rendered_prompt

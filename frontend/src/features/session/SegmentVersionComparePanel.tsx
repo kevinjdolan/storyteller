@@ -66,7 +66,9 @@ function findCurrentVersion(segment: CompositionSegmentView | null) {
 
   return (
     segment.versions.find((version) => version.is_current) ??
-    segment.versions.find((version) => version.acceptance_state === 'accepted') ??
+    segment.versions.find(
+      (version) => version.acceptance_state === 'accepted',
+    ) ??
     null
   )
 }
@@ -135,14 +137,17 @@ export function SegmentVersionComparePanel({
   reviewJob = null,
   segments,
 }: SegmentVersionComparePanelProps) {
-  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<
+    number | null
+  >(null)
+  const [inspectedVersionId, setInspectedVersionId] = useState<string | null>(
     null,
   )
-  const [inspectedVersionId, setInspectedVersionId] = useState<string | null>(null)
 
   const defaultSegmentIndex = useMemo(
     () =>
-      segments.find((segment) => segment.pending_version_id != null)?.segment_index ??
+      segments.find((segment) => segment.pending_version_id != null)
+        ?.segment_index ??
       segments.find((segment) => segment.is_stale)?.segment_index ??
       segments[0]?.segment_index ??
       null,
@@ -154,14 +159,17 @@ export function SegmentVersionComparePanel({
       ? selectedSegmentIndex
       : defaultSegmentIndex
   const selectedSegment =
-    segments.find((segment) => segment.segment_index === resolvedSelectedSegmentIndex) ??
-    null
+    segments.find(
+      (segment) => segment.segment_index === resolvedSelectedSegmentIndex,
+    ) ?? null
   const defaultInspectedVersion = findDefaultInspectedVersion(selectedSegment)
   const resolvedInspectedVersionId =
     inspectedVersionId != null &&
-    selectedSegment?.versions.some((version) => version.id === inspectedVersionId)
+    selectedSegment?.versions.some(
+      (version) => version.id === inspectedVersionId,
+    )
       ? inspectedVersionId
-      : defaultInspectedVersion?.id ?? null
+      : (defaultInspectedVersion?.id ?? null)
   const inspectedVersion =
     getSelectedSegmentVersion(selectedSegment, resolvedInspectedVersionId) ??
     defaultInspectedVersion
@@ -193,7 +201,8 @@ export function SegmentVersionComparePanel({
       <div className="segment-compare__grid">
         <aside className="segment-compare__segment-list">
           {segments.map((segment) => {
-            const isSelected = selectedSegment?.segment_index === segment.segment_index
+            const isSelected =
+              selectedSegment?.segment_index === segment.segment_index
 
             return (
               <button
@@ -207,7 +216,8 @@ export function SegmentVersionComparePanel({
               >
                 <div>
                   <strong>
-                    {segment.outline_card_title ?? `Segment ${segment.segment_index}`}
+                    {segment.outline_card_title ??
+                      `Segment ${segment.segment_index}`}
                   </strong>
                   <span>{buildSegmentStatusLabel(segment)}</span>
                 </div>
@@ -216,7 +226,9 @@ export function SegmentVersionComparePanel({
                   {segment.pending_version_id != null ? (
                     <Badge tone="accent">Pending</Badge>
                   ) : null}
-                  {segment.is_stale ? <Badge tone="warning">Stale</Badge> : null}
+                  {segment.is_stale ? (
+                    <Badge tone="warning">Stale</Badge>
+                  ) : null}
                   {segment.current_revision_number != null ? (
                     <Badge tone="neutral">
                       Rev {segment.current_revision_number}
@@ -233,7 +245,9 @@ export function SegmentVersionComparePanel({
             <>
               <div className="segment-compare__header">
                 <div>
-                  <p className="eyebrow">Segment {selectedSegment.segment_index}</p>
+                  <p className="eyebrow">
+                    Segment {selectedSegment.segment_index}
+                  </p>
                   <h4>
                     {selectedSegment.outline_card_title ??
                       `Segment ${selectedSegment.segment_index}`}
@@ -250,7 +264,9 @@ export function SegmentVersionComparePanel({
                       Showing{' '}
                       {selectedSegment.included_version_count ??
                         selectedSegment.versions.length}{' '}
-                      of {selectedSegment.version_count ?? selectedSegment.versions.length}{' '}
+                      of{' '}
+                      {selectedSegment.version_count ??
+                        selectedSegment.versions.length}{' '}
                       saved revisions in the workspace window.
                     </p>
                   ) : null}
@@ -335,14 +351,16 @@ export function SegmentVersionComparePanel({
                   <div className="segment-compare__compare-card-header">
                     <span>Current manuscript</span>
                     {currentVersion != null ? (
-                      <Badge tone="neutral">{buildVersionLabel(currentVersion)}</Badge>
+                      <Badge tone="neutral">
+                        {buildVersionLabel(currentVersion)}
+                      </Badge>
                     ) : null}
                   </div>
                   <div className="segment-compare__text">
                     {compareAgainstCurrent && diffSummary != null
                       ? renderHighlightedText(diffSummary.parts, 'before')
-                      : currentVersion?.text_content ??
-                        'No current manuscript text exists for this segment yet.'}
+                      : (currentVersion?.text_content ??
+                        'No current manuscript text exists for this segment yet.')}
                   </div>
                 </article>
 
@@ -379,15 +397,17 @@ export function SegmentVersionComparePanel({
                   <div className="segment-compare__text">
                     {compareAgainstCurrent && diffSummary != null
                       ? renderHighlightedText(diffSummary.parts, 'after')
-                      : inspectedVersion.text_content ??
-                        'No saved text exists for this revision yet.'}
+                      : (inspectedVersion.text_content ??
+                        'No saved text exists for this revision yet.')}
                   </div>
                 </article>
               </div>
 
               {showPendingRewriteActions || showRestoreAction ? (
                 <div className="segment-compare__actions">
-                  {showPendingRewriteActions && reviewJob != null && onAcceptRewrite != null ? (
+                  {showPendingRewriteActions &&
+                  reviewJob != null &&
+                  onAcceptRewrite != null ? (
                     <Button
                       disabled={disabled}
                       onClick={() => {
@@ -401,7 +421,9 @@ export function SegmentVersionComparePanel({
                     </Button>
                   ) : null}
 
-                  {showPendingRewriteActions && reviewJob != null && onRejectRewrite != null ? (
+                  {showPendingRewriteActions &&
+                  reviewJob != null &&
+                  onRejectRewrite != null ? (
                     <Button
                       disabled={disabled}
                       onClick={() => {
@@ -498,7 +520,10 @@ export function SegmentVersionComparePanel({
             </>
           ) : (
             <div className="composition-stage__empty">
-              <p>Once the first segment lands, its revision history will appear here.</p>
+              <p>
+                Once the first segment lands, its revision history will appear
+                here.
+              </p>
             </div>
           )}
         </section>

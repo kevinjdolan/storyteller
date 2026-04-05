@@ -158,13 +158,9 @@ def test_create_plan_uses_chapter_boundaries_and_offsets(db_session) -> None:
     assert result.segments[0].pause_after_seconds == 3
     assert result.segments[0].pause_hint == NarrationPauseHint.CHAPTER_BREAK
     assert result.segments[1].pause_after_seconds == 3
-    assert result.segments[1].music_transition_hint == (
-        NarrationMusicTransitionHint.SOFT_RESET
-    )
+    assert result.segments[1].music_transition_hint == (NarrationMusicTransitionHint.SOFT_RESET)
     assert result.segments[2].pause_after_seconds == 0
-    assert result.segments[2].music_transition_hint == (
-        NarrationMusicTransitionHint.END_STORY
-    )
+    assert result.segments[2].music_transition_hint == (NarrationMusicTransitionHint.END_STORY)
 
 
 def test_create_plan_splits_large_segment_on_sentence_boundaries(db_session) -> None:
@@ -361,25 +357,17 @@ def test_create_plan_replaces_stale_rows_and_only_marks_final_chapter_split(
     assert result.segments[1].pause_hint == NarrationPauseHint.NONE
     assert result.segments[2].pause_hint == NarrationPauseHint.CHAPTER_BREAK
     assert result.segments[2].pause_after_seconds == 3
-    assert result.segments[2].music_transition_hint == (
-        NarrationMusicTransitionHint.SOFT_RESET
-    )
+    assert result.segments[2].music_transition_hint == (NarrationMusicTransitionHint.SOFT_RESET)
     assert result.segments[3].pause_after_seconds == 0
-    assert result.segments[3].music_transition_hint == (
-        NarrationMusicTransitionHint.END_STORY
-    )
+    assert result.segments[3].music_transition_hint == (NarrationMusicTransitionHint.END_STORY)
     assert [segment.metadata_json["ends_source_boundary"] for segment in result.segments] == [
         False,
         False,
         True,
         True,
     ]
-    assert result.segments[0].music_transition_hint == (
-        NarrationMusicTransitionHint.CONTINUE_BED
-    )
-    assert result.segments[-1].music_transition_hint == (
-        NarrationMusicTransitionHint.END_STORY
-    )
+    assert result.segments[0].music_transition_hint == (NarrationMusicTransitionHint.CONTINUE_BED)
+    assert result.segments[-1].music_transition_hint == (NarrationMusicTransitionHint.END_STORY)
     assert result.segments[0].metadata_json["split_reason"] == "sentence_group"
 
 
@@ -453,16 +441,10 @@ def test_create_plan_applies_chapter_break_only_to_last_split_segment(db_session
     ]
     assert result.segments[0].pause_after_seconds == 0
     assert result.segments[0].pause_hint == NarrationPauseHint.NONE
-    assert result.segments[0].music_transition_hint == (
-        NarrationMusicTransitionHint.CONTINUE_BED
-    )
+    assert result.segments[0].music_transition_hint == (NarrationMusicTransitionHint.CONTINUE_BED)
     assert result.segments[1].pause_after_seconds == 3
     assert result.segments[1].pause_hint == NarrationPauseHint.CHAPTER_BREAK
-    assert result.segments[1].music_transition_hint == (
-        NarrationMusicTransitionHint.SOFT_RESET
-    )
-    assert result.segments[2].music_transition_hint == (
-        NarrationMusicTransitionHint.END_STORY
-    )
+    assert result.segments[1].music_transition_hint == (NarrationMusicTransitionHint.SOFT_RESET)
+    assert result.segments[2].music_transition_hint == (NarrationMusicTransitionHint.END_STORY)
     assert result.segments[0].metadata_json["ends_source_boundary"] is False
     assert result.segments[1].metadata_json["ends_source_boundary"] is True

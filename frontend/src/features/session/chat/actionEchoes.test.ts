@@ -256,8 +256,7 @@ describe('actionEchoes', () => {
     expect(messages).toContainEqual(
       expect.objectContaining({
         role: 'action_echo',
-        body:
-          'Selected character sheet: Lantern Keeper Cast: Softer. Refined from "Lantern Keeper Cast" with: Soften Mira\'s voice. Change impact: minor.',
+        body: 'Selected character sheet: Lantern Keeper Cast: Softer. Refined from "Lantern Keeper Cast" with: Soften Mira\'s voice. Change impact: minor.',
       }),
     )
   })
@@ -395,8 +394,7 @@ describe('actionEchoes', () => {
     expect(messages).toContainEqual(
       expect.objectContaining({
         role: 'action_echo',
-        body:
-          'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
+        body: 'Rewrite requested from segment 2. The current chunk will finish saving before the redirect applies.',
       }),
     )
   })

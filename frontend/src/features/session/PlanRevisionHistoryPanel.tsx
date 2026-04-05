@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import type { SessionHistoryEvent, SessionSnapshot } from '../../api/sessions.ts'
+import type {
+  SessionHistoryEvent,
+  SessionSnapshot,
+} from '../../api/sessions.ts'
 import { Badge, Button } from '../../shared/ui/primitives.tsx'
 
 type PlanRevisionHistoryPanelProps = {
@@ -38,7 +41,9 @@ function humanizeArtifactList(values: string[]) {
     return 'No selection changes'
   }
 
-  const labels = values.map((value) => artifactLabels[value as ArtifactKey] ?? value)
+  const labels = values.map(
+    (value) => artifactLabels[value as ArtifactKey] ?? value,
+  )
   if (labels.length === 1) {
     return labels[0]
   }
@@ -48,7 +53,9 @@ function humanizeArtifactList(values: string[]) {
   return `${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`
 }
 
-function readPlanArtifacts(revision: NonNullable<SessionSnapshot['current_plan_revision']>) {
+function readPlanArtifacts(
+  revision: NonNullable<SessionSnapshot['current_plan_revision']>,
+) {
   return [
     revision.pitch,
     revision.character_sheet,
@@ -87,16 +94,21 @@ export function PlanRevisionHistoryPanel({
   onRestorePlanRevision,
   snapshot,
 }: PlanRevisionHistoryPanelProps) {
-  const planRevisions = useMemo(() => snapshot.plan_revisions ?? [], [snapshot.plan_revisions])
-  const currentPlanRevision = snapshot.current_plan_revision ?? planRevisions.find((revision) => revision.is_current) ?? null
-  const [pendingRevisionNumber, setPendingRevisionNumber] = useState<number | null>(null)
+  const planRevisions = useMemo(
+    () => snapshot.plan_revisions ?? [],
+    [snapshot.plan_revisions],
+  )
+  const currentPlanRevision =
+    snapshot.current_plan_revision ??
+    planRevisions.find((revision) => revision.is_current) ??
+    null
+  const [pendingRevisionNumber, setPendingRevisionNumber] = useState<
+    number | null
+  >(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
 
   const earlierRevisions = useMemo(
-    () =>
-      planRevisions
-        .filter((revision) => !revision.is_current)
-        .slice(0, 5),
+    () => planRevisions.filter((revision) => !revision.is_current).slice(0, 5),
     [planRevisions],
   )
 
@@ -149,8 +161,11 @@ export function PlanRevisionHistoryPanel({
         </div>
 
         <div className="plan-revision-panel__badges">
-          <Badge tone="accent">Revision {currentPlanRevision.revision_number}</Badge>
-          {latestCompositionJob?.plan_revision_number === currentPlanRevision.revision_number ? (
+          <Badge tone="accent">
+            Revision {currentPlanRevision.revision_number}
+          </Badge>
+          {latestCompositionJob?.plan_revision_number ===
+          currentPlanRevision.revision_number ? (
             <Badge tone="success">Composition aligned</Badge>
           ) : (
             <Badge tone="neutral">Ready for composition</Badge>
@@ -158,7 +173,9 @@ export function PlanRevisionHistoryPanel({
         </div>
       </div>
 
-      <p className="plan-revision-panel__composition-note">{compositionPlanLabel}</p>
+      <p className="plan-revision-panel__composition-note">
+        {compositionPlanLabel}
+      </p>
 
       <div className="plan-revision-panel__artifact-list">
         {readPlanArtifacts(currentPlanRevision).map((artifact) => (
@@ -174,9 +191,15 @@ export function PlanRevisionHistoryPanel({
       {earlierRevisions.length > 0 ? (
         <ol className="plan-revision-panel__history" reversed>
           {earlierRevisions.map((revision) => {
-            const differences = diffAgainstCurrent(currentPlanRevision, revision)
+            const differences = diffAgainstCurrent(
+              currentPlanRevision,
+              revision,
+            )
             return (
-              <li key={revision.id} className="plan-revision-panel__history-item">
+              <li
+                key={revision.id}
+                className="plan-revision-panel__history-item"
+              >
                 <div className="plan-revision-panel__history-header">
                   <div>
                     <h4>Revision {revision.revision_number}</h4>
@@ -188,7 +211,10 @@ export function PlanRevisionHistoryPanel({
                   </div>
 
                   <Button
-                    disabled={disabled || pendingRevisionNumber === revision.revision_number}
+                    disabled={
+                      disabled ||
+                      pendingRevisionNumber === revision.revision_number
+                    }
                     onClick={() => {
                       void handleRestore(revision.revision_number)
                     }}

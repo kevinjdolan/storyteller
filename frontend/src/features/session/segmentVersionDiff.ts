@@ -52,8 +52,16 @@ function buildDiffParts(beforeText: string, afterText: string) {
     Array<number>(afterTokens.length + 1).fill(0),
   )
 
-  for (let beforeIndex = 1; beforeIndex <= beforeTokens.length; beforeIndex += 1) {
-    for (let afterIndex = 1; afterIndex <= afterTokens.length; afterIndex += 1) {
+  for (
+    let beforeIndex = 1;
+    beforeIndex <= beforeTokens.length;
+    beforeIndex += 1
+  ) {
+    for (
+      let afterIndex = 1;
+      afterIndex <= afterTokens.length;
+      afterIndex += 1
+    ) {
       if (beforeTokens[beforeIndex - 1] === afterTokens[afterIndex - 1]) {
         matrix[beforeIndex][afterIndex] =
           matrix[beforeIndex - 1][afterIndex - 1] + 1
@@ -87,9 +95,13 @@ function buildDiffParts(beforeText: string, afterText: string) {
     }
 
     const leftScore =
-      afterIndex > 0 ? matrix[beforeIndex][afterIndex - 1] : Number.NEGATIVE_INFINITY
+      afterIndex > 0
+        ? matrix[beforeIndex][afterIndex - 1]
+        : Number.NEGATIVE_INFINITY
     const upScore =
-      beforeIndex > 0 ? matrix[beforeIndex - 1][afterIndex] : Number.NEGATIVE_INFINITY
+      beforeIndex > 0
+        ? matrix[beforeIndex - 1][afterIndex]
+        : Number.NEGATIVE_INFINITY
 
     if (afterIndex > 0 && leftScore >= upScore) {
       diffParts.push({

@@ -393,7 +393,9 @@ function buildBeatEditorUpdateRequest(
 
   const request = {
     summary:
-      draft.summary !== (beatSheet.summary ?? '') ? summary : (null as string | null),
+      draft.summary !== (beatSheet.summary ?? '')
+        ? summary
+        : (null as string | null),
     bedtimeNotes:
       draft.bedtimeNotes !== (beatSheet.bedtime_notes ?? '')
         ? bedtimeNotes
@@ -433,7 +435,10 @@ function buildEditHistoryFocusCopy(entry: {
   }
 
   const changedFields = entry.changed_fields ?? []
-  if (changedFields.includes('summary') || changedFields.includes('bedtime_notes')) {
+  if (
+    changedFields.includes('summary') ||
+    changedFields.includes('bedtime_notes')
+  ) {
     return 'This edit changed the overall arc framing for the revision.'
   }
 
@@ -502,10 +507,13 @@ export function BeatSheetStage({
     null
   const editorBeatDraft =
     editorBeat != null && editorDraft != null
-      ? editorDraft.beats[editorBeat.key] ?? null
+      ? (editorDraft.beats[editorBeat.key] ?? null)
       : null
   const editHistory = inspectedBeatSheet?.edit_history ?? []
-  const editorChangeCount = countBeatEditorChanges(inspectedBeatSheet, editorDraft)
+  const editorChangeCount = countBeatEditorChanges(
+    inspectedBeatSheet,
+    editorDraft,
+  )
   const editorDirty = editorChangeCount > 0
   const downstreamEditImpactLabels = selectedStage.invalidatesOnEdit.map(
     getWorkflowStageLabel,
@@ -653,7 +661,10 @@ export function BeatSheetStage({
       return
     }
 
-    const nextUpdate = buildBeatEditorUpdateRequest(inspectedBeatSheet, editorDraft)
+    const nextUpdate = buildBeatEditorUpdateRequest(
+      inspectedBeatSheet,
+      editorDraft,
+    )
     if ('error' in nextUpdate && nextUpdate.error != null) {
       setEditorError(nextUpdate.error)
       return
@@ -1416,12 +1427,16 @@ export function BeatSheetStage({
                 <li key={entry.id} className="beat-stage__history-item">
                   <div className="beat-stage__history-header">
                     <div>
-                      <p className="eyebrow">{formatRevisionTimestamp(entry.created_at)}</p>
+                      <p className="eyebrow">
+                        {formatRevisionTimestamp(entry.created_at)}
+                      </p>
                       <h4>{entry.summary_text}</h4>
                     </div>
                     <div className="workspace-stage-detail__badges">
                       <Badge tone="neutral">
-                        {entry.origin === 'chat' ? 'Chat edit' : 'Workspace edit'}
+                        {entry.origin === 'chat'
+                          ? 'Chat edit'
+                          : 'Workspace edit'}
                       </Badge>
                       {entry.material_change ? (
                         <Badge tone="warning">Material change</Badge>

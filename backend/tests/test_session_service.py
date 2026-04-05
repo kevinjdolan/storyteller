@@ -74,11 +74,7 @@ def _seed_catalog_rows(db_session) -> None:
 
 
 def _load_catalog_lane(db_session, *, index: int = 0) -> tuple[Genre, ToneProfile]:
-    genres = (
-        db_session.query(Genre)
-        .order_by(Genre.sort_order.asc(), Genre.label.asc())
-        .all()
-    )
+    genres = db_session.query(Genre).order_by(Genre.sort_order.asc(), Genre.label.asc()).all()
     genre = genres[index]
     tone = (
         db_session.query(ToneProfile)
@@ -1495,9 +1491,7 @@ def test_save_audio_settings_persists_durable_audio_plan_and_invalidates_stale_a
     assert stored_session.audio_music_profile == "night_ambience"
     assert stored_session.audio_narration_volume == 88
     assert stored_session.audio_music_volume == 18
-    assert stored_session.audio_guidance_notes == (
-        "Ease off even more during the final chapter."
-    )
+    assert stored_session.audio_guidance_notes == ("Ease off even more during the final chapter.")
 
     assert result.event.event_type == "content.user_edit.recorded"
     assert result.event.stage == WorkflowStage.AUDIO
@@ -1550,10 +1544,7 @@ def test_save_audio_settings_persists_durable_audio_plan_and_invalidates_stale_a
         "Final length can vary with the finished story and narration delivery."
         in stage_map[WorkflowStage.AUDIO].detail
     )
-    assert (
-        "Ease off even more during the final chapter."
-        in stage_map[WorkflowStage.AUDIO].detail
-    )
+    assert "Ease off even more during the final chapter." in stage_map[WorkflowStage.AUDIO].detail
     assert stage_map[WorkflowStage.FINALIZE].status == WorkflowStageState.NEEDS_REGENERATION
 
 
@@ -1772,9 +1763,7 @@ def test_list_recent_sessions_can_filter_and_build_polished_story_metadata(db_se
         status=AssetStatus.READY,
         storage_bucket="storyteller-exports",
         object_path="sessions/polished/story.docx",
-        mime_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        mime_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         metadata_json={"source_story_asset_id": story_asset.id},
         ready_at=now + timedelta(minutes=1),
     )

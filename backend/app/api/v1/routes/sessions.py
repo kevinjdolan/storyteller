@@ -638,9 +638,7 @@ def start_session_audio_generation(
             tool_name=StoryWorkflowToolName.START_AUDIO_GENERATION,
             session_id=session_id,
             arguments=(
-                payload.model_dump(mode="json", exclude_unset=True)
-                if payload is not None
-                else {}
+                payload.model_dump(mode="json", exclude_unset=True) if payload is not None else {}
             ),
         )
         snapshot = session_service.load_session_snapshot(session_id)
@@ -1879,10 +1877,7 @@ def _resolve_byte_range(
 def _build_content_disposition(*, filename: str, disposition: str) -> str:
     quoted_filename = quote(filename, safe="")
     fallback_filename = filename.replace('"', "")
-    return (
-        f'{disposition}; filename="{fallback_filename}"; '
-        f"filename*=UTF-8''{quoted_filename}"
-    )
+    return f"{disposition}; filename=\"{fallback_filename}\"; filename*=UTF-8''{quoted_filename}"
 
 
 def _iter_payload_chunks(payload: bytes, *, chunk_size: int = 64 * 1024):

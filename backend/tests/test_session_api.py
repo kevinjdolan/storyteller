@@ -485,15 +485,21 @@ def _seed_catalog_rows() -> None:
 
 
 def _load_catalog_lane(db_session, *, index: int = 0) -> tuple[Genre, ToneProfile]:
-    genres = db_session.execute(
-        select(Genre).order_by(Genre.sort_order.asc(), Genre.label.asc())
-    ).scalars().all()
+    genres = (
+        db_session.execute(select(Genre).order_by(Genre.sort_order.asc(), Genre.label.asc()))
+        .scalars()
+        .all()
+    )
     genre = genres[index]
-    tone = db_session.execute(
-        select(ToneProfile)
-        .where(ToneProfile.genre_id == genre.id)
-        .order_by(ToneProfile.sort_order.asc(), ToneProfile.label.asc())
-    ).scalars().first()
+    tone = (
+        db_session.execute(
+            select(ToneProfile)
+            .where(ToneProfile.genre_id == genre.id)
+            .order_by(ToneProfile.sort_order.asc(), ToneProfile.label.asc())
+        )
+        .scalars()
+        .first()
+    )
     assert tone is not None
     return genre, tone
 
@@ -1027,9 +1033,7 @@ def test_debug_inspector_endpoint_requires_feature_flag(
         json={"working_title": "Moonlit Harbor"},
     ).json()
 
-    response = session_api_client.get(
-        f"/api/v1/sessions/{created['id']}/debug-inspector"
-    )
+    response = session_api_client.get(f"/api/v1/sessions/{created['id']}/debug-inspector")
 
     assert response.status_code == 404
     assert response.json()["detail"] == (
@@ -1125,9 +1129,7 @@ def test_hydrate_session_endpoint_includes_audio_segments_and_preview_urls(
                     status=JobStatus.QUEUED,
                     source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
                     source_outline_card_title="Silver bell crossing",
-                    text_content=(
-                        "Otis stayed close while the silver bell called from the cove."
-                    ),
+                    text_content=("Otis stayed close while the silver bell called from the cove."),
                     word_count=11,
                     text_start_offset=78,
                     text_end_offset=140,
@@ -1273,8 +1275,7 @@ def test_get_named_story_docx_artifact_generates_export_from_story_text(
     document = Document(BytesIO(response.content))
     assert document.paragraphs[0].text == "Lantern Harbor"
     assert any(
-        paragraph.text == "Mira carried the lantern home."
-        for paragraph in document.paragraphs
+        paragraph.text == "Mira carried the lantern home." for paragraph in document.paragraphs
     )
 
     db_session = get_session_factory()()
@@ -2633,12 +2634,10 @@ def test_reject_rewrite_endpoint_keeps_the_current_segment_version(
             current_segment_index=2,
             metadata_json={
                 "accepted_story_so_far": (
-                    "Draft segment 1 settles the harbor.\n\n"
-                    "Draft segment 2 keeps the bell close."
+                    "Draft segment 1 settles the harbor.\n\nDraft segment 2 keeps the bell close."
                 ),
                 "latest_partial_output": (
-                    "Draft segment 1 settles the harbor.\n\n"
-                    "Draft segment 2 keeps the bell close."
+                    "Draft segment 1 settles the harbor.\n\nDraft segment 2 keeps the bell close."
                 ),
                 "total_segments": 2,
                 "start_segment_index": 1,
@@ -2683,12 +2682,10 @@ def test_reject_rewrite_endpoint_keeps_the_current_segment_version(
             rewrite_to_segment_index=2,
             metadata_json={
                 "accepted_story_so_far": (
-                    "Draft segment 1 settles the harbor.\n\n"
-                    "Draft segment 2 keeps the bell close."
+                    "Draft segment 1 settles the harbor.\n\nDraft segment 2 keeps the bell close."
                 ),
                 "latest_partial_output": (
-                    "Draft segment 1 settles the harbor.\n\n"
-                    "Draft segment 2 keeps the bell close."
+                    "Draft segment 1 settles the harbor.\n\nDraft segment 2 keeps the bell close."
                 ),
                 "total_segments": 1,
                 "start_segment_index": 2,
@@ -2720,9 +2717,7 @@ def test_reject_rewrite_endpoint_keeps_the_current_segment_version(
     assert response.status_code == 200
     payload = response.json()
     composition_stage = next(
-        stage
-        for stage in payload["snapshot"]["stage_states"]
-        if stage["stage"] == "composition"
+        stage for stage in payload["snapshot"]["stage_states"] if stage["stage"] == "composition"
     )
     segment_two = next(
         segment
@@ -2740,9 +2735,10 @@ def test_reject_rewrite_endpoint_keeps_the_current_segment_version(
     assert composition_stage["status"] == "completed"
     assert segment_two["current_revision_number"] == 1
     assert segment_two["pending_version_id"] is None
-    assert [
-        version["acceptance_state"] for version in segment_two["versions"]
-    ] == ["rejected", "accepted"]
+    assert [version["acceptance_state"] for version in segment_two["versions"]] == [
+        "rejected",
+        "accepted",
+    ]
 
 
 def test_session_events_websocket_replays_composition_job_status(
@@ -2880,15 +2876,9 @@ def test_session_realtime_service_streams_composition_chunk_deltas(
             cursor=cursor,
         )
 
-    delta_events = [
-        event
-        for event in streamed_events
-        if event.payload.chunk_kind.value == "delta"
-    ]
+    delta_events = [event for event in streamed_events if event.payload.chunk_kind.value == "delta"]
     summary_events = [
-        event
-        for event in streamed_events
-        if event.payload.chunk_kind.value == "segment_summary"
+        event for event in streamed_events if event.payload.chunk_kind.value == "segment_summary"
     ]
 
     assert len(initial_events) == 1
@@ -3275,18 +3265,12 @@ def test_save_audio_settings_endpoint_persists_durable_audio_preferences(
     assert payload["snapshot"]["audio_settings"]["narration_volume"] == 88
     assert payload["snapshot"]["audio_settings"]["music_volume"] == 18
     assert len(payload["snapshot"]["audio_settings"]["music_profile_options"]) == 3
-    assert (
-        payload["snapshot"]["audio_settings"]["mix_preview"]["strategy"]
-        == "curated_bed_ducked"
-    )
+    assert payload["snapshot"]["audio_settings"]["mix_preview"]["strategy"] == "curated_bed_ducked"
     assert (
         payload["snapshot"]["audio_settings"]["runtime_estimate"]["basis_source"]
         == "story_setup_target"
     )
-    stage_map = {
-        stage["stage"]: stage
-        for stage in payload["snapshot"]["stage_states"]
-    }
+    stage_map = {stage["stage"]: stage for stage in payload["snapshot"]["stage_states"]}
     assert stage_map["audio"]["status"] == "needs_regeneration"
     assert stage_map["finalize"]["status"] == "needs_regeneration"
 

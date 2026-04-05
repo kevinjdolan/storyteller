@@ -133,9 +133,7 @@ def test_hydrate_session_replays_failed_composition_job_state(db_session) -> Non
     assert hydrated.snapshot.overall_status == WorkflowStageState.NEEDS_REGENERATION
     assert hydrated.hydration.strategy == "materialized_with_recent_replay"
     assert hydrated.hydration.replayed_event_count == 1
-    assert "Composition job: failed at 42.0%" in (
-        hydrated.snapshot.agent_context_summary or ""
-    )
+    assert "Composition job: failed at 42.0%" in (hydrated.snapshot.agent_context_summary or "")
 
 
 def test_hydrate_session_returns_completed_workspace_state(db_session) -> None:
@@ -299,9 +297,7 @@ def test_hydrate_session_includes_audio_segments_with_preview_assets(db_session)
                 status=JobStatus.QUEUED,
                 source_boundary_kind=NarrationSourceBoundaryKind.CHAPTER,
                 source_outline_card_title="Silver bell crossing",
-                text_content=(
-                    "Otis stayed close while the silver bell called from the cove."
-                ),
+                text_content=("Otis stayed close while the silver bell called from the cove."),
                 word_count=11,
                 text_start_offset=78,
                 text_end_offset=140,
@@ -320,9 +316,7 @@ def test_hydrate_session_includes_audio_segments_with_preview_assets(db_session)
             asset_kind=AssetKind.AUDIO_SEGMENT,
             status=AssetStatus.READY,
             storage_bucket="storyteller-audio",
-            object_path=(
-                f"sessions/{snapshot.id}/audio/jobs/{audio_job.id}/segments/0001.wav"
-            ),
+            object_path=(f"sessions/{snapshot.id}/audio/jobs/{audio_job.id}/segments/0001.wav"),
             mime_type="audio/wav",
             segment_index=1,
             ready_at=datetime.now(timezone.utc),
@@ -478,9 +472,7 @@ def test_hydrate_session_windows_large_revision_collections(db_session) -> None:
                 summary=f"Beat sheet revision {revision_number}",
                 beats={"opening_image": f"Revision {revision_number} opens softly."},
                 is_selected=revision_number == 1,
-                accepted_at=(
-                    datetime.now(timezone.utc) if revision_number == 1 else None
-                ),
+                accepted_at=(datetime.now(timezone.utc) if revision_number == 1 else None),
             )
             for revision_number in range(1, 7)
         ]

@@ -195,9 +195,7 @@ class SessionAssetService:
                 f"session {session_id!r}"
             )
         if existing_asset.asset_kind != asset_kind:
-            raise ValueError(
-                "existing asset kind does not match the requested upsert asset_kind"
-            )
+            raise ValueError("existing asset kind does not match the requested upsert asset_kind")
 
         existing_asset.status = status
         existing_asset.mime_type = normalized_mime_type

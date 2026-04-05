@@ -61,9 +61,7 @@ def test_classify_gemini_exception_marks_quota_exhaustion_as_user_actionable() -
             payload={
                 "error": {
                     "status": "RESOURCE_EXHAUSTED",
-                    "message": (
-                        "You exceeded your current quota. Check plan and billing details."
-                    ),
+                    "message": ("You exceeded your current quota. Check plan and billing details."),
                 }
             },
         ),

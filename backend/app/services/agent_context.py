@@ -41,9 +41,7 @@ def build_session_agent_context_summary(
                     or snapshot.story_brief.raw_brief
                 )
             )
-            lines.extend(
-                _build_brief_preference_lines(snapshot.story_brief.normalized_preferences)
-            )
+            lines.extend(_build_brief_preference_lines(snapshot.story_brief.normalized_preferences))
 
         if snapshot.selected_pitch is not None:
             lines.append(f"Selected pitch: {snapshot.selected_pitch.title}")
@@ -106,22 +104,14 @@ def build_session_agent_context_summary(
     composition_job = snapshot.active_composition_job or snapshot.latest_composition_job
     if composition_job is not None:
         lines.append(
-            "Composition job: "
-            f"{composition_job.status} at "
-            f"{composition_job.progress_percent:.1f}%"
+            f"Composition job: {composition_job.status} at {composition_job.progress_percent:.1f}%"
         )
 
     audio_job = snapshot.active_audio_job or snapshot.latest_audio_job
     if audio_job is not None:
-        lines.append(
-            "Audio job: "
-            f"{audio_job.status}, "
-            f"voice={audio_job.voice_key or 'unset'}"
-        )
+        lines.append(f"Audio job: {audio_job.status}, voice={audio_job.voice_key or 'unset'}")
 
-    lines.append(
-        "Audio settings: " + build_audio_settings_memory_summary(snapshot.audio_settings)
-    )
+    lines.append("Audio settings: " + build_audio_settings_memory_summary(snapshot.audio_settings))
 
     return "\n".join(lines)
 
@@ -222,8 +212,7 @@ def _build_brief_preference_lines(normalized_preferences) -> list[str]:
         lines.append(
             "Bedtime safety guardrails: "
             + "; ".join(
-                _truncate(note, limit=80)
-                for note in normalized_preferences.bedtime_safety_concerns
+                _truncate(note, limit=80) for note in normalized_preferences.bedtime_safety_concerns
             )
         )
     if normalized_preferences.candidate_motifs:

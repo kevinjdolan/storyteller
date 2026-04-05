@@ -345,9 +345,7 @@ class SessionCollectionWindowView(BaseModel):
 
 
 class SessionSnapshotCollectionWindowsView(BaseModel):
-    pitch_batches: SessionCollectionWindowView = Field(
-        default_factory=SessionCollectionWindowView
-    )
+    pitch_batches: SessionCollectionWindowView = Field(default_factory=SessionCollectionWindowView)
     character_sheet_batches: SessionCollectionWindowView = Field(
         default_factory=SessionCollectionWindowView
     )
@@ -357,9 +355,7 @@ class SessionSnapshotCollectionWindowsView(BaseModel):
     story_outline_revisions: SessionCollectionWindowView = Field(
         default_factory=SessionCollectionWindowView
     )
-    plan_revisions: SessionCollectionWindowView = Field(
-        default_factory=SessionCollectionWindowView
-    )
+    plan_revisions: SessionCollectionWindowView = Field(default_factory=SessionCollectionWindowView)
     composition_segment_versions: SessionCollectionWindowView = Field(
         default_factory=SessionCollectionWindowView
     )
@@ -733,8 +729,7 @@ class StartSessionCompositionRequest(BaseModel):
             and self.rewrite_to_segment_index < self.restart_from_segment_index
         ):
             raise ValueError(
-                "rewrite_to_segment_index cannot be earlier than "
-                "restart_from_segment_index"
+                "rewrite_to_segment_index cannot be earlier than restart_from_segment_index"
             )
         return self
 
@@ -756,8 +751,7 @@ class RedirectSessionCompositionRequest(BaseModel):
             and self.rewrite_to_segment_index < self.rewrite_from_segment_index
         ):
             raise ValueError(
-                "rewrite_to_segment_index cannot be earlier than "
-                "rewrite_from_segment_index"
+                "rewrite_to_segment_index cannot be earlier than rewrite_from_segment_index"
             )
         return self
 
