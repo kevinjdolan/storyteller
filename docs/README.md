@@ -14,6 +14,7 @@ Current entrypoints:
 - `event-taxonomy.md`: append-only event families, payload versioning rules, and helper usage
 - `realtime-events.md`: session-channel contract, live event families, replay rules, and local auth assumptions
 - `realtime-events.schema.json`: machine-readable schema bundle for subscription frames and session events
+- `long-session-performance.md`: workspace hydration windows, transcript rendering limits, and extension guidance for long-lived sessions
 - `genre-tone-catalog.md`: curated catalog provenance, editing rules, and seed command
 - `storage-buckets-and-prefixes.md`: bucket roles, stable object-key conventions, and storage usage
 - `artifact-retention-policy.md`: conservative retention windows, cleanup safety rules, and maintenance commands

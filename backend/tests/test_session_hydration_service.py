@@ -8,8 +8,11 @@ from app.db import (
     AssetStatus,
     AudioJob,
     Base,
+    BeatSheet,
     CompositionJob,
     CompositionJobKind,
+    CompositionSegment,
+    CompositionSegmentAcceptanceState,
     ContinuityBible,
     JobStatus,
     NarrationPauseHint,
@@ -461,6 +464,90 @@ def test_hydrate_session_recovers_draft_text_from_snapshot_asset(db_session) -> 
         hydrated.snapshot.latest_composition_job.status_message
         == hydrated.snapshot.active_composition_job.status_message
     )
+
+
+def test_hydrate_session_windows_large_revision_collections(db_session) -> None:
+    session_service = SessionService(db_session)
+    snapshot = session_service.create_session(working_title="Hydration Windows")
+
+    db_session.add_all(
+        [
+            BeatSheet(
+                session_id=snapshot.id,
+                revision_number=revision_number,
+                summary=f"Beat sheet revision {revision_number}",
+                beats={"opening_image": f"Revision {revision_number} opens softly."},
+                is_selected=revision_number == 1,
+                accepted_at=(
+                    datetime.now(timezone.utc) if revision_number == 1 else None
+                ),
+            )
+            for revision_number in range(1, 7)
+        ]
+    )
+
+    composition_job = CompositionJob(
+        session_id=snapshot.id,
+        job_kind=CompositionJobKind.REWRITE,
+        status=JobStatus.PAUSED,
+        progress_percent=61.0,
+        current_segment_index=1,
+    )
+    db_session.add(composition_job)
+    db_session.flush()
+
+    segment_versions: list[CompositionSegment] = []
+    for revision_number in range(1, 8):
+        acceptance_state = (
+            CompositionSegmentAcceptanceState.ACCEPTED
+            if revision_number == 1
+            else CompositionSegmentAcceptanceState.PENDING
+            if revision_number == 7
+            else CompositionSegmentAcceptanceState.REJECTED
+        )
+        segment_versions.append(
+            CompositionSegment(
+                session_id=snapshot.id,
+                composition_job_id=composition_job.id,
+                segment_index=1,
+                revision_number=revision_number,
+                status=JobStatus.COMPLETED,
+                acceptance_state=acceptance_state,
+                accepted_text=f"Revision {revision_number} text",
+                text_content=f"Revision {revision_number} text",
+                word_count=3,
+                payload={
+                    "outline_card_title": "Harbor crossing",
+                    "outline_card_summary": "Mira keeps the harbor calm.",
+                },
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+    db_session.add_all(segment_versions)
+    db_session.commit()
+
+    hydrated = SessionHydrationService(db_session).hydrate_session(snapshot.id)
+
+    assert hydrated.snapshot.selected_beat_sheet is not None
+    assert hydrated.snapshot.selected_beat_sheet.revision_number == 1
+    assert [revision.revision_number for revision in hydrated.snapshot.beat_sheet_revisions] == [
+        6,
+        5,
+        4,
+        3,
+    ]
+    assert hydrated.snapshot.collection_windows.beat_sheet_revisions.total_count == 6
+    assert hydrated.snapshot.collection_windows.beat_sheet_revisions.included_count == 4
+    assert hydrated.snapshot.collection_windows.beat_sheet_revisions.has_more is True
+
+    segment = hydrated.snapshot.composition_segments[0]
+    assert segment.version_count == 7
+    assert segment.included_version_count == 5
+    assert segment.hidden_version_count == 2
+    assert [version.revision_number for version in segment.versions] == [7, 6, 5, 4, 1]
+    assert hydrated.snapshot.collection_windows.composition_segment_versions.total_count == 7
+    assert hydrated.snapshot.collection_windows.composition_segment_versions.included_count == 5
+    assert hydrated.snapshot.collection_windows.composition_segment_versions.has_more is True
 
 
 def test_hydrate_session_raises_for_missing_session(db_session) -> None:

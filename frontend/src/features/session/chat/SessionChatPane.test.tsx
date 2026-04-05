@@ -29,6 +29,15 @@ const sampleMessages = [
   },
 ] as const
 
+function buildLargeTranscript(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `message-${index + 1}`,
+    role: (index % 2 === 0 ? 'assistant' : 'user') as const,
+    body: `Transcript message ${index + 1}`,
+    createdAt: `2026-04-01T08:${String(index % 60).padStart(2, '0')}:00Z`,
+  }))
+}
+
 describe('SessionChatPane', () => {
   it('renders the transcript as a chat log with all supported message roles', () => {
     render(
@@ -163,5 +172,30 @@ describe('SessionChatPane', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
 
     expect(onDismissPendingAction).toHaveBeenCalledWith('pending-1')
+  })
+
+  it('renders a recent transcript window first and can reveal older messages', () => {
+    const messages = buildLargeTranscript(100)
+
+    render(
+      <SessionChatPane
+        activityLabel="Ready for notes."
+        connectionLabel="Live feed connected"
+        connectionTone="success"
+        messages={messages}
+        onSubmit={() => undefined}
+        windowKey="session-a"
+      />,
+    )
+
+    expect(
+      screen.getByText('Showing the most recent 80 messages to keep the transcript responsive.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Transcript message 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Transcript message 100')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show 20 older' }))
+
+    expect(screen.getByText('Transcript message 1')).toBeInTheDocument()
   })
 })

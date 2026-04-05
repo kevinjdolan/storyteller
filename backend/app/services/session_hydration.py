@@ -47,12 +47,14 @@ from app.models import (
     SessionArtifactReadinessView,
     SessionAssetView,
     SessionCatalogSelection,
+    SessionCollectionWindowView,
     SessionEventType,
     SessionHydrationMetadata,
     SessionHydrationView,
     SessionLibrarySummaryView,
     SessionProgress,
     SessionSnapshot,
+    SessionSnapshotCollectionWindowsView,
     SessionStageStateView,
     SessionUsageSummaryView,
     StoryBriefView,
@@ -89,6 +91,13 @@ _ACTIVE_JOB_STATUS_VALUES = {
     JobStatus.IN_PROGRESS.value,
     JobStatus.PAUSED.value,
 }
+
+_WORKSPACE_PITCH_BATCH_LIMIT = 4
+_WORKSPACE_CHARACTER_BATCH_LIMIT = 4
+_WORKSPACE_BEAT_REVISION_LIMIT = 4
+_WORKSPACE_OUTLINE_REVISION_LIMIT = 4
+_WORKSPACE_PLAN_REVISION_LIMIT = 6
+_WORKSPACE_SEGMENT_VERSION_LIMIT = 5
 
 
 class SessionHydrationServiceError(Exception):
@@ -341,6 +350,24 @@ def build_session_library_summary(
     )
 
 
+def _limit_recent_collection(
+    items: list[Any],
+    *,
+    limit: int,
+) -> tuple[list[Any], SessionCollectionWindowView]:
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
+
+    total_count = len(items)
+    included_items = items[:limit]
+
+    return included_items, SessionCollectionWindowView(
+        total_count=total_count,
+        included_count=len(included_items),
+        has_more=total_count > len(included_items),
+    )
+
+
 def build_session_snapshot(
     aggregate: SessionAggregate,
     *,
@@ -348,7 +375,32 @@ def build_session_snapshot(
     usage_summary: SessionUsageSummaryView,
 ) -> SessionSnapshot:
     story_session = aggregate.session
-    plan_revision_views = build_plan_revision_views(aggregate.plan_revisions)
+    pitch_batch_views, pitch_batch_window = _limit_recent_collection(
+        build_pitch_batch_views(aggregate.pitches),
+        limit=_WORKSPACE_PITCH_BATCH_LIMIT,
+    )
+    character_sheet_batch_views, character_sheet_batch_window = _limit_recent_collection(
+        build_character_sheet_batch_views(aggregate.character_sheets),
+        limit=_WORKSPACE_CHARACTER_BATCH_LIMIT,
+    )
+    beat_sheet_views, beat_sheet_window = _limit_recent_collection(
+        build_beat_sheet_views(aggregate.beat_sheets),
+        limit=_WORKSPACE_BEAT_REVISION_LIMIT,
+    )
+    story_outline_views, story_outline_window = _limit_recent_collection(
+        build_story_outline_views(aggregate.story_outlines),
+        limit=_WORKSPACE_OUTLINE_REVISION_LIMIT,
+    )
+    plan_revision_views, plan_revision_window = _limit_recent_collection(
+        build_plan_revision_views(aggregate.plan_revisions),
+        limit=_WORKSPACE_PLAN_REVISION_LIMIT,
+    )
+    composition_segment_views, composition_segment_version_window = (
+        build_composition_segment_views(
+            aggregate.composition_segments,
+            per_segment_version_limit=_WORKSPACE_SEGMENT_VERSION_LIMIT,
+        )
+    )
     current_plan_revision_view = next(
         (revision for revision in plan_revision_views if revision.is_current),
         None,
@@ -394,14 +446,14 @@ def build_session_snapshot(
         progress=build_progress(story_session.workflow_stage_states),
         stage_states=build_stage_state_views(story_session.workflow_stage_states),
         story_brief=build_story_brief_view(aggregate.active_story_brief),
-        pitch_batches=build_pitch_batch_views(aggregate.pitches),
+        pitch_batches=pitch_batch_views,
         selected_pitch=build_pitch_view(aggregate.selected_pitch),
-        character_sheet_batches=build_character_sheet_batch_views(aggregate.character_sheets),
+        character_sheet_batches=character_sheet_batch_views,
         selected_character_sheet=build_character_sheet_view(aggregate.selected_character_sheet),
-        beat_sheet_revisions=build_beat_sheet_views(aggregate.beat_sheets),
+        beat_sheet_revisions=beat_sheet_views,
         selected_beat_sheet=build_beat_sheet_view(aggregate.selected_beat_sheet),
         selected_story_setup=build_story_setup_view(aggregate.selected_story_setup),
-        story_outline_revisions=build_story_outline_views(aggregate.story_outlines),
+        story_outline_revisions=story_outline_views,
         selected_story_outline=build_story_outline_view(aggregate.selected_story_outline),
         plan_revisions=plan_revision_views,
         current_plan_revision=current_plan_revision_view,
@@ -409,7 +461,7 @@ def build_session_snapshot(
         latest_audio_job=build_audio_job_view(aggregate.latest_audio_job),
         active_composition_job=build_composition_job_view(aggregate.active_composition_job),
         active_audio_job=build_audio_job_view(aggregate.active_audio_job),
-        composition_segments=build_composition_segment_views(aggregate.composition_segments),
+        composition_segments=composition_segment_views,
         audio_segments=build_narration_segment_views(
             aggregate.audio_segments,
             aggregate.audio_segment_assets,
@@ -427,6 +479,14 @@ def build_session_snapshot(
         continuity_bible=build_continuity_bible_view(aggregate.selected_continuity_bible),
         usage_summary=usage_summary,
         conversation_memory=conversation_memory,
+        collection_windows=SessionSnapshotCollectionWindowsView(
+            pitch_batches=pitch_batch_window,
+            character_sheet_batches=character_sheet_batch_window,
+            beat_sheet_revisions=beat_sheet_window,
+            story_outline_revisions=story_outline_window,
+            plan_revisions=plan_revision_window,
+            composition_segment_versions=composition_segment_version_window,
+        ),
     )
     snapshot.agent_context_summary = build_session_agent_context_summary(
         snapshot,
@@ -2101,12 +2161,21 @@ def build_composition_job_view(row: CompositionJob | None) -> CompositionJobView
     )
 
 
-def build_composition_segment_views(rows) -> list[CompositionSegmentView]:
+def build_composition_segment_views(
+    rows,
+    *,
+    per_segment_version_limit: int = _WORKSPACE_SEGMENT_VERSION_LIMIT,
+) -> tuple[list[CompositionSegmentView], SessionCollectionWindowView]:
+    if per_segment_version_limit <= 0:
+        raise ValueError("per_segment_version_limit must be greater than zero")
+
     by_segment: dict[int, list] = {}
     for row in rows:
         by_segment.setdefault(row.segment_index, []).append(row)
 
     segment_views: list[CompositionSegmentView] = []
+    total_version_count = 0
+    included_version_count = 0
     for segment_index in sorted(by_segment):
         segment_rows = sorted(
             by_segment[segment_index],
@@ -2131,6 +2200,12 @@ def build_composition_segment_views(rows) -> list[CompositionSegmentView]:
         payload = _read_mapping(getattr(source_row, "payload", None))
         outline_title = _read_optional_mapping_text(payload, "outline_card_title")
         outline_summary = _read_optional_mapping_text(payload, "outline_card_summary")
+        total_version_count += len(segment_rows)
+        included_versions = _select_segment_versions_for_workspace(
+            segment_rows,
+            limit=per_segment_version_limit,
+        )
+        included_version_count += len(included_versions)
         segment_views.append(
             CompositionSegmentView(
                 segment_index=segment_index,
@@ -2142,14 +2217,54 @@ def build_composition_segment_views(rows) -> list[CompositionSegmentView]:
                 pending_revision_number=getattr(pending_version, "revision_number", None),
                 is_stale=bool(getattr(current_version, "is_stale", False)),
                 stale_reason=getattr(current_version, "stale_reason", None),
+                version_count=len(segment_rows),
+                included_version_count=len(included_versions),
+                hidden_version_count=max(0, len(segment_rows) - len(included_versions)),
                 versions=[
                     build_composition_segment_version_view(version)
-                    for version in segment_rows
+                    for version in included_versions
                 ],
             )
         )
 
-    return segment_views
+    return segment_views, SessionCollectionWindowView(
+        total_count=total_version_count,
+        included_count=included_version_count,
+        has_more=total_version_count > included_version_count,
+    )
+
+
+def _select_segment_versions_for_workspace(rows, *, limit: int):
+    prioritized_ids = {
+        row.id
+        for row in rows
+        if row.acceptance_state == "pending"
+        or (
+            row.acceptance_state == "accepted"
+            and row.superseded_by_segment_id is None
+        )
+    }
+
+    selected_rows: list[Any] = []
+    selected_ids: set[str] = set()
+    for row in rows:
+        if row.id in prioritized_ids:
+            selected_rows.append(row)
+            selected_ids.add(row.id)
+
+    for row in rows:
+        if len(selected_rows) >= limit:
+            break
+        if row.id in selected_ids:
+            continue
+        selected_rows.append(row)
+        selected_ids.add(row.id)
+
+    return sorted(
+        selected_rows,
+        key=lambda item: (item.revision_number, item.created_at),
+        reverse=True,
+    )
 
 
 def build_composition_segment_version_view(row) -> CompositionSegmentVersionView:

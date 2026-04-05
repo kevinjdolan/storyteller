@@ -35,6 +35,7 @@ type SessionChatPaneProps = {
   }>
   quickActions?: ReadonlyArray<SessionChatQuickAction>
   slashCommandHint?: string | null
+  windowKey?: string
 }
 
 type MessageRoleCopy = {
@@ -43,6 +44,8 @@ type MessageRoleCopy = {
 }
 
 const autoScrollThresholdPx = 80
+const defaultVisibleMessageCount = 80
+const visibleMessageStep = 80
 
 function getMessageRoleCopy(role: SessionChatMessageRole): MessageRoleCopy {
   if (role === 'assistant') {
@@ -116,15 +119,23 @@ export function SessionChatPane({
   pendingConfirmations = [],
   quickActions = [],
   slashCommandHint = null,
+  windowKey,
 }: SessionChatPaneProps) {
   const transcriptRef = useRef<HTMLOListElement | null>(null)
   const shouldStickToBottomRef = useRef(true)
   const [draft, setDraft] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [visibleMessageCount, setVisibleMessageCount] = useState(
+    defaultVisibleMessageCount,
+  )
   const chatHeadingId = useId()
   const activityId = useId()
   const pendingHeadingId = useId()
+
+  useEffect(() => {
+    setVisibleMessageCount(defaultVisibleMessageCount)
+  }, [windowKey])
 
   useEffect(() => {
     const transcript = transcriptRef.current
@@ -247,6 +258,9 @@ export function SessionChatPane({
     slashCommandHint,
   })
   const composerIsDisabled = disabledReason != null || isSubmitting
+  const hiddenMessageCount = Math.max(0, messages.length - visibleMessageCount)
+  const visibleMessages =
+    hiddenMessageCount > 0 ? messages.slice(-visibleMessageCount) : messages
   const pendingConfirmationAnnouncement =
     pendingConfirmations.length > 0
       ? `${pendingConfirmations.length} chat-requested change${pendingConfirmations.length === 1 ? '' : 's'} waiting for confirmation.`
@@ -278,6 +292,27 @@ export function SessionChatPane({
         {activityLabel}
       </p>
 
+      {hiddenMessageCount > 0 ? (
+        <div className="workspace-chat-pane__history-window">
+          <p className="body-copy">
+            Showing the most recent {visibleMessages.length} messages to keep
+            the transcript responsive.
+          </p>
+          <Button
+            onClick={() => {
+              setVisibleMessageCount(
+                (currentCount) => currentCount + visibleMessageStep,
+              )
+            }}
+            size="compact"
+            tone="ghost"
+            type="button"
+          >
+            Show {Math.min(hiddenMessageCount, visibleMessageStep)} older
+          </Button>
+        </div>
+      ) : null}
+
       <ol
         ref={transcriptRef}
         aria-describedby={activityId}
@@ -288,7 +323,7 @@ export function SessionChatPane({
         onScroll={updateStickiness}
         role="log"
       >
-        {messages.map((message) => {
+        {visibleMessages.map((message) => {
           const roleCopy = getMessageRoleCopy(message.role)
 
           return (

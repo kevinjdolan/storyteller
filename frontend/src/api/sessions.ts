@@ -437,7 +437,25 @@ export type CompositionSegmentView = {
   pending_revision_number?: number | null
   is_stale: boolean
   stale_reason?: string | null
+  version_count?: number
+  included_version_count?: number
+  hidden_version_count?: number
   versions: CompositionSegmentVersionView[]
+}
+
+export type SessionCollectionWindow = {
+  total_count: number
+  included_count: number
+  has_more: boolean
+}
+
+export type SessionSnapshotCollectionWindows = {
+  pitch_batches: SessionCollectionWindow
+  character_sheet_batches: SessionCollectionWindow
+  beat_sheet_revisions: SessionCollectionWindow
+  story_outline_revisions: SessionCollectionWindow
+  plan_revisions: SessionCollectionWindow
+  composition_segment_versions: SessionCollectionWindow
 }
 
 export type AudioJobView = {
@@ -767,6 +785,7 @@ export type SessionSnapshot = RecentSessionSummary & {
   audio_settings?: AudioSettingsView | null
   continuity_bible?: ContinuityBibleView | null
   agent_context_summary?: string | null
+  collection_windows?: SessionSnapshotCollectionWindows | null
 }
 
 export type SessionHydrationMetadata = {
@@ -1118,8 +1137,25 @@ export function fetchSessionSnapshot(sessionId: string) {
   return getJson<SessionSnapshot>(`/api/v1/sessions/${sessionId}`)
 }
 
-export function fetchSessionHydration(sessionId: string) {
-  return getJson<SessionHydration>(`/api/v1/sessions/${sessionId}/hydrate`)
+export function fetchSessionHydration(
+  sessionId: string,
+  options?: {
+    historyLimit?: number
+  },
+) {
+  const searchParams = new URLSearchParams()
+  if (
+    options?.historyLimit != null &&
+    Number.isFinite(options.historyLimit) &&
+    options.historyLimit > 0
+  ) {
+    searchParams.set('history_limit', String(options.historyLimit))
+  }
+
+  const queryString = searchParams.size > 0 ? `?${searchParams}` : ''
+  return getJson<SessionHydration>(
+    `/api/v1/sessions/${sessionId}/hydrate${queryString}`,
+  )
 }
 
 export function fetchSessionDebugInspector(sessionId: string) {

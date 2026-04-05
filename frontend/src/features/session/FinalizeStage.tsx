@@ -236,9 +236,11 @@ function resolveCurrentSegmentText(segment: CompositionSegmentView) {
   return textContent != null && textContent.length > 0 ? textContent : null
 }
 
-function buildFallbackStoryText(snapshot: SessionSnapshot) {
-  const compositionJob =
-    snapshot.active_composition_job ?? snapshot.latest_composition_job ?? null
+function buildFallbackStoryText(options: {
+  compositionJob: SessionSnapshot['active_composition_job'] | SessionSnapshot['latest_composition_job']
+  compositionSegments: CompositionSegmentView[]
+}) {
+  const compositionJob = options.compositionJob ?? null
 
   const acceptedStory = compositionJob?.accepted_story_so_far?.trim()
   if (acceptedStory != null && acceptedStory.length > 0) {
@@ -250,7 +252,7 @@ function buildFallbackStoryText(snapshot: SessionSnapshot) {
     return partialOutput
   }
 
-  const segmentTexts = (snapshot.composition_segments ?? [])
+  const segmentTexts = options.compositionSegments
     .map((segment) => resolveCurrentSegmentText(segment))
     .filter((value): value is string => value != null)
 
@@ -451,20 +453,21 @@ function buildReaderSectionsFromSegments(options: {
     .filter((section): section is ReaderSection => section != null)
 }
 
-function buildReaderSections(
-  snapshot: SessionSnapshot,
-  displayStoryText: string | null,
-) {
-  const preferChapters = (snapshot.selected_story_setup?.chapter_count ?? 0) > 1
+function buildReaderSections(options: {
+  chapterCount: number | null | undefined
+  compositionSegments: CompositionSegmentView[]
+  displayStoryText: string | null
+}) {
+  const preferChapters = (options.chapterCount ?? 0) > 1
   const textSections =
-    displayStoryText != null
+    options.displayStoryText != null
       ? buildReaderSectionsFromStoryText({
-          storyText: displayStoryText,
+          storyText: options.displayStoryText,
           preferChapters,
         })
       : []
   const segmentSections = buildReaderSectionsFromSegments({
-    segments: snapshot.composition_segments ?? [],
+    segments: options.compositionSegments,
     preferChapters,
   })
 
@@ -1010,9 +1013,16 @@ export function FinalizeStage({
     listen: null,
     read: null,
   })
+  const compositionSegments = snapshot.composition_segments ?? []
+  const displayCompositionJob =
+    snapshot.active_composition_job ?? snapshot.latest_composition_job ?? null
   const fallbackStoryText = useMemo(
-    () => buildFallbackStoryText(snapshot),
-    [snapshot],
+    () =>
+      buildFallbackStoryText({
+        compositionJob: displayCompositionJob,
+        compositionSegments,
+      }),
+    [compositionSegments, displayCompositionJob],
   )
   const initialTab: ReviewTab =
     snapshot.latest_story_asset != null || fallbackStoryText != null
@@ -1027,7 +1037,6 @@ export function FinalizeStage({
   const tabSetId = useId()
   const artifactInventoryQuery = useSessionArtifactInventoryQuery(snapshot.id)
 
-  const compositionSegments = snapshot.composition_segments ?? []
   const reviewJob = snapshot.latest_composition_job?.pending_review
     ? snapshot.latest_composition_job
     : null
@@ -1053,8 +1062,17 @@ export function FinalizeStage({
     snapshot.latest_audio_asset.audio_job_id !== displayAudioJob.id
   const displayStoryText = storyAssetText ?? fallbackStoryText ?? null
   const readerSections = useMemo(
-    () => buildReaderSections(snapshot, displayStoryText),
-    [displayStoryText, snapshot],
+    () =>
+      buildReaderSections({
+        chapterCount: snapshot.selected_story_setup?.chapter_count,
+        compositionSegments,
+        displayStoryText,
+      }),
+    [
+      compositionSegments,
+      displayStoryText,
+      snapshot.selected_story_setup?.chapter_count,
+    ],
   )
   const playbackSync = useNarrationPlaybackSync({
     asset: snapshot.latest_audio_asset,

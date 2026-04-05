@@ -2370,6 +2370,21 @@ h4 {
   background: rgba(255, 255, 255, 0.56);
 }
 
+.workspace-chat-pane__history-window {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(39, 69, 99, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.workspace-chat-pane__history-window p {
+  margin: 0;
+}
+
 .workspace-chat-transcript {
   display: grid;
   gap: var(--space-4);

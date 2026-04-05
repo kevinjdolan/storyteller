@@ -245,6 +245,15 @@ export function SegmentVersionComparePanel({
                       selectedSegment.outline_card_summary ??
                       'No saved revision summary is available yet.'}
                   </p>
+                  {(selectedSegment.hidden_version_count ?? 0) > 0 ? (
+                    <p className="body-copy">
+                      Showing{' '}
+                      {selectedSegment.included_version_count ??
+                        selectedSegment.versions.length}{' '}
+                      of {selectedSegment.version_count ?? selectedSegment.versions.length}{' '}
+                      saved revisions in the workspace window.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="workspace-stage-detail__badges">

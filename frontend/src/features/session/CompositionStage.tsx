@@ -271,8 +271,11 @@ function buildEarlierAcceptedText(
   return prefix.length > 0 ? prefix : null
 }
 
-function buildSegmentChoices(snapshot: SessionSnapshot): SegmentChoice[] {
-  const segments = snapshot.composition_segments ?? []
+function buildSegmentChoices(options: {
+  compositionSegments: SessionSnapshot['composition_segments']
+  outlineCards: StoryOutlineCard[] | null | undefined
+}) {
+  const segments = options.compositionSegments ?? []
   if (segments.length > 0) {
     return segments.map((segment) => ({
       index: segment.segment_index,
@@ -283,7 +286,7 @@ function buildSegmentChoices(snapshot: SessionSnapshot): SegmentChoice[] {
     }))
   }
 
-  return (snapshot.selected_story_outline?.cards ?? []).map((card) => ({
+  return (options.outlineCards ?? []).map((card) => ({
     index: card.position,
     label: `Segment ${card.position}: ${card.title}`,
   }))
@@ -342,8 +345,12 @@ export function CompositionStage({
     [compositionSegments],
   )
   const segmentChoices = useMemo(
-    () => buildSegmentChoices(snapshot),
-    [snapshot],
+    () =>
+      buildSegmentChoices({
+        compositionSegments,
+        outlineCards: snapshot.selected_story_outline?.cards ?? [],
+      }),
+    [compositionSegments, snapshot.selected_story_outline?.cards],
   )
   const storyText =
     composition.storyText ||

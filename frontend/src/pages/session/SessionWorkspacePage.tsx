@@ -28,6 +28,7 @@ import {
   selectSessionCharacterSheet,
   selectSessionPitch,
   type NormalizedBriefPreferencesView,
+  type SessionHydrationMetadata,
   type SessionHistoryEvent,
   type SessionSnapshot,
   startSessionComposition,
@@ -705,6 +706,49 @@ function getWorkspaceConnectionBanner(connectionState: string): {
   }
 }
 
+const workspaceWindowLabels = {
+  pitch_batches: 'pitch batches',
+  character_sheet_batches: 'character batches',
+  beat_sheet_revisions: 'beat revisions',
+  story_outline_revisions: 'outline revisions',
+  plan_revisions: 'plan revisions',
+  composition_segment_versions: 'segment revisions',
+} as const
+
+function buildWorkspacePerformanceBanner(options: {
+  hydration?: SessionHydrationMetadata | null
+  snapshot: SessionSnapshot
+}) {
+  const summaries: string[] = []
+  const collectionWindows = options.snapshot.collection_windows
+
+  if (options.hydration?.history_window_truncated) {
+    summaries.push(
+      `the latest ${options.hydration.history_event_count} durable chat events`,
+    )
+  }
+
+  if (collectionWindows != null) {
+    for (const [key, label] of Object.entries(workspaceWindowLabels) as Array<
+      [keyof typeof workspaceWindowLabels, string]
+    >) {
+      const window = collectionWindows[key]
+      if (window?.has_more) {
+        summaries.push(`${window.included_count} of ${window.total_count} ${label}`)
+      }
+    }
+  }
+
+  if (summaries.length === 0) {
+    return null
+  }
+
+  return {
+    description: `The workspace is only hydrating recent slices of ${summaries.join(', ')} so long sessions stay responsive. Selected items and current job state remain fully available.`,
+    title: 'Recent-session window active',
+  }
+}
+
 function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const hydrationQuery = useCurrentSessionHydrationQuery()
@@ -846,6 +890,10 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
   const workspaceConnectionBanner = getWorkspaceConnectionBanner(
     eventStream.connectionState,
   )
+  const workspacePerformanceBanner = buildWorkspacePerformanceBanner({
+    hydration: hydrationQuery.data?.hydration,
+    snapshot,
+  })
   const selectedStageStatus = getStatusBadgeCopy(selectedStage.status)
   const selectedStageAvailability = getStageAvailabilityCopy(
     selectedStage.availability,
@@ -2034,6 +2082,15 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
         />
       ) : null}
 
+      {workspacePerformanceBanner != null ? (
+        <FeedbackBanner
+          className="workspace-page__banner"
+          description={workspacePerformanceBanner.description}
+          title={workspacePerformanceBanner.title}
+          tone="info"
+        />
+      ) : null}
+
       <div className="workspace-shell" data-testid="workspace-route">
         <aside
           aria-label="Chat lane"
@@ -2081,6 +2138,7 @@ function SessionWorkspaceContent({ sessionId }: { sessionId: string }) {
             pendingConfirmations={pendingChatConfirmations}
             quickActions={chatQuickActions}
             slashCommandHint={slashCommandHint}
+            windowKey={sessionId}
           />
         </aside>
 

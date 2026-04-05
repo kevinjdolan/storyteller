@@ -332,7 +332,37 @@ class CompositionSegmentView(BaseModel):
     pending_revision_number: int | None = None
     is_stale: bool = False
     stale_reason: str | None = None
+    version_count: int = Field(default=0, ge=0)
+    included_version_count: int = Field(default=0, ge=0)
+    hidden_version_count: int = Field(default=0, ge=0)
     versions: list[CompositionSegmentVersionView] = Field(default_factory=list)
+
+
+class SessionCollectionWindowView(BaseModel):
+    total_count: int = Field(default=0, ge=0)
+    included_count: int = Field(default=0, ge=0)
+    has_more: bool = False
+
+
+class SessionSnapshotCollectionWindowsView(BaseModel):
+    pitch_batches: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
+    character_sheet_batches: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
+    beat_sheet_revisions: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
+    story_outline_revisions: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
+    plan_revisions: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
+    composition_segment_versions: SessionCollectionWindowView = Field(
+        default_factory=SessionCollectionWindowView
+    )
 
 
 class CompositionJobView(BaseModel):
@@ -1025,6 +1055,9 @@ class SessionSnapshot(BaseModel):
     usage_summary: SessionUsageSummaryView = Field(default_factory=SessionUsageSummaryView)
     conversation_memory: ConversationMemorySnapshotView | None = None
     agent_context_summary: str | None = None
+    collection_windows: SessionSnapshotCollectionWindowsView = Field(
+        default_factory=SessionSnapshotCollectionWindowsView
+    )
 
 
 class SessionHydrationMetadata(BaseModel):

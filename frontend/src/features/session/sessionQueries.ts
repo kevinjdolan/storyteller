@@ -10,6 +10,8 @@ import {
   fetchSessionSnapshot,
 } from '../../api/sessions.ts'
 
+const sessionWorkspaceHistoryWindow = 30
+
 export const sessionQueryKeys = {
   all: ['sessions'] as const,
   lists: () => [...sessionQueryKeys.all, 'list'] as const,
@@ -52,8 +54,14 @@ export function useSessionSnapshotQuery(sessionId: string) {
 
 export function useSessionHydrationQuery(sessionId: string) {
   return useQuery({
-    queryKey: sessionQueryKeys.hydration(sessionId),
-    queryFn: () => fetchSessionHydration(sessionId),
+    queryKey: [
+      ...sessionQueryKeys.hydration(sessionId),
+      { historyLimit: sessionWorkspaceHistoryWindow },
+    ],
+    queryFn: () =>
+      fetchSessionHydration(sessionId, {
+        historyLimit: sessionWorkspaceHistoryWindow,
+      }),
     enabled: sessionId.length > 0,
     staleTime: 10_000,
   })
